@@ -43,7 +43,7 @@ on your own computer, this is it.
 
 ## Features
 
-| | |
+| Feature | What it does |
 |---|---|
 | 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Duplicates are skipped, and a watched folder imports new statements automatically. |
 | 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |

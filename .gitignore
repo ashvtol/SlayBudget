@@ -1,0 +1,15 @@
+target/
+node_modules/
+dist/
+coverage/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+src-tauri/target/
+src-tauri/gen/
+# never commit real financial data
+Statements/
+*.pdf
+*.CSV
+!crates/core/tests/fixtures/**

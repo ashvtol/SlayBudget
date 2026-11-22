@@ -1,0 +1,24 @@
+[package]
+name = "slaybudget"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "SlayBudget, a local-first personal budgeting app for macOS"
+
+[lib]
+name = "slaybudget_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.43", features = ["bundled"] }
+slaybudget-core = { path = "../crates/core" }
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }

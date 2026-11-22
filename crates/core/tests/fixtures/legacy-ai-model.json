@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "timestamp": "2026-06-28T00:00:00.000Z",
+  "learningModel": {
+    "uber": "Transportation - Cab/Rideshare",
+    "whole foods": "Groceries",
+    "netflix.com": "Digital Entertainment",
+    "starbucks": "Coffee Shop",
+    "nespresso usa": "Nespresso",
+    "venmo 1032551688": "Food & Dining",
+    "shell oil 575729373": "Transportation - Fuel",
+    "legalzoom": "Legal"
+  },
+  "customCategories": [
+    "Fees",
+    "Nespresso",
+    "Coffee Shop",
+    "Legal",
+    "Wedding",
+    "Entertainment - Outdoors",
+    "Housing & Utilities - Rent"
+  ]
+}

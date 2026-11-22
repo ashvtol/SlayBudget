@@ -154,3 +154,22 @@ describe('App shell Mac details', () => {
     expect(useNavStore.getState().refreshTick).toBe(before + 2);
   });
 });
+
+describe('App updates', () => {
+  it('starts the update checks on launch, shows the update dialog and the sidebar badge', async () => {
+    const { useUpdateStore } = await import('@/features/updates/update-store');
+    const start = vi.spyOn(useUpdateStore.getState(), 'startAutoCheck');
+    useUpdateStore.setState({
+      status: 'available',
+      currentVersion: '0.1.0',
+      available: { version: '0.2.0', date: '2026-12-01', notes: '## [0.2.0] - 2026-12-01\n- Two' },
+      sections: [{ version: '0.2.0', date: '2026-12-01', body: '- Two' }],
+      dialogOpen: true,
+    });
+    render(<App />);
+    expect(start).toHaveBeenCalled();
+    expect(screen.getByRole('dialog', { name: 'Update available' })).toHaveTextContent('SlayBudget 0.2.0 is available');
+    expect(within(screen.getByRole('navigation', { name: /sections/i })).getByRole('button', { name: /Update available/ })).toBeInTheDocument();
+    useUpdateStore.getState().reset();
+  });
+});

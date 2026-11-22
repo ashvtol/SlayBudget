@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src",
     "check": "cargo test -p slaybudget-core && cargo clippy -p slaybudget-core -- -D warnings && cargo fmt --check && npm run typecheck && npm run lint && npm test",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "release": "node scripts/release.ts",
+    "publish:github": "node scripts/publish.ts"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",

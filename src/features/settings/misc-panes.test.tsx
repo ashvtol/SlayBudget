@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
 import { createMemoryIpc, ipc, setIpc } from '@/lib/ipc';
 import { AboutPane } from './about-pane';
+import { useUpdateStore } from '@/features/updates/update-store';
 import { UpdatesPane } from './updates-pane';
 import { ImportSourcesPane } from './import-sources-pane';
 
@@ -19,8 +20,9 @@ describe('AboutPane', () => {
 describe('UpdatesPane', () => {
   it('reports updates are unsupported outside the desktop app', async () => {
     const user = userEvent.setup();
+    useUpdateStore.getState().reset();
     render(<UpdatesPane />);
-    await user.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await user.click(await screen.findByRole('button', { name: 'Check now' }));
     await waitFor(() => expect(screen.getByText(/installed desktop app/)).toBeInTheDocument());
   });
 });

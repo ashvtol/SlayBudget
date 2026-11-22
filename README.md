@@ -14,7 +14,7 @@ Import your bank statements, let SlayBudget categorize every transaction, and se
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](src)
 [![GitHub stars](https://img.shields.io/github/stars/ashvtol/SlayBudget?style=social)](https://github.com/ashvtol/SlayBudget/stargazers)
 
-[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Contributing](#contributing)
+**[⬇️ Download for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)**<br><br>[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
 
 <br>
 
@@ -121,19 +121,31 @@ plane, and there's nothing to cancel.
 
 ## Install
 
-SlayBudget is a native macOS app. Until signed releases are published, build it from source (about five minutes):
+**[⬇️ Download the latest SlayBudget for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)** (a universal DMG
+for Apple Silicon and Intel, macOS 13 or later).
 
-**Prerequisites:** Xcode Command Line Tools (`xcode-select --install`), [Rust](https://rustup.rs) and Node.js 20+.
+1. Open the DMG and drag **SlayBudget** to **Applications**.
+2. The first time, right-click SlayBudget in Applications and choose **Open** (or go to System Settings > Privacy &
+   Security > **Open Anyway**). SlayBudget isn't notarized by Apple yet, so macOS asks once.
+3. If macOS says the app "is damaged", run this once in Terminal, then open it again:
+   ```sh
+   xattr -dr com.apple.quarantine /Applications/SlayBudget.app
+   ```
+
+**Updates are automatic.** SlayBudget checks for new versions when it opens and every 6 hours, shows you what's new
+since your version, and installs only when you click. See the [changelog](CHANGELOG.md).
+
+### Build from source
+
+Prerequisites: Xcode Command Line Tools (`xcode-select --install`), [Rust](https://rustup.rs) and Node.js 22+.
 
 ```sh
 git clone https://github.com/ashvtol/SlayBudget.git
 cd SlayBudget
 npm install
-npx tauri build --bundles app       # builds SlayBudget.app
-open target/release/bundle/macos/SlayBudget.app
+npm run dev                          # try it in your browser with sample data
+npx tauri build --bundles app        # or build SlayBudget.app
 ```
-
-Prefer to try it first? `npm run dev` opens the app in your browser with sample data, no setup needed.
 
 Your data lives in `~/Library/Application Support/dev.ashvtol.slaybudget/slaybudget.db`.
 

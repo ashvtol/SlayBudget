@@ -21,6 +21,7 @@ import {
 } from '@/components/icons';
 import { Logo } from './logo';
 import { ProfileSwitcher } from './profile-switcher';
+import { UpdateBadge } from '@/features/updates/update-ui';
 import { groupByInstitution, useSidebarData } from './use-sidebar-data';
 
 const ICONS: Record<SectionId, ComponentType<{ size?: number }>> = {
@@ -94,6 +95,7 @@ export function Sidebar() {
 
       <div className="mt-auto flex flex-col gap-2 px-3 pb-4 pt-3">
         <ProfileSwitcher />
+        <UpdateBadge />
         <a
           href="#settings"
           aria-current={settingsOpen ? 'page' : undefined}

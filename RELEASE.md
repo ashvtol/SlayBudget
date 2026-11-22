@@ -1,78 +1,47 @@
 # Releasing SlayBudget
 
-Builds and releases are produced by `.github/workflows/release.yml` on every
-`v*` tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`). The workflow builds a
-universal macOS app on `macos-14` and uploads a draft GitHub Release.
+A release is a universal macOS DMG on GitHub Releases plus the files the in-app updater reads. Installed copies check
+for updates on launch and every 6 hours and show the changelog for every version since the one installed.
 
-## One-time: enable auto-update
+## Every release
 
-The in-app updater (Settings → Updates) needs a signing key and a few config
-additions. This is a one-time setup on your Mac.
-
-1. **Generate a signing key**
-
-   ```bash
-   npm run tauri signer generate -- -w ~/.tauri/slaybudget.key
+1. **Write the notes** under `## [Unreleased]` in `CHANGELOG.md` (Added, Changed, Fixed, Removed). Plain language:
+   people read these in the update dialog.
+2. **Cut the version** on `main`:
+   ```sh
+   npm run release -- 0.2.0
    ```
-
-   This prints a **public key** and writes the private key to the path given.
-   Keep the private key secret.
-
-2. **Add the public key to `src-tauri/tauri.conf.json`** under a new `plugins`
-   block, and point the updater at the GitHub Releases endpoint:
-
-   ```json
-   "plugins": {
-     "updater": {
-       "endpoints": [
-         "https://github.com/<owner>/<repo>/releases/latest/download/latest.json"
-       ],
-       "pubkey": "<PASTE THE PUBLIC KEY HERE>"
-     }
-   }
+   This dates the changelog (moving the Unreleased notes under `## [0.2.0] - today`), bumps the version in
+   `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and `Cargo.toml`, and commits.
+3. **Check**: `npm run check`.
+4. **Publish and tag**:
+   ```sh
+   npm run publish:github -- --tag
    ```
+   This copies `main` to the public repository as one commit (leaving out `tasks/`, `docs/superpowers/`,
+   `docs/launch/` and `.claude/`), refuses if anything matches your git-ignored `.publish-blocklist`, pushes it, and
+   pushes the `v0.2.0` tag.
+5. **Wait for the workflow** (`.github/workflows/release.yml`, about 15 minutes). It builds the DMG and the signed
+   updater files, uses the changelog section as the release text, and puts the full changelog into `latest.json`.
+6. **Publish the draft release** on GitHub after a quick look. Installed apps see the update once it's published.
 
-3. **Add the updater target** to `bundle` in the same file:
+Without `--tag`, `npm run publish:github` only updates the public code (for README or docs changes).
 
-   ```json
-   "bundle": { "createUpdaterArtifacts": true }
-   ```
+## One-time setup
 
-4. **Add the Rust plugins** in `src-tauri/Cargo.toml`:
+- **Updater signing key**: the private key is at `~/.tauri/slaybudget.key` and its public half is in
+  `src-tauri/tauri.conf.json`. Add the private key to the public repository's secrets (Settings > Secrets and
+  variables > Actions):
+  - `TAURI_SIGNING_PRIVATE_KEY`: the contents of `~/.tauri/slaybudget.key` (`pbcopy < ~/.tauri/slaybudget.key`)
+  - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: leave it empty (the key has no password)
 
-   ```toml
-   tauri-plugin-updater = "2"
-   tauri-plugin-process = "2"
-   ```
+  **Back the key up** (a password manager is ideal). If it's lost, installed copies can't verify new updates and
+  everyone has to download the next version by hand.
+- **`.publish-blocklist`** (git-ignored): one case-insensitive pattern per line, such as your name, email and account
+  digits.
 
-   and register them in `src-tauri/src/lib.rs`:
+## Later: Apple notarization
 
-   ```rust
-   .plugin(tauri_plugin_updater::Builder::new().build())
-   .plugin(tauri_plugin_process::init())
-   ```
-
-   (The JS packages `@tauri-apps/plugin-updater` and `@tauri-apps/plugin-process`
-   are already in `package.json`, and the Updates pane already calls them.)
-
-5. **Add the updater capability** in `src-tauri/capabilities/default.json`:
-
-   ```json
-   "updater:default", "process:allow-restart"
-   ```
-
-6. **Add GitHub repository secrets** (Settings → Secrets → Actions):
-   - `TAURI_SIGNING_PRIVATE_KEY` — contents of `~/.tauri/slaybudget.key`
-   - `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` — the password you set (blank if none)
-
-Once these are in place, tagging a release produces signed updater artifacts and
-a `latest.json`; the installed app will offer the update from Settings → Updates.
-
-## Code signing & notarization (optional, removes Gatekeeper warnings)
-
-To ship outside your own machine without the "unidentified developer" prompt,
-add an Apple Developer ID certificate and notarization credentials as secrets
-(`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
-`APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`) and pass them through in the
-workflow env. Until then, the app runs locally fine (right-click → Open the
-first time).
+To remove the first-launch "Open Anyway" step, join the Apple Developer Program and add these secrets:
+`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` and
+`APPLE_TEAM_ID`. Then pass them in the workflow's `env` and remove `"signingIdentity": "-"` from `tauri.conf.json`.

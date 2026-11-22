@@ -17,3 +17,9 @@ Statements/
 # exports from Settings > Data and backup
 slaybudget-rules-*.json
 slaybudget-backup-*.db
+
+# personal markers the publish script refuses to push (never committed)
+.publish-blocklist
+
+# local memory-plugin notes
+.memsearch/

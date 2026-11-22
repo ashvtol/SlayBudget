@@ -3,6 +3,7 @@ name = "slaybudget-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 description = "SlayBudget business logic: SQLite storage, import, categorization, analytics"
 
 [dependencies]

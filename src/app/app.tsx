@@ -19,6 +19,8 @@ import { useTransactionsStore } from '@/features/transactions/transactions-store
 import { sectionForShortcut, useNavStore } from '@/lib/stores/nav-store';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useDisplayStore } from '@/lib/stores/display-store';
+import { useUpdateStore } from '@/features/updates/update-store';
+import { UpdateDialog } from '@/features/updates/update-ui';
 
 const SCREENS: [SectionId, (activeProfile: number | null) => React.ReactNode][] = [
   ['dashboard', () => <DashboardPage />],
@@ -50,6 +52,9 @@ export function App() {
       .then(() => useNotificationsStore.getState().load())
       .then(() => useNotificationsStore.getState().runDueCheck());
   }, [loadTheme, loadProfiles]);
+
+  // Look for a new version shortly after launch and every 6 hours; the dialog asks before installing.
+  useEffect(() => useUpdateStore.getState().startAutoCheck(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -101,6 +106,7 @@ export function App() {
       </div>
       <SettingsDrawer />
       <SearchPalette />
+      <UpdateDialog />
     </div>
   );
 }

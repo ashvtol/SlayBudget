@@ -3779,7 +3779,7 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slaybudget"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "mac-notification-sys",
@@ -3798,7 +3798,7 @@ dependencies = [
 
 [[package]]
 name = "slaybudget-core"
-version = "0.2.1"
+version = "0.3.0"
 dependencies = [
  "chrono",
  "csv",

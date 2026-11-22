@@ -5,6 +5,20 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-22
+### Added
+- **Possible duplicates.** When an import brings in a row that looks like one you already have but doesn't match
+  exactly, it's tagged "Possible duplicate" (amber), marked to review, and explained: the same charge worded
+  differently, a tip added later, a card hold replaced by the final charge, or a pending charge that posted up to a
+  week later. Rows the new file repeats exactly are never flagged, so weekly habits stay quiet.
+  - The import results list them ("3 to check"), and the bell gets one item per import.
+  - In a flagged transaction: **Delete this one**, **Delete the other one**, or **Not a duplicate** (that pair is
+    never flagged again).
+- **Delete transactions**, one or many, from the selection bar or the trash button next to Review.
+- **Undo an import** from the new Recent imports list on the Import page. It removes only what that file added, so
+  you can import it again.
+- A backup of your data is made before every delete or undo (the newest 3 of each are kept).
+
 ## [0.2.1] - 2026-11-22
 ### Changed
 - Toggles slide smoothly, the way macOS switches do.

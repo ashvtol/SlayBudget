@@ -73,4 +73,23 @@ describe('memory IPC notification producers', () => {
     await ipc.notificationsRefresh('2026-11-20', true);
     expect((await ipc.notificationsRefresh('2027-02-11', false)).filter((n) => n.kind === 'billMissed')).toEqual([]);
   });
+  it('one item per import with open possible duplicates (mirrors possible_duplicates)', async () => {
+    const a = tx('2026-11-17', 'SHAKE SHACK 123', -3031);
+    const b = tx('2026-11-18', 'SHAKE SHACK 123', -3631, { tagIds: [7] });
+    const make = (resolution: 'kept' | null) =>
+      createMemoryIpc({
+        transactions: [{ ...a }, { ...b }],
+        tags: [{ id: 7, name: 'Possible duplicate', color: '#ddb24a' }],
+        imports: [{ id: 2, sourceId: 1, sourceName: 'Amex', fileName: 'full.csv', importedAt: '2026-11-22T10:00:00Z', importedRows: 1, skippedRows: 0, transactionIds: [b.id] }],
+        duplicateFlags: [{ id: 1, txId: b.id, otherId: a.id, importId: 2, confidence: 'likely', reason: 'x', createdAt: '', resolvedAt: null, resolution }],
+        settings: { 'notifications.baselined_at': '2026-11-20T00:00:00Z' },
+      });
+    const dupes = async (ipc: Ipc) => (await ipc.notificationsRefresh('2026-11-22', false)).filter((n) => n.kind === 'possibleDuplicates');
+    const got = await dupes(make(null));
+    expect(got.map((n) => [n.key, n.title, n.body])).toEqual([
+      ['duplicates:2', '1 possible duplicate from full.csv', 'They look like transactions you already had, and are tagged Possible duplicate to review.'],
+    ]);
+    expect(got[0].target).toEqual({ kind: 'transactions', filter: 'duplicates' });
+    expect(await dupes(make('kept'))).toEqual([]);
+  });
 });

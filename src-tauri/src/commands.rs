@@ -511,21 +511,25 @@ use slaybudget_core::import::pipeline::{self, ImportReport};
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ImportReportDto {
+    pub import_id: Option<i64>,
     pub source_name: String,
     pub inserted: usize,
     pub duplicates: usize,
     pub skipped: usize,
     pub already_imported: bool,
+    pub flags: Vec<slaybudget_core::duplicates::DuplicateFlag>,
 }
 
 impl From<ImportReport> for ImportReportDto {
     fn from(r: ImportReport) -> Self {
         ImportReportDto {
+            import_id: r.import_id,
             source_name: r.source_name,
             inserted: r.inserted,
             duplicates: r.duplicates,
             skipped: r.skipped,
             already_imported: r.already_imported,
+            flags: r.flags,
         }
     }
 }
@@ -1344,5 +1348,62 @@ pub fn notifications_refresh(
         today,
         &now_utc(),
         baseline,
+    )?)
+}
+
+// ----- manual fixes -----
+
+fn local_stamp() -> String {
+    chrono::Local::now().format("%Y%m%d-%H%M%S").to_string()
+}
+
+/// Delete transactions after backing the database up (newest 3 "delete" backups kept).
+#[tauri::command]
+pub fn delete_transactions(state: State<'_, AppState>, ids: Vec<i64>) -> IpcResult<usize> {
+    let conn = lock(&state);
+    slaybudget_core::db::backup_before(&conn, "delete", &local_stamp())?;
+    Ok(slaybudget_core::transactions::delete_many(&conn, &ids)?)
+}
+
+#[tauri::command]
+pub fn list_imports(
+    state: State<'_, AppState>,
+) -> IpcResult<Vec<slaybudget_core::imports::ImportRecord>> {
+    Ok(slaybudget_core::imports::list(&lock(&state))?)
+}
+
+/// Undo an import after backing the database up (newest 3 "undo-import" backups kept).
+#[tauri::command]
+pub fn undo_import(state: State<'_, AppState>, id: i64) -> IpcResult<usize> {
+    let conn = lock(&state);
+    slaybudget_core::db::backup_before(&conn, "undo-import", &local_stamp())?;
+    Ok(slaybudget_core::imports::undo(&conn, id)?)
+}
+
+/// The open possible-duplicate flag a transaction is part of, if any.
+#[tauri::command]
+pub fn duplicate_flag_for(
+    state: State<'_, AppState>,
+    tx_id: i64,
+) -> IpcResult<Option<slaybudget_core::duplicates::DuplicateFlag>> {
+    Ok(slaybudget_core::duplicates::for_transaction(
+        &lock(&state),
+        tx_id,
+    )?)
+}
+
+/// Settle a possible duplicate: delete this one, delete the other one (both back up first), or keep both.
+#[tauri::command]
+pub fn resolve_duplicate(
+    state: State<'_, AppState>,
+    flag_id: i64,
+    resolution: slaybudget_core::duplicates::Resolution,
+) -> IpcResult<()> {
+    let conn = lock(&state);
+    if resolution != slaybudget_core::duplicates::Resolution::Kept {
+        slaybudget_core::db::backup_before(&conn, "delete", &local_stamp())?;
+    }
+    Ok(slaybudget_core::duplicates::resolve(
+        &conn, flag_id, resolution,
     )?)
 }

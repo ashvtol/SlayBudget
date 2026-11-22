@@ -4,7 +4,8 @@
  * swap in the in-memory implementation.
  */
 
-import type { AppNotification, NewNotification } from './types';
+import type { AppNotification, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification } from './types';
+import { DUPLICATE_TAG_NAME, duplicatesBeforeDelete, openFlagFor, settle, stillFlagged } from './duplicates-memory';
 import type {
   BudgetStatus,
   CashFlow,
@@ -113,6 +114,16 @@ export interface Ipc {
   previewFtModel(modelJson: string): Promise<FtProposal[]>;
   /** Learn the chosen merchants and move their Other transactions (the app backs up first). */
   importFtModel(choices: FtChoice[]): Promise<FtReport>;
+  /** Delete transactions (with their split parts and tags; refund links cleared). Backs up first in the app. */
+  deleteTransactions(ids: number[]): Promise<number>;
+  /** Past imports, newest first. */
+  listImports(): Promise<ImportRecord[]>;
+  /** Remove what an import added (never rows it skipped) so the file can be imported again. Backs up first. */
+  undoImport(id: number): Promise<number>;
+  /** The open possible-duplicate flag a transaction is part of (as either row), or null. */
+  duplicateFlagFor(txId: number): Promise<DuplicateFlag | null>;
+  /** Delete this one, delete the other one, or keep both (the pair is never flagged again). */
+  resolveDuplicate(flagId: number, resolution: DuplicateResolution): Promise<void>;
   /** Notification center: the inbox behind the bell (see notifications.rs). */
   notificationsList(profileId: number | null): Promise<AppNotification[]>;
   /** Store an event unless its key was seen; `read` marks a quiet baseline item. Null when it already existed. */
@@ -222,6 +233,8 @@ export const TAG_MAX_NAME = 40;
 
 export interface MemoryIpcSeed {
   settings?: Record<string, string>;
+  /** Past imports and the transactions each one added (imports themselves only run in the app). */
+  imports?: (Omit<ImportRecord, 'remaining'> & { transactionIds: number[] })[];
   profiles?: Profile[];
   sources?: Source[];
   transactions?: Transaction[];
@@ -229,6 +242,8 @@ export interface MemoryIpcSeed {
   categories?: Category[];
   fxRates?: FxRate[];
   tags?: Omit<Tag, 'count'>[];
+  /** Possible duplicates found by earlier imports. */
+  duplicateFlags?: DuplicateFlag[];
   /** Statement file and columns by transaction id. */
   statements?: Record<number, Omit<StatementInfo, 'sourceName'>>;
 }
@@ -283,6 +298,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   const children = new Map<number, Transaction[]>();
   const fxRates: FxRate[] = (seed.fxRates ?? []).map((r) => ({ ...r }));
   const inbox = createNotificationInbox();
+  const importsLog = (seed.imports ?? []).map((i) => ({ ...i, transactionIds: [...i.transactionIds] }));
 
   // ----- budget plan (mirror `budgets.rs`) -----
   const plan: BudgetPlan = { months: [], groups: [], rollovers: [] };
@@ -306,6 +322,14 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
 
   // ----- tags (mirror `tags.rs`) -----
   const tags: Omit<Tag, 'count'>[] = (seed.tags ?? []).map((t) => ({ ...t }));
+  const duplicateFlags: DuplicateFlag[] = (seed.duplicateFlags ?? []).map((f) => ({ ...f }));
+  /** Take "Possible duplicate" off a row once no open flag needs it. */
+  const untagDuplicate = (txId: number) => {
+    if (stillFlagged(duplicateFlags, txId)) return;
+    const tag = tags.find((t) => t.name.toLowerCase() === DUPLICATE_TAG_NAME.toLowerCase());
+    const row = transactions.find((t) => t.id === txId);
+    if (tag && row?.tagIds) row.tagIds = row.tagIds.filter((g) => g !== tag.id);
+  };
   let nextTagId = Math.max(0, ...tags.map((t) => t.id)) + 1;
   const checkedTagName = (name: string, except: number | null): string => {
     const n = name.trim();
@@ -643,6 +667,42 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       }
       return out.sort((a, b) => a.ftCategory.localeCompare(b.ftCategory) || a.merchant.localeCompare(b.merchant));
     },
+    async deleteTransactions(ids) {
+      const gone = new Set(ids);
+      duplicatesBeforeDelete(duplicateFlags, gone, (txId) => untagDuplicate(txId));
+      const before = transactions.length;
+      for (let i = transactions.length - 1; i >= 0; i--) if (gone.has(transactions[i].id)) transactions.splice(i, 1);
+      for (const t of transactions) if (t.refundOf != null && gone.has(t.refundOf)) t.refundOf = null;
+      for (const g of gone) children.delete(g);
+      for (const imp of importsLog) imp.transactionIds = imp.transactionIds.filter((x) => !gone.has(x));
+      return before - transactions.length;
+    },
+    async duplicateFlagFor(txId) {
+      return openFlagFor(duplicateFlags, txId);
+    },
+    async resolveDuplicate(flagId, resolution) {
+      const flag = duplicateFlags.find((f) => f.id === flagId);
+      if (!flag || flag.resolution) return;
+      if (resolution === 'kept') {
+        settle(flag, 'kept');
+        if (flag.txId != null) untagDuplicate(flag.txId);
+        return;
+      }
+      const target = resolution === 'deleted' ? flag.txId : flag.otherId;
+      if (target != null) await this.deleteTransactions([target]);
+    },
+    async listImports() {
+      return [...importsLog]
+        .sort((a, b) => b.importedAt.localeCompare(a.importedAt) || b.id - a.id)
+        .map(({ transactionIds, ...r }) => ({ ...r, remaining: transactionIds.filter((x) => transactions.some((t) => t.id === x)).length }));
+    },
+    async undoImport(id) {
+      const imp = importsLog.find((i) => i.id === id);
+      if (!imp) return 0;
+      const removed = await this.deleteTransactions(imp.transactionIds);
+      importsLog.splice(importsLog.indexOf(imp), 1);
+      return removed;
+    },
     async notificationsList(profileId) {
       return inbox.list(profileId);
     },
@@ -676,6 +736,8 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         config,
         today,
         isSplitParent: (id) => (children.get(id)?.length ?? 0) > 0,
+        duplicateFlags,
+        importFileName: (id) => importsLog.find((i) => i.id === id)?.fileName,
       });
       for (const n of candidates) {
         if (!config.kinds[n.kind]?.bell) continue;

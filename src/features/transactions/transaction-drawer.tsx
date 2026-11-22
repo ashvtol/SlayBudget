@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Drawer } from '@/components/drawer';
 import { CategoryPicker } from './category-picker';
-import { DetailPane, ReviewButton } from './detail-pane';
+import { DetailActions, DetailPane } from './detail-pane';
 import { useTransactionsStore } from './transactions-store';
 
 /**
@@ -27,7 +27,7 @@ export function TransactionDrawer({ id, onOpen, onClose, onChanged }: { id: numb
   );
 
   return (
-    <Drawer open onClose={onClose} title={tx?.recurringId != null ? 'Recurring transaction' : 'Transaction'} actions={tx ? <ReviewButton id={id} /> : undefined}>
+    <Drawer open onClose={onClose} title={tx?.recurringId != null ? 'Recurring transaction' : 'Transaction'} actions={tx ? <DetailActions id={id} /> : undefined}>
       <div className="relative">
         <DetailPane id={id} onPickCategory={setPickerId} onOpen={onOpen} />
         {pickerId != null && <CategoryPicker transactionId={pickerId} onClose={() => setPickerId(null)} />}

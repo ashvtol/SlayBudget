@@ -592,3 +592,20 @@ pub fn statement(conn: &Connection, id: TransactionId) -> Result<StatementInfo> 
         fields,
     })
 }
+
+/// Delete transactions (and, through the schema, their split parts and tags; refund links to them are cleared).
+/// Returns how many of the given rows were removed. All or nothing.
+pub fn delete_many(conn: &Connection, ids: &[TransactionId]) -> Result<usize> {
+    if ids.is_empty() {
+        return Ok(0);
+    }
+    crate::db::atomically(conn, |c| {
+        crate::duplicates::before_delete(c, ids)?;
+        let mut stmt = c.prepare("DELETE FROM transactions WHERE id = ?1")?;
+        let mut removed = 0;
+        for id in ids {
+            removed += stmt.execute([id])?;
+        }
+        Ok(removed)
+    })
+}

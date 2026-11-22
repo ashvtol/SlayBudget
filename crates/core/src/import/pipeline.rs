@@ -36,6 +36,9 @@ pub struct ImportReport {
     pub skipped: usize,
     /// The same file (by content hash) was imported into this source before.
     pub already_imported: bool,
+    /// Rows that look like ones you already had (tagged "Possible duplicate"), for the results to show.
+    #[serde(default)]
+    pub flags: Vec<crate::duplicates::DuplicateFlag>,
 }
 
 pub fn content_hash(content: &[u8]) -> String {
@@ -110,6 +113,7 @@ pub fn import_rows(
             duplicates: rows.len(),
             skipped: 0,
             already_imported: true,
+            flags: Vec::new(),
         });
     }
     conn.execute(
@@ -120,6 +124,8 @@ pub fn import_rows(
 
     let mut inserted = 0;
     let mut duplicates = 0;
+    let mut new_ids = Vec::new();
+    let mut accounted_ids = Vec::new();
     for row in &rows {
         let category_id = categorize(conn, profile_id, source_id, kind, row)?;
         let tx = NewTransaction {
@@ -136,10 +142,12 @@ pub fn import_rows(
         let id = match transactions::insert(conn, &tx)? {
             InsertOutcome::Inserted(id) => {
                 inserted += 1;
+                new_ids.push(id);
                 id
             }
             InsertOutcome::Duplicate(id) => {
                 duplicates += 1;
+                accounted_ids.push(id);
                 id
             }
         };
@@ -150,9 +158,11 @@ pub fn import_rows(
         "UPDATE imports SET imported_rows = ?1, skipped_rows = ?2 WHERE id = ?3",
         params![inserted as i64, duplicates as i64, import_id],
     )?;
+    let mut flags = Vec::new();
     if inserted > 0 {
         refunds::rematch(conn, Some(profile_id))?;
         crate::recurrings::after_import(conn)?;
+        flags = crate::duplicates::detect(conn, import_id, &new_ids, &accounted_ids)?;
     }
     Ok(ImportReport {
         import_id: Some(import_id),
@@ -162,6 +172,7 @@ pub fn import_rows(
         duplicates,
         skipped: 0,
         already_imported: false,
+        flags,
     })
 }
 
@@ -224,6 +235,7 @@ fn already_imported_anywhere(
             duplicates: rows,
             skipped: 0,
             already_imported: true,
+            flags: Vec::new(),
         }),
     )
 }

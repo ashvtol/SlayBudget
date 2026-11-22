@@ -370,3 +370,33 @@ describe('TransactionsPage tags', () => {
   });
 });
 
+
+describe('TransactionsPage deleting', () => {
+  it('deletes the selected transactions after a confirm that says how many', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    for (const cb of within(list()).getAllByRole('checkbox')) await user.click(cb);
+    await user.click(screen.getByRole('button', { name: 'Delete selected' }));
+    const dialog = screen.getByRole('alertdialog', { name: 'Delete 2 transactions?' });
+    expect(dialog).toHaveTextContent('categories, notes and tags');
+    await user.click(within(dialog).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(screen.queryAllByRole('row')).toHaveLength(0));
+  });
+
+  it('cancelling keeps them', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(list()).getAllByRole('checkbox')[0]);
+    await user.click(screen.getByRole('button', { name: 'Delete selected' }));
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(within(list()).getAllByRole('row')).toHaveLength(2);
+  });
+
+  it('deletes one transaction from its detail pane', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(details()).getByRole('button', { name: 'Delete transaction' }));
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete this transaction?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(() => expect(within(list()).getAllByRole('row')).toHaveLength(1));
+  });
+});

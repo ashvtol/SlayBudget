@@ -26,6 +26,10 @@ const MIGRATIONS: &[(i64, &str)] = &[
     ),
     (10, include_str!("../../migrations/0010_budget_plan.sql")),
     (11, include_str!("../../migrations/0011_notifications.sql")),
+    (
+        12,
+        include_str!("../../migrations/0012_duplicate_flags.sql"),
+    ),
 ];
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
@@ -126,4 +130,42 @@ pub fn atomically<T>(conn: &Connection, f: impl FnOnce(&Connection) -> Result<T>
             Err(e)
         }
     }
+}
+
+/// Before a destructive change: copy the database beside itself as `<name>.before-<kind>-<stamp>.db`, keeping only
+/// the newest 3 backups of that kind. Returns the path, or None for a database with no file (in memory).
+pub fn backup_before(
+    conn: &Connection,
+    kind: &str,
+    stamp: &str,
+) -> Result<Option<std::path::PathBuf>> {
+    let Some(db) = conn
+        .path()
+        .filter(|p| !p.is_empty())
+        .map(std::path::PathBuf::from)
+    else {
+        return Ok(None);
+    };
+    let dir = db.parent().map(Path::to_path_buf).unwrap_or_default();
+    let stem = db
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("slaybudget")
+        .to_string();
+    let prefix = format!("{stem}.before-{kind}-");
+    let target = dir.join(format!("{prefix}{stamp}.db"));
+    if !target.exists() {
+        backup_to(conn, &target)?;
+    }
+    let mut existing: Vec<String> = std::fs::read_dir(&dir)
+        .map_err(|e| crate::CoreError::Invalid(e.to_string()))?
+        .filter_map(|e| e.ok()?.file_name().into_string().ok())
+        .filter(|n| n.starts_with(&prefix) && n.ends_with(".db"))
+        .collect();
+    existing.sort();
+    let excess = existing.len().saturating_sub(3);
+    for old in &existing[..excess] {
+        let _ = std::fs::remove_file(dir.join(old));
+    }
+    Ok(Some(target))
 }

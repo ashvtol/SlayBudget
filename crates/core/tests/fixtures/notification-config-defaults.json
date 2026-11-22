@@ -10,6 +10,7 @@
     "overBudget": { "bell": true, "banner": true },
     "priceUp": { "bell": true, "banner": true },
     "reviewDigest": { "bell": true, "banner": true },
+    "possibleDuplicates": { "bell": true, "banner": true },
     "update": { "bell": true, "banner": true }
   },
   "billLeadDays": 3,

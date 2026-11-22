@@ -47,7 +47,7 @@ on your own computer, this is it.
 
 | Feature | What it does |
 |---|---|
-| 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Duplicates are skipped, and a watched folder imports new statements automatically. |
+| 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Exact repeats are skipped, and a watched folder imports new statements automatically. |
 | 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. |
@@ -56,6 +56,8 @@ on your own computer, this is it.
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
+| 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
+| ↩️ **Undo and delete** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
 | 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price increases, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
 | ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
 | 👨‍👩‍👧 **Profiles** | Keep household members' accounts separate, or view everything combined. |
@@ -115,6 +117,23 @@ on your own computer, this is it.
 
 **Daylight theme**
 ![SlayBudget categories view in the light theme](docs/screenshots/categories-light.png)
+
+</td>
+</tr>
+</table>
+
+<table>
+<tr>
+<td width="50%">
+
+**Possible duplicates: why, and what to do**
+![SlayBudget transaction detail with an amber Possible duplicate box explaining it matches another charge on the same day, with Delete this one, Delete the other one and Not a duplicate](docs/screenshots/possible-duplicate.png)
+
+</td>
+<td width="50%">
+
+**Recent imports, each one undoable**
+![SlayBudget import page listing recent statement imports with the account, date, rows added and an Undo button](docs/screenshots/recent-imports.png)
 
 </td>
 </tr>
@@ -210,6 +229,17 @@ you're used to.
 Yes. The bell in the top bar and Mac banners tell you about upcoming bills (as many days ahead as you like), bills
 that look missed, price increases, possible double charges, large purchases and budgets running over. Banners appear
 while SlayBudget is open, and quiet hours hold them overnight.
+</details>
+
+<details>
+<summary><b>What if I import overlapping statements?</b></summary>
+
+Rows that match exactly are skipped, so importing the full month after a mid-month download only adds what's new.
+Rows that look like ones you already have but don't match exactly (a PDF that words a merchant differently, a tip
+added after the fact, a card hold, or a pending charge that posted days later) are imported, tagged "Possible
+duplicate" and marked to review, with an explanation. Filter by the tag, then delete one of the pair or mark it "Not a
+duplicate". SlayBudget never deletes anything on its own. If a whole import was a mistake, undo it from Recent
+imports on the Import page.
 </details>
 
 <details>

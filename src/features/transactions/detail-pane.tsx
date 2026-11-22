@@ -10,7 +10,9 @@ import type { Category, NewRecurring, SplitPart, StatementInfo, Transaction } fr
 import { dayHeaderLabel, formatSignedMoney, groupByDay } from '@/lib/format';
 import { Money } from '@/components/money';
 import { ToolbarButton } from '@/components/toolbar-button';
-import { IconCalendar, IconCard, IconCheck, IconTag } from '@/components/icons';
+import { IconCalendar, IconCard, IconCheck, IconTag, IconTrash } from '@/components/icons';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { DuplicateBox } from './duplicate-box';
 import { displayMerchant, TransactionRow, TransferPill } from './transaction-row';
 import { similarTransactions } from './similar';
 import { RecategorizeOffer } from './recategorize-offer';
@@ -262,6 +264,32 @@ export function ReviewButton({ id }: { id: number }) {
   );
 }
 
+/** Delete (trash, with a confirm) and the review toggle, for the detail header bar. */
+export function DetailActions({ id }: { id: number }) {
+  const tx = useTransactionsStore((s) => s.byId(id));
+  const deleteTransactions = useTransactionsStore((s) => s.deleteTransactions);
+  const [confirm, setConfirm] = useState(false);
+  if (!tx) return null;
+  return (
+    <>
+      <ToolbarButton icon={IconTrash} aria-label="Delete transaction" title="Delete transaction" onClick={() => setConfirm(true)} />
+      <ReviewButton id={id} />
+      {confirm && (
+        <ConfirmDialog
+          title="Delete this transaction?"
+          body="Its category, notes and tags go too. A backup of your data is made first."
+          confirmLabel="Delete"
+          onCancel={() => setConfirm(false)}
+          onConfirm={() => {
+            setConfirm(false);
+            void deleteTransactions([tx.id]);
+          }}
+        />
+      )}
+    </>
+  );
+}
+
 /** The detail panel body for one transaction (Copilot layout). Renders nothing when `id` is null. */
 export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; onClose?: () => void; onPickCategory: (id: number) => void; onOpen?: (id: number) => void }) {
   const tx = useTransactionsStore((s) => (id != null ? s.byId(id) : undefined));
@@ -301,6 +329,7 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
           <Money cents={tx.amountCents} currency={tx.currency} tone={tx.amountCents > 0 ? 'pos' : 'default'} sign={signs ? 'always' : 'none'} />
         </span>
       </header>
+      <DuplicateBox tx={tx} onOpen={onOpen} />
 
       <div className="flex flex-wrap gap-10">
         <div>

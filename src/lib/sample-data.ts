@@ -1,3 +1,5 @@
+import { DUPLICATE_TAG_COLOR, DUPLICATE_TAG_NAME } from './duplicates-memory';
+import { money } from './notification-producers';
 // Sample dataset for the browser build (no Tauri, no real data). It gives every
 // screen realistic content so the UI can be developed and compared visually.
 // Deterministic: the same `today` always yields the same data.
@@ -161,7 +163,66 @@ export function sampleSeed(today: Date = new Date()): MemoryIpcSeed {
     }
   }
 
+  // Two slips from overlapping statements, flagged as possible duplicates: the PDF's wording, and a tip added later.
+  const tag = { id: 1, name: DUPLICATE_TAG_NAME, color: DUPLICATE_TAG_COLOR };
+  const duplicateFlags: NonNullable<MemoryIpcSeed['duplicateFlags']> = [];
+  const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+  const recentCharges = txs.filter((t) => t.sourceId === 1 && t.amountCents < -1500 && t.postedOn < iso(reviewCutoff)).slice(-2);
+  recentCharges.forEach((orig, i) => {
+    const copy: Transaction = {
+      ...orig,
+      id: txs.length + 1,
+      reviewed: false,
+      tagIds: [tag.id],
+      ...(i === 0
+        ? { description: `${orig.description} #0193 SEATTLE WA` }
+        : { postedOn: iso(new Date(new Date(`${orig.postedOn}T00:00:00`).getTime() + 86_400_000)), amountCents: orig.amountCents - 600 }),
+    };
+    txs.push(copy);
+    duplicateFlags.push({
+      id: i + 1,
+      txId: copy.id,
+      otherId: orig.id,
+      importId: null,
+      confidence: i === 0 ? 'certain' : 'likely',
+      reason:
+        i === 0
+          ? `Same day and amount as ${orig.description} (${money(-orig.amountCents)}, Amex Gold, imported ${short(iso(end))}), worded differently.`
+          : `Same place a day apart as ${orig.description} on ${short(orig.postedOn)} (${money(-orig.amountCents)}); the amount changed by $6.00 (a tip?).`,
+      createdAt: `${iso(end)}T09:00:00Z`,
+      resolvedAt: null,
+      resolution: null,
+    });
+  });
+
+  // The last three months arrive as one statement per account, so Import shows Recent imports.
+  const imports: NonNullable<MemoryIpcSeed['imports']> = [];
+  for (let back = 3; back >= 1; back--) {
+    const month = new Date(end.getFullYear(), end.getMonth() - back + 1, 1);
+    const key = iso(month).slice(0, 7);
+    for (const src of SOURCES) {
+      const ids = txs.filter((t) => t.sourceId === src.id && t.postedOn.startsWith(key)).map((t) => t.id);
+      if (ids.length === 0) continue;
+      imports.push({
+        id: imports.length + 1,
+        sourceId: src.id,
+        sourceName: src.name,
+        fileName: `${src.name.replace(/\s+/g, '-')}-${key}.csv`,
+        importedAt: `${iso(back === 1 ? end : new Date(month.getFullYear(), month.getMonth() + 1, 2))}T09:00:00Z`,
+        importedRows: ids.length,
+        skippedRows: 0,
+        transactionIds: ids,
+      });
+    }
+  }
+
+  // Each flagged copy came in with its month's statement.
+  for (const f of duplicateFlags) f.importId = imports.find((im) => im.transactionIds.includes(f.txId!))?.id ?? null;
+
   return {
+    imports,
+    tags: [tag],
+    duplicateFlags,
     profiles: [{ id: 1, name: 'Me', color: '#77a5f2', sortOrder: 0 }],
     sources: SOURCES.map((s) => ({ ...s })),
     groups: GROUPS.map((g) => ({ ...g })),

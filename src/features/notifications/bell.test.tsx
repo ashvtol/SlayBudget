@@ -82,6 +82,9 @@ describe('openTarget routing', () => {
     expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ reviewed: false }));
     await openTarget({ kind: 'transactions', filter: 'search', text: 'Blue Bottle' });
     expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ text: 'Blue Bottle' }));
+    const tag = await ipc().createTag('Possible duplicate', '#ddb24a');
+    await openTarget({ kind: 'transactions', filter: 'duplicates' });
+    expect(apply).toHaveBeenLastCalledWith(expect.objectContaining({ tagIds: [tag] }));
 
     await openTarget({ kind: 'category', id: 50, month: '2026-10' });
     expect(useNavStore.getState().section).toBe('categories');

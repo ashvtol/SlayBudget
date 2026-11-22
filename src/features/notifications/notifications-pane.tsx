@@ -207,6 +207,7 @@ export function NotificationsPane() {
         <Check label="Refunds" checked={config.moneyInRefunds} onChange={(v) => void update({ moneyInRefunds: v })} />
         <span className="inline-flex items-center gap-1.5">at or above <MoneyField label="Money in minimum" cents={config.moneyInMinCents} onCommit={(v) => void update({ moneyInMinCents: v })} /></span>
       </KindRow>
+      <KindRow kind="possibleDuplicates" title="Possible duplicates" hint="An import found rows that look like ones you already had." config={config} onSwitch={onSwitch} />
       <KindRow kind="update" title="Update available" hint="A new version of SlayBudget is ready." config={config} onSwitch={onSwitch} />
 
       <div className="flex items-center justify-between gap-3 pt-3" style={{ borderTop: '1px solid var(--line)' }}>

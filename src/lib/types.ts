@@ -242,12 +242,30 @@ export interface CategoryPatch {
   archived?: boolean;
 }
 
+/** A row that looks like one you already had (crates/core/src/duplicates.rs). */
+export interface DuplicateFlag {
+  id: number;
+  /** The new row, and the existing row it looks like (null once deleted). */
+  txId: number | null;
+  otherId: number | null;
+  importId: number | null;
+  confidence: 'certain' | 'likely';
+  reason: string;
+  createdAt: string;
+  resolvedAt: string | null;
+  resolution: DuplicateResolution | null;
+}
+export type DuplicateResolution = 'deleted' | 'kept' | 'other_deleted';
+
 export interface ImportReport {
+  importId?: number | null;
   sourceName: string;
   inserted: number;
   duplicates: number;
   skipped: number;
   alreadyImported: boolean;
+  /** Rows tagged "Possible duplicate" by this import. */
+  flags?: DuplicateFlag[];
 }
 
 export interface PdfItemDto { x: number; text: string }
@@ -329,7 +347,8 @@ export type NotificationKind =
   | 'overBudget'
   | 'monthlyRecap'
   | 'reviewDigest'
-  | 'moneyIn';
+  | 'moneyIn'
+  | 'possibleDuplicates';
 
 /** Where clicking a notification goes. */
 export type NotificationTarget =
@@ -337,7 +356,7 @@ export type NotificationTarget =
   | { kind: 'recurring'; id: number }
   | { kind: 'transaction'; id: number }
   | { kind: 'category'; id: number | null; month: string }
-  | { kind: 'transactions'; filter: 'review' | 'search'; text?: string };
+  | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates'; text?: string };
 
 export interface NewNotification {
   key: string;
@@ -353,4 +372,17 @@ export interface AppNotification extends NewNotification {
   createdAt: string;
   read: boolean;
   delivered: boolean;
+}
+
+/** A past import, for the Import page's Recent imports (mirrors imports.rs). */
+export interface ImportRecord {
+  id: number;
+  sourceId: number;
+  sourceName: string;
+  fileName: string;
+  importedAt: string;
+  importedRows: number;
+  skippedRows: number;
+  /** Rows from this file still present. */
+  remaining: number;
 }

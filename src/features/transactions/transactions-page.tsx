@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { SplitPage } from '@/app/shell/page';
 import { ToolbarButton } from '@/components/toolbar-button';
-import { IconCheck, IconClose, IconFilter, IconPlus, IconSearch, IconSort } from '@/components/icons';
+import { IconCheck, IconClose, IconFilter, IconPlus, IconSearch, IconSort, IconTrash } from '@/components/icons';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { CategoryPicker } from './category-picker';
-import { DetailPane, ReviewButton } from './detail-pane';
+import { DetailActions, DetailPane } from './detail-pane';
 import { FilterChips, SearchField, SortMenu } from './filter-bar';
 import { FilterMenu } from './filter-menu';
 import { TagPicker } from './tag-picker';
@@ -28,6 +29,8 @@ export function TransactionsPage() {
   const toggleSelect = useTransactionsStore((s) => s.toggleSelect);
   const toggleReviewed = useTransactionsStore((s) => s.toggleReviewed);
   const clearSelection = useTransactionsStore((s) => s.clearSelection);
+  const deleteTransactions = useTransactionsStore((s) => s.deleteTransactions);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const hasText = useTransactionsStore((s) => Boolean(s.filter.text));
   const filtered = useTransactionsStore((s) => isFiltered(s.filter));
 
@@ -113,7 +116,20 @@ export function TransactionsPage() {
             </ToolbarButton>
             {popover === 'tag' && <TagPicker ids={selectedIds} onClose={closePopover} className="left-0 top-[34px]" />}
           </div>
+          <ToolbarButton icon={IconTrash} aria-label="Delete selected" title="Delete selected" onClick={() => setConfirmDelete(true)} />
           <ToolbarButton icon={IconClose} aria-label="Clear selection" title="Clear selection" onClick={clearSelection} />
+          {confirmDelete && (
+            <ConfirmDialog
+              title={selectedIds.length === 1 ? 'Delete this transaction?' : `Delete ${selectedIds.length} transactions?`}
+              body="Their categories, notes and tags go too. A backup of your data is made first."
+              confirmLabel="Delete"
+              onCancel={() => setConfirmDelete(false)}
+              onConfirm={() => {
+                setConfirmDelete(false);
+                void deleteTransactions(selectedIds);
+              }}
+            />
+          )}
         </>
       )}
     </>
@@ -141,7 +157,7 @@ export function TransactionsPage() {
         </div>
       }
       detailTitle="Transaction"
-      detailActions={shownId != null ? <ReviewButton id={shownId} /> : undefined}
+      detailActions={shownId != null ? <DetailActions id={shownId} /> : undefined}
       detail={<DetailPane id={shownId} onPickCategory={setPickerId} onOpen={setOpenId} />}
     />
   );

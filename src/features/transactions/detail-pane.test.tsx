@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach } from 'vitest';
+import { afterEach, vi } from 'vitest';
 import { createMemoryIpc, setIpc } from '@/lib/ipc';
 import type { Source, Transaction } from '@/lib/types';
 import { DetailPane, ReviewButton } from './detail-pane';
@@ -195,5 +195,71 @@ describe('DetailPane statement section', () => {
     expect(within(section).getByText('Cleared')).toBeInTheDocument();
     expect(within(section).getByText(/YTD-2026\.csv/)).toBeInTheDocument();
     expect(within(section).getByText(/Amex/)).toBeInTheDocument();
+  });
+});
+
+describe('DetailPane possible duplicate', () => {
+  const REASON = 'Same place a day apart as SHAKE SHACK 123 on Nov 17 ($30.31); the amount changed by $6.00 (a tip?).';
+  async function renderFlagged(id: number, onOpen = vi.fn()) {
+    const ipc = createMemoryIpc({
+      sources,
+      tags: [{ id: 7, name: 'Possible duplicate', color: '#ddb24a' }],
+      transactions: [
+        tx({ id: 1, postedOn: '2026-11-17', description: 'SHAKE SHACK 123', merchant: 'shake shack', amountCents: -3031, reviewed: true }),
+        tx({ id: 2, postedOn: '2026-11-18', description: 'SHAKE SHACK 123', merchant: 'shake shack', amountCents: -3631, tagIds: [7] }),
+      ],
+      duplicateFlags: [{ id: 5, txId: 2, otherId: 1, importId: 3, confidence: 'likely', reason: REASON, createdAt: '', resolvedAt: null, resolution: null }],
+    });
+    setIpc(ipc);
+    useTransactionsStore.setState({ transactions: [], categoriesById: {}, sourcesById: {}, selected: new Set(), cursor: 0, offer: null, notice: null });
+    await useTransactionsStore.getState().load(null);
+    render(<DetailPane id={id} onPickCategory={() => {}} onOpen={onOpen} />);
+    return { ipc, onOpen, box: await screen.findByRole('region', { name: 'Possible duplicate' }) };
+  }
+  const ids = async (ipc: ReturnType<typeof createMemoryIpc>) => (await ipc.listTransactions({})).map((t) => t.id).sort();
+
+  it('explains why and shows the other transaction, which opens on click', async () => {
+    const user = userEvent.setup();
+    const { box, onOpen } = await renderFlagged(2);
+    expect(box).toHaveTextContent(REASON);
+    const other = within(box).getByRole('button', { name: /Open the other transaction/ });
+    expect(other).toHaveTextContent('Nov 17');
+    expect(other).toHaveTextContent('Shake Shack');
+    expect(other).toHaveTextContent('$30.31');
+    expect(other).toHaveTextContent('Amex');
+    await user.click(other);
+    expect(onOpen).toHaveBeenCalledWith(1);
+  });
+
+  it('not a duplicate keeps both and clears the tag', async () => {
+    const user = userEvent.setup();
+    const { box, ipc } = await renderFlagged(2);
+    await user.click(within(box).getByRole('button', { name: 'Not a duplicate' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Possible duplicate' })).not.toBeInTheDocument());
+    expect(await ids(ipc)).toEqual([1, 2]);
+    expect((await ipc.listTransactions({})).find((t) => t.id === 2)?.tagIds).toEqual([]);
+  });
+
+  it('delete this one, after a confirm', async () => {
+    const user = userEvent.setup();
+    const { box, ipc } = await renderFlagged(2);
+    await user.click(within(box).getByRole('button', { name: 'Delete this one' }));
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete this transaction?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(async () => expect(await ids(ipc)).toEqual([1]));
+  });
+
+  it('delete the other one, after a confirm, from either side of the pair', async () => {
+    const user = userEvent.setup();
+    const { box, ipc } = await renderFlagged(1);
+    await user.click(within(box).getByRole('button', { name: 'Delete the other one' }));
+    await user.click(within(screen.getByRole('alertdialog', { name: 'Delete the other transaction?' })).getByRole('button', { name: 'Delete' }));
+    await waitFor(async () => expect(await ids(ipc)).toEqual([1]));
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Possible duplicate' })).not.toBeInTheDocument());
+  });
+
+  it('shows nothing for a transaction without an open flag', async () => {
+    await renderPane(1);
+    await act(async () => {});
+    expect(screen.queryByRole('region', { name: 'Possible duplicate' })).not.toBeInTheDocument();
   });
 });

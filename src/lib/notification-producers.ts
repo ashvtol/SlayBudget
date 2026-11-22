@@ -3,7 +3,7 @@
 
 import { budgetsForMonth } from './budget-plan';
 import type { NotificationConfig } from './notification-config';
-import type { BudgetPlan, Category, NewNotification, Recurring, Transaction } from './types';
+import type { BudgetPlan, Category, DuplicateFlag, NewNotification, Recurring, Transaction } from './types';
 import { isRegular, txTypeOf } from './tx-type';
 
 const RECENT_DAYS = 7;
@@ -23,6 +23,9 @@ export interface ProducerInput {
   today: string;
   /** Split parents are counted through their parts. */
   isSplitParent: (id: number) => boolean;
+  /** Possible-duplicate flags and the file name of each import, for one item per import with open flags. */
+  duplicateFlags?: DuplicateFlag[];
+  importFileName?: (importId: number) => string | undefined;
 }
 
 export function money(cents: number): string {
@@ -41,6 +44,31 @@ const day = (d: string) => {
 const titleCase = (s: string) => s.split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1).toLowerCase()).join(' ');
 const monthName = (ym: string) => MONTHS[Number(ym.slice(5, 7)) - 1];
 const lastDayOf = (ym: string) => new Date(Date.UTC(Number(ym.slice(0, 4)), Number(ym.slice(5, 7)), 0)).getUTCDate();
+
+/** One item per import that still has open possible-duplicate flags (mirrors `possible_duplicates`). */
+function possibleDuplicates(input: ProducerInput): NewNotification[] {
+  const byImport = new Map<number, DuplicateFlag[]>();
+  for (const f of input.duplicateFlags ?? []) {
+    if (f.resolution != null || f.importId == null || f.txId == null) continue;
+    byImport.set(f.importId, [...(byImport.get(f.importId) ?? []), f]);
+  }
+  return [...byImport.entries()]
+    .sort(([a], [b]) => a - b)
+    .flatMap(([importId, flags]) => {
+      const file = input.importFileName?.(importId);
+      if (file == null) return [];
+      const profileId = input.transactions.find((t) => t.id === flags[0].txId)?.profileId ?? null;
+      const what = flags.length === 1 ? '1 possible duplicate' : `${flags.length} possible duplicates`;
+      return [{
+        key: `duplicates:${importId}`,
+        kind: 'possibleDuplicates' as const,
+        title: `${what} from ${file}`,
+        body: 'They look like transactions you already had, and are tagged Possible duplicate to review.',
+        target: { kind: 'transactions' as const, filter: 'duplicates' as const },
+        profileId,
+      }];
+    });
+}
 
 export function produceCandidates(input: ProducerInput): NewNotification[] {
   const { transactions, config, today } = input;
@@ -149,6 +177,8 @@ export function produceCandidates(input: ProducerInput): NewNotification[] {
       });
     }
   }
+
+  out.push(...possibleDuplicates(input));
 
   // Budgets, the monthly recap and the review digest.
   const excluded = new Set(input.categories.filter((c) => c.excluded).map((c) => c.id));

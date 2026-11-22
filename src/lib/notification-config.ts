@@ -5,7 +5,7 @@ import type { NotificationKind } from '@/lib/types';
 export const KEY = 'notifications.config';
 export const OLD_HORIZON_KEY = 'reminder_horizon_days';
 
-export const KINDS: NotificationKind[] = ['billMissed', 'billUpcoming', 'doubleCharge', 'largeTransaction', 'moneyIn', 'monthlyRecap', 'overBudget', 'priceUp', 'reviewDigest', 'update'];
+export const KINDS: NotificationKind[] = ['billMissed', 'billUpcoming', 'doubleCharge', 'largeTransaction', 'moneyIn', 'monthlyRecap', 'overBudget', 'possibleDuplicates', 'priceUp', 'reviewDigest', 'update'];
 
 export interface QuietHours {
   enabled: boolean;

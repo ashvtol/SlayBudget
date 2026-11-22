@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { ipc } from '@/lib/ipc';
 import { withGroupColors } from '@/lib/category-colors';
 import { useTagsStore } from '@/lib/stores/tags-store';
-import type { Category, Recurring, Source, Transaction, TransactionFilter, TxType } from '@/lib/types';
+import type { Category, DuplicateResolution, Recurring, Source, Transaction, TransactionFilter, TxType } from '@/lib/types';
 import { clearAllPatch, removePillPatch, togglePatch, type FilterPill, type FilterValue } from './filter-model';
 
 /** List order: by date (newest/oldest) or by size of amount (no day grouping). */
@@ -44,6 +44,10 @@ interface TransactionsState {
   /** Change the type of transactions (categories that don't fit are cleared), then reload. */
   setType(ids: number[], type: TxType): Promise<void>;
   toggleReviewed(ids: number[]): Promise<void>;
+  /** Delete transactions (a backup is made first), drop them from the selection, and reload. */
+  deleteTransactions(ids: number[]): Promise<void>;
+  /** Settle a possible duplicate (delete this one, delete the other one, or keep both), then reload. */
+  resolveDuplicate(flagId: number, resolution: DuplicateResolution): Promise<void>;
   /** Copilot's tag checkbox: removes the tag when every row has it, otherwise adds it to all. */
   toggleTag(ids: number[], tagId: number): Promise<void>;
   /** Make a tag and put it on the rows; returns its id. */
@@ -206,6 +210,20 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
     set((s) => ({
       transactions: s.transactions.map((t) => (target.has(t.id) ? { ...t, reviewed: anyUnreviewed } : t)),
     }));
+  },
+
+  async deleteTransactions(ids) {
+    if (ids.length === 0) return;
+    await ipc().deleteTransactions(ids);
+    const gone = new Set(ids);
+    set((s) => ({ selected: new Set([...s.selected].filter((id) => !gone.has(id))) }));
+    await get().refresh();
+  },
+
+  async resolveDuplicate(flagId, resolution) {
+    await ipc().resolveDuplicate(flagId, resolution);
+    await get().refresh();
+    await useTagsStore.getState().load();
   },
 
   async toggleTag(ids, tagId) {

@@ -57,6 +57,7 @@ fn kind_key(kind: Kind) -> &'static str {
         Kind::MonthlyRecap => "monthlyRecap",
         Kind::ReviewDigest => "reviewDigest",
         Kind::MoneyIn => "moneyIn",
+        Kind::PossibleDuplicates => "possibleDuplicates",
     }
 }
 
@@ -72,6 +73,7 @@ pub fn candidates(
     double_charges(conn, config, today, &mut out)?;
     large_transactions(conn, config, today, &mut out)?;
     money_in(conn, config, today, &mut out)?;
+    possible_duplicates(conn, &mut out)?;
     budgets(conn, config, today, &mut out)?;
     recap(conn, today, &mut out)?;
     review_digest(conn, config, today, &mut out)?;
@@ -392,6 +394,41 @@ fn money_in(
             title: title.into(),
             body: format!("{} from {}", money(cents), title_case(&merchant)),
             target: json!({ "kind": "transaction", "id": id }),
+            profile_id: Some(profile),
+        });
+    }
+    Ok(())
+}
+
+/// One item per import that still has open possible-duplicate flags.
+fn possible_duplicates(conn: &Connection, out: &mut Vec<NewNotification>) -> Result<()> {
+    let mut stmt = conn.prepare(
+        "SELECT f.import_id, i.file_name, count(*), min(t.profile_id) FROM duplicate_flags f
+         JOIN imports i ON i.id = f.import_id JOIN transactions t ON t.id = f.tx_id
+         WHERE f.resolution IS NULL GROUP BY f.import_id ORDER BY f.import_id",
+    )?;
+    let rows = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, i64>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, i64>(2)?,
+            r.get::<_, i64>(3)?,
+        ))
+    })?;
+    for row in rows {
+        let (import_id, file, n, profile) = row?;
+        let what = if n == 1 {
+            "1 possible duplicate".to_string()
+        } else {
+            format!("{n} possible duplicates")
+        };
+        out.push(NewNotification {
+            key: format!("duplicates:{import_id}"),
+            kind: Kind::PossibleDuplicates,
+            title: format!("{what} from {file}"),
+            body: "They look like transactions you already had, and are tagged Possible duplicate to review."
+                .into(),
+            target: json!({ "kind": "transactions", "filter": "duplicates" }),
             profile_id: Some(profile),
         });
     }

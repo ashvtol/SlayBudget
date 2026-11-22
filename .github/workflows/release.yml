@@ -53,7 +53,8 @@ jobs:
           releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: true
           prerelease: false
-          args: --target universal-apple-darwin
+          # Signed updater files are only built here (the release config), so local builds need no key.
+          args: --target universal-apple-darwin --config src-tauri/tauri.release.conf.json
 
       - name: Put the full changelog in latest.json
         env:

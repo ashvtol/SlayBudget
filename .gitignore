@@ -13,3 +13,7 @@ Statements/
 *.pdf
 *.CSV
 !crates/core/tests/fixtures/**
+
+# exports from Settings > Data and backup
+slaybudget-rules-*.json
+slaybudget-backup-*.db

@@ -35,7 +35,7 @@ describe('NotificationsPane', () => {
     await user.type(days, '10');
     await user.tab();
     await waitFor(async () => expect((await saved()).billLeadDays).toBe(10));
-    expect(refresh).toHaveBeenCalledWith(expect.any(String), true);
+    await waitFor(() => expect(refresh).toHaveBeenCalledWith(expect.any(String), true), { timeout: 2000 });
     await user.click(within(row('Upcoming bill')).getByRole('switch', { name: 'Again on the due day' }));
     await waitFor(async () => expect((await saved()).billDueDay).toBe(false));
   });
@@ -89,5 +89,23 @@ describe('NotificationsPane', () => {
     expect(bell.closest('[data-stack]')).not.toBeNull();
     await user.click(bell);
     await waitFor(() => expect(within(row('Monthly recap')).getByRole('switch', { name: 'Banner' })).toBeDisabled());
+  });
+
+  it('saves each toggle at once but re-checks notifications only after the toggling stops', async () => {
+    const user = userEvent.setup();
+    await renderPane();
+    const refresh = vi.spyOn(ipc(), 'notificationsRefresh');
+    const recap = () => within(row('Monthly recap')).getByRole('switch', { name: 'Banner' });
+    await user.click(recap());
+    await user.click(recap());
+    await user.click(recap());
+    await waitFor(async () => expect((await saved()).kinds.monthlyRecap.banner).toBe(false));
+    expect(refresh).not.toHaveBeenCalled();
+    await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1), { timeout: 2000 });
+  });
+
+  it('has no test banner button', async () => {
+    await renderPane();
+    expect(screen.queryByRole('button', { name: /test banner/i })).toBeNull();
   });
 });

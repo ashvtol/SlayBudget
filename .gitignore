@@ -23,3 +23,7 @@ slaybudget-backup-*.db
 
 # local memory-plugin notes
 .memsearch/
+
+# local release rehearsal records (npm run release:rehearse / release:approve)
+.release-rehearsal.json
+.release-approved.json

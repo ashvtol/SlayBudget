@@ -5,6 +5,13 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-22
+### Changed
+- Toggles slide smoothly, the way macOS switches do.
+
+### Removed
+- The "Send a test banner" button in notification settings.
+
 ## [0.2.0] - 2026-11-22
 ### Added
 - **Notifications.** A bell in the top bar of every screen collects alerts, with an unread count; click one to jump

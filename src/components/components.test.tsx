@@ -148,3 +148,17 @@ describe('Switch sizes and options', () => {
     expect(label.previousElementSibling).toBe(screen.getByRole('switch', { name: 'Refunds' }));
   });
 });
+
+describe('Switch motion', () => {
+  it('slides the knob with a transform (smooth even while the app is busy), not by moving left', async () => {
+    const { Switch } = await import('./switch');
+    const { render, screen } = await import('@testing-library/react');
+    const { rerender } = render(<Switch label="Bell" checked={false} onChange={() => {}} size="sm" />);
+    const knob = () => screen.getByRole('switch', { name: 'Bell' }).querySelector('span') as HTMLElement;
+    expect(knob().style.transform).toBe('translateX(0px)');
+    rerender(<Switch label="Bell" checked onChange={() => {}} size="sm" />);
+    expect(knob().style.transform).toBe('translateX(11px)');
+    expect(knob().style.left).toBe('2px');
+    expect(knob().className).toMatch(/transition-transform/);
+  });
+});

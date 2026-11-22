@@ -64,3 +64,23 @@ export function findBlocked(files: { path: string; content: string }[], patterns
   for (const f of files) for (const p of patterns) if (p.test(f.content) || p.test(f.path)) hits.push({ path: f.path, pattern: p.source });
   return hits;
 }
+
+/** What `npm run release:approve` records after a local rehearsal: this version, at this commit, was tested. */
+export function approvalFor(version: string, commit: string, at: string): string {
+  return `${JSON.stringify({ version, commit, at }, null, 2)}\n`;
+}
+
+/** Null when `version` at `commit` was rehearsed and approved; otherwise why publishing with a tag must wait. */
+export function checkApproval(marker: string | null, version: string, commit: string): string | null {
+  const redo = 'Run npm run release:rehearse, test the app, then npm run release:approve.';
+  let saved: { version?: string; commit?: string } | null = null;
+  try {
+    saved = marker ? JSON.parse(marker) : null;
+  } catch {
+    saved = null;
+  }
+  if (!saved?.version || !saved.commit) return `No tested release on record. ${redo}`;
+  if (saved.version !== version) return `v${version} hasn't been tested (the last approval was v${saved.version}). ${redo}`;
+  if (saved.commit !== commit) return `The code changed since v${version} was tested. ${redo}`;
+  return null;
+}

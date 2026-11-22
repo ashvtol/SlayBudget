@@ -4,7 +4,7 @@
 // main, and with --tag also pushes v<package.json version>, which starts the release build.
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { isPublished, parseBlocklist } from './release-lib.ts';
+import { checkApproval, isPublished, parseBlocklist } from './release-lib.ts';
 
 const REMOTE = 'git@github.com:ashvtol/SlayBudget.git';
 const AUTHOR = { name: 'ashvtol', email: 'ashvtol@users.noreply.github.com' };
@@ -48,6 +48,12 @@ for (const p of patterns) {
 if (blocked.length) fail(`refusing to publish; these match .publish-blocklist:\n  ${blocked.join('\n  ')}`);
 
 const version = JSON.parse(readFileSync('package.json', 'utf8')).version as string;
+// A release goes out only after the same version and commit was built, installed and tested here.
+if (tag) {
+  const approval = existsSync('.release-approved.json') ? readFileSync('.release-approved.json', 'utf8') : null;
+  const problem = checkApproval(approval, version, git(['rev-parse', 'HEAD']));
+  if (problem) fail(`refusing to tag v${version}: ${problem}`);
+}
 const parent = git(['rev-parse', '--verify', '-q', 'refs/heads/public']);
 const parentTree = parent ? git(['rev-parse', `${parent}^{tree}`]) : '';
 let commit = parent;

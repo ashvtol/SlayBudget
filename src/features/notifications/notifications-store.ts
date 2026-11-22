@@ -37,8 +37,6 @@ interface NotificationsState {
   /** A clicked banner: open its item, or the bell for a summary. */
   handleClick(id: string): Promise<void>;
   startScheduler(): () => void;
-  /** A banner that opens the bell, to check notifications work on this Mac. */
-  sendTestBanner(): Promise<void>;
 }
 
 const profile = () => useProfileStore.getState().activeProfileId ?? null;
@@ -96,10 +94,6 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
     if (!n) return;
     await useInboxStore.getState().markRead(n.id);
     await openTarget(n.target);
-  },
-  async sendTestBanner() {
-    await ensurePermission();
-    await deps.sendBanner('bell', 'SlayBudget notifications work', 'Click this banner to open your notifications.');
   },
   startScheduler() {
     const first = setTimeout(() => void get().checkNow(), FIRST_CHECK_MS);

@@ -14,16 +14,30 @@ for updates on launch and every 6 hours and show the changelog for every version
    This dates the changelog (moving the Unreleased notes under `## [0.2.0] - today`), bumps the version in
    `package.json`, `package-lock.json`, `src-tauri/tauri.conf.json` and `Cargo.toml`, and commits.
 3. **Check**: `npm run check`.
-4. **Publish and tag**:
+4. **Rehearse on your Mac** (required):
+   ```sh
+   npm run release:rehearse
+   ```
+   This builds the release app exactly as GitHub will (release config, signed update files, DMG), checks its version,
+   signature and architectures, backs up your database, installs it into `/Applications`, opens it, and prints a test
+   checklist with this release's changelog. Universal builds need `rustup target add x86_64-apple-darwin`; without it,
+   it builds for Apple Silicon only.
+   When everything works, approve it:
+   ```sh
+   npm run release:approve
+   ```
+   The approval is for this version at this commit. Change anything afterwards and you rehearse again.
+5. **Publish and tag**:
    ```sh
    npm run publish:github -- --tag
    ```
-   This copies `main` to the public repository as one commit (leaving out `tasks/`, `docs/superpowers/`,
-   `docs/launch/` and `.claude/`), refuses if anything matches your git-ignored `.publish-blocklist`, pushes it, and
-   pushes the `v0.2.0` tag.
-5. **Wait for the workflow** (`.github/workflows/release.yml`, about 15 minutes). It builds the DMG and the signed
+   This refuses unless the same version and commit were rehearsed and approved. It copies `main` to the public
+   repository as one commit (leaving out `tasks/`, `docs/superpowers/`, `docs/launch/` and `.claude/`), refuses if
+   anything matches your git-ignored `.publish-blocklist`, pushes it, and pushes the `vX.Y.Z` tag.
+6. **Wait for the workflow** (`.github/workflows/release.yml`, about 15 minutes). It builds the DMG and the signed
    updater files, uses the changelog section as the release text, and puts the full changelog into `latest.json`.
-6. **Publish the draft release** on GitHub after a quick look. Installed apps see the update once it's published.
+7. **Publish the draft release** on GitHub after a quick look. Check it says "Latest" and not "Draft"; installed apps
+   can't see a draft. GitHub's "latest" address can take a few minutes to switch over.
 
 Without `--tag`, `npm run publish:github` only updates the public code (for README or docs changes).
 

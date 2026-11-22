@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { ipc } from '@/lib/ipc';
 import { isTauri } from '@/lib/tauri-ipc';
 import type { NotificationKind } from '@/lib/types';
@@ -7,6 +7,8 @@ import { useNotificationsStore } from './notifications-store';
 import { isAutostartEnabled, setAutostart } from './notify';
 import { Switch } from '@/components/switch';
 
+/** Settings are saved at once; the re-baseline that follows waits this long after the last change. */
+const RECHECK_AFTER_MS = 600;
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const muted = { color: 'var(--muted)' };
 const field = 'h-[26px] rounded-md border bg-transparent px-2 text-[12px] outline-none';
@@ -102,7 +104,12 @@ function KindRow({ kind, title, hint, config, error, onSwitch, children }: { kin
 
 /** Settings > Notifications: Mac banners, quiet hours, and each kind's switches and thresholds. */
 export function NotificationsPane() {
-  const { enabled, load, setEnabled, checkNow, sendTestBanner } = useNotificationsStore();
+  const { enabled, load, setEnabled, checkNow } = useNotificationsStore();
+  // Re-checking notifications is heavy; wait until a burst of changes stops so toggles stay smooth.
+  const recheck = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (recheck.current) clearTimeout(recheck.current);
+  }, []);
   const [config, setConfig] = useState<NotificationConfig | null>(null);
   const [errors, setErrors] = useState<Partial<Record<keyof NotificationConfig, string>>>({});
   const [autostart, setAuto] = useState(false);
@@ -124,7 +131,8 @@ export function NotificationsPane() {
     if (Object.keys(found).length > 0) return;
     setConfig(next);
     await saveConfig(ipc(), next);
-    await checkNow({ baseline: true });
+    if (recheck.current) clearTimeout(recheck.current);
+    recheck.current = setTimeout(() => void checkNow({ baseline: true }), RECHECK_AFTER_MS);
   };
   const onSwitch = (kind: NotificationKind, which: 'bell' | 'banner', v: boolean) =>
     void update({ kinds: { ...config.kinds, [kind]: { ...config.kinds[kind], [which]: v } } });
@@ -141,11 +149,6 @@ export function NotificationsPane() {
         </span>
         <Switch label="Mac banners" hideLabel size="md" checked={enabled} onChange={(v) => void setEnabled(v)} />
       </label>
-      {desktop && (
-        <button type="button" onClick={() => void sendTestBanner()} className="mb-2 self-start text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
-          Send a test banner
-        </button>
-      )}
 
       <div role="group" aria-label="Quiet hours" className="flex flex-wrap items-center justify-between gap-3 py-3" style={{ borderTop: '1px solid var(--line)' }}>
         <span className="flex flex-col">

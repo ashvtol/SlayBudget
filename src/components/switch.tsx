@@ -35,10 +35,14 @@ export function Switch({
       aria-label={label}
       disabled={disabled}
       onClick={() => onChange(!checked)}
-      className={`relative shrink-0 rounded-full transition-colors disabled:cursor-default disabled:opacity-40 ${s.track}`}
+      className={`relative shrink-0 rounded-full transition-colors duration-200 disabled:cursor-default disabled:opacity-40 ${s.track}`}
       style={{ background: checked ? 'var(--accent)' : 'var(--line-strong)' }}
     >
-      <span className="absolute top-[2px] rounded-full bg-white transition-all" style={{ width: s.knob, height: s.knob, left: checked ? s.on : 2 }} />
+      {/* The knob slides with a transform: the GPU animates it, so it stays smooth while the app is busy saving. */}
+      <span
+        className="absolute top-[2px] rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.3)] transition-transform duration-200 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+        style={{ width: s.knob, height: s.knob, left: 2, transform: `translateX(${checked ? s.on - 2 : 0}px)` }}
+      />
     </button>
   );
   if (hideLabel) return toggle;

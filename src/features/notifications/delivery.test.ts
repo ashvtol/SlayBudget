@@ -90,10 +90,3 @@ describe('clicked banners', () => {
   });
 });
 
-describe('test banner', () => {
-  it('sends a banner that opens the bell when clicked, even with banners off', async () => {
-    useNotificationsStore.setState({ enabled: false });
-    await useNotificationsStore.getState().sendTestBanner();
-    expect(send).toHaveBeenCalledWith('bell', 'SlayBudget notifications work', 'Click this banner to open your notifications.');
-  });
-});

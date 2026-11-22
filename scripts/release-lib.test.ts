@@ -58,3 +58,15 @@ describe('publishing filters', () => {
     expect(hits).toEqual([{ path: 'a.ts', pattern: 'jane' }]);
   });
 });
+
+describe('release rehearsal approval', async () => {
+  const { approvalFor, checkApproval } = await import('./release-lib.ts');
+  it('approves only the exact version and commit that was tested', () => {
+    const marker = approvalFor('0.3.0', 'abc123', '2026-12-01T10:00:00Z');
+    expect(checkApproval(marker, '0.3.0', 'abc123')).toBeNull();
+    expect(checkApproval(marker, '0.3.0', 'def456')).toMatch(/changed since/);
+    expect(checkApproval(marker, '0.3.1', 'abc123')).toMatch(/0\.3\.1.*hasn't been tested/);
+    expect(checkApproval(null, '0.3.0', 'abc123')).toMatch(/release:rehearse/);
+    expect(checkApproval('garbage', '0.3.0', 'abc123')).toMatch(/release:rehearse/);
+  });
+});

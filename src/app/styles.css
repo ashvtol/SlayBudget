@@ -5,6 +5,8 @@
   --bg: #02080f; --side: #050d18; --panel: #06101a; --header: #030c1c;
   --line: #111c2d; --line-strong: #1b2840; --hover: #0f1829;
   --text: #e6ebf3; --muted: #7e8a9c; --subtle: #56677b;
+  /* Category pill text: the category colour mixed toward this ink (lighter on dark themes). */
+  --pill-tint: 82%; --pill-ink: white;
   --accent: #77a5f2; --on-accent: #06101f;
   --pos: #57bd57; --neg: #e34e3a; --warn: #eaa64a; --current: #ebc769;
   --income: #81aef2; --spend: #4c85ee; --track: #0f1f36; --grid: #0e1828;
@@ -23,6 +25,7 @@
   --bg: #f3f5f9; --side: #ffffff; --panel: #ffffff; --header: #fbfcfe;
   --line: #e2e6ee; --line-strong: #cfd6e2; --hover: #eef2f9;
   --text: #121826; --muted: #5d687a; --subtle: #8892a3;
+  --pill-tint: 55%; --pill-ink: black;
   --accent: #2f63e0; --on-accent: #ffffff;
   --pos: #1f8f3a; --neg: #cc3a2a; --warn: #c9801c; --current: #c9a21c;
   --income: #5b8de8; --spend: #2f63e0; --track: #e6ebf3; --grid: #edf0f5;

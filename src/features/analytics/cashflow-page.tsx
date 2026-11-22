@@ -211,7 +211,7 @@ function FlowDetails({ kind, cf, tokens }: { kind: Kind; cf: Cashflow; tokens: C
               <span className="h-[6px] w-[6px] rounded-full" style={{ background: c.color }} />
               <span
                 className="rounded-md px-2 py-0.5 text-[12px] font-semibold"
-                style={{ background: `color-mix(in srgb, ${c.color} 26%, transparent)`, color: `color-mix(in srgb, ${c.color} 82%, white)` }}
+                style={{ background: `color-mix(in srgb, ${c.color} 26%, transparent)`, color: `color-mix(in srgb, ${c.color} var(--pill-tint), var(--pill-ink))` }}
               >
                 {c.emoji ? `${c.emoji} ` : ''}
                 {c.name}

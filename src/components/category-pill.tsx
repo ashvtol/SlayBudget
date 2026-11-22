@@ -7,7 +7,7 @@ import type { Category } from '@/lib/types';
 export function pillColors(color: string): { background: string; color: string } {
   return {
     background: `color-mix(in srgb, ${color} 26%, transparent)`,
-    color: `color-mix(in srgb, ${color} 82%, white)`,
+    color: `color-mix(in srgb, ${color} var(--pill-tint), var(--pill-ink))`,
   };
 }
 

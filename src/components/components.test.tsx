@@ -92,3 +92,33 @@ describe('ToolbarButton labels', () => {
     expect(screen.getByRole('button', { name: 'Mark reviewed' })).toHaveClass('whitespace-nowrap', 'shrink-0');
   });
 });
+
+describe('pillColors contrast per theme', () => {
+  it('mixes the text with a theme ink, so light themes darken it instead of washing it out', async () => {
+    const { pillColors } = await import('./category-pill');
+    expect(pillColors('#e5b700').color).toBe('color-mix(in srgb, #e5b700 var(--pill-tint), var(--pill-ink))');
+    const fs = await import('node:fs');
+    const css = fs.readFileSync('src/app/styles.css', 'utf8');
+    const block = (theme: string) => css.slice(css.indexOf(`[data-theme="${theme}"]`), css.indexOf('}', css.indexOf(`[data-theme="${theme}"]`)));
+    expect(css.slice(0, css.indexOf('}'))).toMatch(/--pill-ink:\s*white/);
+    expect(block('daylight')).toMatch(/--pill-ink:\s*black/);
+    expect(block('daylight')).toMatch(/--pill-tint:\s*5\d%/);
+  });
+});
+
+describe('theme-aware tinted text', () => {
+  it('no component mixes coloured text toward literal white (it washes out on the Daylight theme)', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const offenders: string[] = [];
+    const walk = (dir: string) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walk(p);
+        else if (/\.tsx?$/.test(e.name) && !/\.test\./.test(e.name) && /color: `color-mix\([^`]*, white\)`/.test(fs.readFileSync(p, 'utf8'))) offenders.push(p);
+      }
+    };
+    walk('src');
+    expect(offenders).toEqual([]);
+  });
+});

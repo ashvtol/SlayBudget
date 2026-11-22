@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { syncRates } from './rates';
+import { todayStr } from '@/features/analytics/analytics-store';
 import { COMMON_CURRENCIES, useCurrencyStore, type FxBasis } from './currency-store';
 
 const BASIS_OPTIONS: { id: FxBasis; label: string; hint: string }[] = [
@@ -26,10 +27,10 @@ export function CurrencyPane() {
     setBusy(true);
     setStatus(null);
     try {
+      // The person's own calendar days (toISOString would give UTC's, a day ahead in the evening).
       const to = new Date();
-      const from = new Date(to.getTime() - 365 * 86400000);
-      const fmt = (d: Date) => d.toISOString().slice(0, 10);
-      const n = await syncRates(STATEMENT_CURRENCY, displayCurrency, fmt(from), fmt(to));
+      const from = new Date(to.getFullYear() - 1, to.getMonth(), to.getDate());
+      const n = await syncRates(STATEMENT_CURRENCY, displayCurrency, todayStr(from), todayStr(to));
       const latest = await ipc().fxLatest(STATEMENT_CURRENCY, displayCurrency);
       setStatus(n > 0 ? `Updated ${n} daily rates. 1 ${STATEMENT_CURRENCY} ≈ ${latest?.toFixed(2)} ${displayCurrency}.` : 'No rates returned.');
     } catch (e) {

@@ -70,7 +70,7 @@ export function CategoryLine({
       </span>
       <span
         className="flex h-[18px] min-w-[18px] items-center justify-center rounded px-1 text-[11px] font-semibold"
-        style={{ background: `color-mix(in srgb, ${color} 28%, transparent)`, color: `color-mix(in srgb, ${color} 80%, white)` }}
+        style={{ background: `color-mix(in srgb, ${color} 28%, transparent)`, color: `color-mix(in srgb, ${color} var(--pill-tint), var(--pill-ink))` }}
       >
         {badge ?? (emoji && emoji.trim() ? emoji : <CategoryIcon emoji={null} color={color} className="inline-flex" />)}
       </span>

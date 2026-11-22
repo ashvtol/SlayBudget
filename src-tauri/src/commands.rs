@@ -802,25 +802,6 @@ pub fn search_transactions(
     Ok(rows.into_iter().map(TransactionDto::from).collect())
 }
 
-// ---------- reminders ----------
-
-use slaybudget_core::reminders::{self, Reminder};
-
-#[tauri::command]
-pub fn reminders_due(
-    state: State<'_, AppState>,
-    profile_id: Option<i64>,
-    today: String,
-    horizon_days: Option<i64>,
-) -> IpcResult<Vec<Reminder>> {
-    Ok(reminders::due(
-        &lock(&state),
-        profile_id,
-        parse_date(&today)?,
-        horizon_days.unwrap_or(7),
-    )?)
-}
-
 // ---------- watched folder ----------
 
 #[derive(Debug, Serialize)]
@@ -1270,5 +1251,98 @@ pub fn apply_rebalance(
         &pairs,
         scope,
         &month,
+    )?)
+}
+
+// ----- notification center -----
+
+fn now_utc() -> String {
+    chrono::Utc::now().format("%Y-%m-%dT%H:%M:%SZ").to_string()
+}
+
+#[tauri::command]
+pub fn notifications_list(
+    state: State<'_, AppState>,
+    profile_id: Option<i64>,
+) -> IpcResult<Vec<slaybudget_core::notifications::Notification>> {
+    Ok(slaybudget_core::notifications::list(
+        &lock(&state),
+        profile_id,
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_add(
+    state: State<'_, AppState>,
+    n: slaybudget_core::notifications::NewNotification,
+    read: bool,
+) -> IpcResult<Option<slaybudget_core::notifications::Notification>> {
+    Ok(slaybudget_core::notifications::add_if_new(
+        &lock(&state),
+        &n,
+        &now_utc(),
+        read,
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_mark_read(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
+    Ok(slaybudget_core::notifications::mark_read(
+        &lock(&state),
+        id,
+        &now_utc(),
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_mark_all_read(
+    state: State<'_, AppState>,
+    profile_id: Option<i64>,
+) -> IpcResult<()> {
+    Ok(slaybudget_core::notifications::mark_all_read(
+        &lock(&state),
+        profile_id,
+        &now_utc(),
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_dismiss(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
+    Ok(slaybudget_core::notifications::dismiss(&lock(&state), id)?)
+}
+
+#[tauri::command]
+pub fn notifications_pending(
+    state: State<'_, AppState>,
+    profile_id: Option<i64>,
+) -> IpcResult<Vec<slaybudget_core::notifications::Notification>> {
+    Ok(slaybudget_core::notifications::pending_banners(
+        &lock(&state),
+        profile_id,
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_mark_delivered(state: State<'_, AppState>, ids: Vec<i64>) -> IpcResult<()> {
+    Ok(slaybudget_core::notifications::mark_delivered(
+        &lock(&state),
+        &ids,
+        &now_utc(),
+    )?)
+}
+
+#[tauri::command]
+pub fn notifications_refresh(
+    state: State<'_, AppState>,
+    today: String,
+    baseline: bool,
+) -> IpcResult<Vec<slaybudget_core::notifications::Notification>> {
+    let today = chrono::NaiveDate::parse_from_str(&today, "%Y-%m-%d")
+        .map_err(|e| slaybudget_core::CoreError::Invalid(format!("bad date {today}: {e}")))?;
+    Ok(slaybudget_core::notifications::producers::refresh(
+        &lock(&state),
+        today,
+        &now_utc(),
+        baseline,
     )?)
 }

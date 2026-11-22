@@ -25,6 +25,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
         include_str!("../../migrations/0009_statement_details.sql"),
     ),
     (10, include_str!("../../migrations/0010_budget_plan.sql")),
+    (11, include_str!("../../migrations/0011_notifications.sql")),
 ];
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.

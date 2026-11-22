@@ -5,6 +5,22 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-22
+### Added
+- **Notifications.** A bell in the top bar of every screen collects alerts, with an unread count; click one to jump
+  straight to it.
+  - Upcoming bills (you choose how many days before, and again on the due day) and bills that look missed.
+  - Subscription price increases, possible double charges and large transactions.
+  - Over budget or on pace to overspend, a monthly recap on the 1st, and a weekly "to review" reminder.
+  - Paychecks and refunds arriving, and new versions of SlayBudget.
+- **Mac banners** for the same alerts while SlayBudget is open; clicking one opens exactly what it's about. Quiet
+  hours hold them overnight, and a burst of alerts arrives as one summary.
+- **Notification settings**: turn each kind on or off for the bell and banners, and tune every threshold.
+
+### Changed
+- Bill reminders now follow the recurring bills you've saved, instead of guessing from your history.
+- Settings switches are now macOS-style slide toggles.
+
 ## [0.1.0] - 2026-11-22
 
 The first public release.

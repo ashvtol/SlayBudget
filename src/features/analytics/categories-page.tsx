@@ -80,6 +80,19 @@ export function CategoriesPage() {
   useEffect(() => clearCleanUp(), [clearCleanUp]);
   const go = useNavStore((s) => s.go);
   const applyTxFilter = useTransactionsStore((s) => s.applyFilter);
+  // A notification asked for a category (or All) in a month: show it once the data is in.
+  const intent = useNavStore((s) => s.intent);
+  const clearIntent = useNavStore((s) => s.clearIntent);
+  const [handledIntent, setHandledIntent] = useState(0);
+  if (src && intent?.target.kind === 'category' && intent.seq !== handledIntent) {
+    const { id, month } = intent.target;
+    setHandledIntent(intent.seq);
+    setSelection(id == null ? { kind: 'all' } : { kind: 'category', id });
+    setPickedMonth(month === today.slice(0, 7) ? null : month);
+  }
+  useEffect(() => {
+    if (intent?.target.kind === 'category' && intent.seq === handledIntent) clearIntent();
+  }, [intent, handledIntent, clearIntent]);
 
   const model = useMemo(() => (src ? buildCategories({ ...src, today, selection, month: pickedMonth ?? undefined }) : null), [src, today, selection, pickedMonth]);
   const selectedCategory = selection.kind === 'category' ? src?.categories.find((c) => c.id === selection.id) : undefined;

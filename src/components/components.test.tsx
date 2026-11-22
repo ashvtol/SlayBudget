@@ -122,3 +122,29 @@ describe('theme-aware tinted text', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+describe('Switch sizes and options', () => {
+  it('toggles, can be small, disabled, labelled after, or labelled only for screen readers', async () => {
+    const { Switch } = await import('./switch');
+    const { render, screen } = await import('@testing-library/react');
+    const userEvent = (await import('@testing-library/user-event')).default;
+    const user = userEvent.setup();
+    const changes: boolean[] = [];
+    const { rerender } = render(<Switch label="Bell" checked={false} onChange={(v) => changes.push(v)} size="sm" />);
+    const sw = screen.getByRole('switch', { name: 'Bell' });
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    expect(sw.className).toMatch(/w-\[26px\]/);
+    await user.click(sw);
+    expect(changes).toEqual([true]);
+    rerender(<Switch label="Bell" checked={false} onChange={(v) => changes.push(v)} size="sm" disabled />);
+    await user.click(screen.getByRole('switch', { name: 'Bell' }));
+    expect(changes).toEqual([true]);
+    expect(screen.getByRole('switch', { name: 'Bell' })).toBeDisabled();
+    rerender(<Switch label="Mac banners" checked onChange={() => {}} hideLabel />);
+    expect(screen.queryByText('Mac banners')).toBeNull();
+    expect(screen.getByRole('switch', { name: 'Mac banners' })).toHaveAttribute('aria-checked', 'true');
+    rerender(<Switch label="Refunds" checked onChange={() => {}} size="sm" labelSide="after" />);
+    const label = screen.getByText('Refunds');
+    expect(label.previousElementSibling).toBe(screen.getByRole('switch', { name: 'Refunds' }));
+  });
+});

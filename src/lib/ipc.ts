@@ -4,6 +4,7 @@
  * swap in the in-memory implementation.
  */
 
+import type { AppNotification, NewNotification } from './types';
 import type {
   BudgetStatus,
   CashFlow,
@@ -19,7 +20,6 @@ import type {
   Profile,
   LegacyReport,
   Recurring,
-  Reminder,
   Source,
   ImportReport,
   PdfTextDto,
@@ -48,6 +48,11 @@ import type {
   Tag,
   TagPatch,
 } from './types';
+import { createNotificationInbox } from './notifications-memory';
+import { configFrom, KEY as NOTIFICATION_CONFIG_KEY, OLD_HORIZON_KEY } from './notification-config';
+import { produceCandidates } from './notification-producers';
+
+const BASELINED_KEY = 'notifications.baselined_at';
 import { MIN_CONTAINS, isPaymentPlatform, normalizeDescription } from './recategorize';
 import {
   budgetStatus,
@@ -59,7 +64,6 @@ import {
 } from './analytics';
 import { parseQuery, runSearch } from './search';
 import { normalizedName } from './category-names';
-import { dueReminders } from './reminders';
 import { budgetsForMonth } from './budget-plan';
 
 export type { Profile } from './types';
@@ -109,6 +113,21 @@ export interface Ipc {
   previewFtModel(modelJson: string): Promise<FtProposal[]>;
   /** Learn the chosen merchants and move their Other transactions (the app backs up first). */
   importFtModel(choices: FtChoice[]): Promise<FtReport>;
+  /** Notification center: the inbox behind the bell (see notifications.rs). */
+  notificationsList(profileId: number | null): Promise<AppNotification[]>;
+  /** Store an event unless its key was seen; `read` marks a quiet baseline item. Null when it already existed. */
+  notificationsAdd(n: NewNotification, read: boolean): Promise<AppNotification | null>;
+  notificationsMarkRead(id: number): Promise<void>;
+  notificationsMarkAllRead(profileId: number | null): Promise<void>;
+  notificationsDismiss(id: number): Promise<void>;
+  /** Unread items whose banner hasn't been shown. */
+  notificationsPending(profileId: number | null): Promise<AppNotification[]>;
+  notificationsMarkDelivered(ids: number[]): Promise<void>;
+  /**
+   * Detect today's events and return the new notifications. Baseline mode (first run, or after the settings change)
+   * stores what's already true as read, without banners.
+   */
+  notificationsRefresh(today: string, baseline: boolean): Promise<AppNotification[]>;
   /** Write a full copy of the database to `path` (a file the person chose). */
   backupDatabase(path: string): Promise<void>;
   /** Write learned merchants and rules to `path`, leaving out anything that identifies the person. */
@@ -170,7 +189,6 @@ export interface Ipc {
 
   searchTransactions(profileId: number | null, query: string, today: string, limit?: number): Promise<Transaction[]>;
 
-  remindersDue(profileId: number | null, today: string, horizonDays: number): Promise<Reminder[]>;
 
   migrateLegacyJson(transactionsJson: string, modelJson?: string | null): Promise<LegacyReport>;
   scanWatchedFolder(): Promise<WatchScan>;
@@ -264,6 +282,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   let nextProfileId = Math.max(0, ...profiles.map((p) => p.id)) + 1;
   const children = new Map<number, Transaction[]>();
   const fxRates: FxRate[] = (seed.fxRates ?? []).map((r) => ({ ...r }));
+  const inbox = createNotificationInbox();
 
   // ----- budget plan (mirror `budgets.rs`) -----
   const plan: BudgetPlan = { months: [], groups: [], rollovers: [] };
@@ -624,6 +643,49 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       }
       return out.sort((a, b) => a.ftCategory.localeCompare(b.ftCategory) || a.merchant.localeCompare(b.merchant));
     },
+    async notificationsList(profileId) {
+      return inbox.list(profileId);
+    },
+    async notificationsAdd(n, read) {
+      return inbox.add(n, read);
+    },
+    async notificationsMarkRead(id) {
+      inbox.markRead(id);
+    },
+    async notificationsMarkAllRead(profileId) {
+      inbox.markAllRead(profileId);
+    },
+    async notificationsDismiss(id) {
+      inbox.dismiss(id);
+    },
+    async notificationsPending(profileId) {
+      return inbox.pending(profileId);
+    },
+    async notificationsMarkDelivered(ids) {
+      inbox.markDelivered(ids);
+    },
+    async notificationsRefresh(today, baseline) {
+      const first = baseline || !settings.has(BASELINED_KEY);
+      const config = configFrom(settings.get(NOTIFICATION_CONFIG_KEY) ?? null, settings.get(OLD_HORIZON_KEY) ?? null);
+      const fresh: AppNotification[] = [];
+      const candidates = produceCandidates({
+        transactions,
+        recurring: recurringViews(null),
+        categories,
+        plan,
+        config,
+        today,
+        isSplitParent: (id) => (children.get(id)?.length ?? 0) > 0,
+      });
+      for (const n of candidates) {
+        if (!config.kinds[n.kind]?.bell) continue;
+        const saved = inbox.add(n, first);
+        if (saved && !first) fresh.push(saved);
+      }
+      if (first) settings.set(BASELINED_KEY, new Date().toISOString());
+      inbox.prune();
+      return fresh;
+    },
     async backupDatabase() {
       // Nothing to copy in memory; the installed app writes the file.
     },
@@ -945,11 +1007,6 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     },
     async scanWatchedFolder() {
       return { filesScanned: 0, filesImported: 0, transactionsInserted: 0, transactionsDuplicate: 0 };
-    },
-    async remindersDue(profileId, today, horizonDays) {
-      const rows = transactions.filter((t) => profileId == null || t.profileId === profileId);
-      const meta: CategoryMeta[] = categories.map((c) => ({ id: c.id, budgetCents: c.budgetCents ?? null, excluded: c.excluded }));
-      return dueReminders(rows, meta, today, horizonDays, children);
     },
 
     async listCategoryGroups() {

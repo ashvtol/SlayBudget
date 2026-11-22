@@ -1,5 +1,4 @@
-// Thin wrappers over the Tauri notification and autostart plugins, guarded so
-// the app runs unchanged in the browser/dev (where the plugins are absent).
+// macOS banners and launch at login, guarded so the app runs unchanged in the browser (where Tauri is absent).
 
 import { isTauri } from '@/lib/tauri-ipc';
 
@@ -11,10 +10,19 @@ export async function ensurePermission(): Promise<boolean> {
   return granted;
 }
 
-export async function notify(title: string, body: string): Promise<void> {
+/**
+ * Show a macOS banner. Clicking it brings SlayBudget forward and emits `notification-click` with `id` (a notification
+ * id, or "bell" for a summary). Falls back to the plugin's plain banner if the native one fails.
+ */
+export async function sendBanner(id: string, title: string, body: string): Promise<void> {
   if (!isTauri()) return;
-  const { sendNotification } = await import('@tauri-apps/plugin-notification');
-  sendNotification({ title, body });
+  const { invoke } = await import('@tauri-apps/api/core');
+  try {
+    await invoke('notify_banner', { id, title, body });
+  } catch {
+    const { sendNotification } = await import('@tauri-apps/plugin-notification');
+    sendNotification({ title, body });
+  }
 }
 
 export async function isAutostartEnabled(): Promise<boolean> {

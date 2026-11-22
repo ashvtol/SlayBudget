@@ -261,16 +261,6 @@ export interface FxRate {
   rate: number;
 }
 
-export type ReminderKind = 'upcomingBill' | 'budgetOver' | 'budgetProjectedOver';
-
-export interface Reminder {
-  kind: ReminderKind;
-  key: string;
-  title: string;
-  body: string;
-  categoryId: number | null;
-}
-
 export interface LegacyReport {
   transactionsInserted: number;
   transactionsDuplicate: number;
@@ -326,4 +316,41 @@ export interface FtReport {
   learned: number;
   moved: number;
   created: number;
+}
+
+/** Notification center (mirrors crates/core/src/notifications.rs). */
+export type NotificationKind =
+  | 'update'
+  | 'billUpcoming'
+  | 'billMissed'
+  | 'priceUp'
+  | 'doubleCharge'
+  | 'largeTransaction'
+  | 'overBudget'
+  | 'monthlyRecap'
+  | 'reviewDigest'
+  | 'moneyIn';
+
+/** Where clicking a notification goes. */
+export type NotificationTarget =
+  | { kind: 'update' }
+  | { kind: 'recurring'; id: number }
+  | { kind: 'transaction'; id: number }
+  | { kind: 'category'; id: number | null; month: string }
+  | { kind: 'transactions'; filter: 'review' | 'search'; text?: string };
+
+export interface NewNotification {
+  key: string;
+  kind: NotificationKind;
+  title: string;
+  body: string;
+  target: NotificationTarget;
+  profileId: number | null;
+}
+
+export interface AppNotification extends NewNotification {
+  id: number;
+  createdAt: string;
+  read: boolean;
+  delivered: boolean;
 }

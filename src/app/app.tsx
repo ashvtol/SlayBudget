@@ -29,7 +29,12 @@ const SCREENS: [SectionId, (activeProfile: number | null) => React.ReactNode][] 
   ['categories', () => <CategoriesPage />],
   ['recurring', () => <RecurringPage />],
   ['insights', () => <InsightsPage />],
-  ['import', (activeProfile) => <ImportPage onImported={() => void useTransactionsStore.getState().load(activeProfile)} />],
+  ['import', (activeProfile) => <ImportPage
+        onImported={() => {
+          void useTransactionsStore.getState().load(activeProfile);
+          void useNotificationsStore.getState().checkNow();
+        }}
+      />],
 ];
 
 export function App() {
@@ -49,9 +54,19 @@ export function App() {
     void ipc()
       .scanWatchedFolder()
       .catch(() => undefined)
-      .then(() => useNotificationsStore.getState().load())
-      .then(() => useNotificationsStore.getState().runDueCheck());
+      .then(() => useNotificationsStore.getState().load());
   }, [loadTheme, loadProfiles]);
+
+  // Notifications: check on launch and hourly; a clicked macOS banner opens its item (or the bell).
+  useEffect(() => useNotificationsStore.getState().startScheduler(), []);
+  useEffect(() => {
+    if (!('__TAURI_INTERNALS__' in window)) return;
+    let stop: (() => void) | undefined;
+    void import('@tauri-apps/api/event').then(({ listen }) =>
+      listen<string>('notification-click', (e) => void useNotificationsStore.getState().handleClick(e.payload)).then((f) => (stop = f)),
+    );
+    return () => stop?.();
+  }, []);
 
   // Look for a new version shortly after launch and every 6 hours; the dialog asks before installing.
   useEffect(() => useUpdateStore.getState().startAutoCheck(), []);

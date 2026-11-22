@@ -1,9 +1,20 @@
+import { NotificationBell } from '@/features/notifications/bell';
 import type { ReactNode } from 'react';
 
 /**
  * The slim header bar every page and panel uses: title, then a toolbar right
  * after it, and optional actions on the far right (Copilot layout).
  */
+/** A screen's own actions, then the notification bell, at the right end of the top bar. */
+function TopBarActions({ children }: { children?: ReactNode }) {
+  return (
+    <>
+      {children}
+      <NotificationBell />
+    </>
+  );
+}
+
 export function PaneHeader({
   title,
   level = 1,
@@ -50,7 +61,7 @@ export function Page({
 }) {
   return (
     <main aria-label={title} className="flex min-w-0 flex-1 flex-col" style={{ background: 'var(--bg)' }}>
-      <PaneHeader title={title} toolbar={toolbar} actions={actions} />
+      <PaneHeader title={title} toolbar={toolbar} actions={<TopBarActions>{actions}</TopBarActions>} />
       <div className={`flex min-h-0 flex-1 flex-col overflow-y-auto ${padded ? 'gap-6 px-8 py-8' : ''}`}>
         {subtitle && <p className="m-0 text-[13px]" style={{ color: 'var(--muted)' }}>{subtitle}</p>}
         {children}
@@ -92,7 +103,7 @@ export function SplitPage({
         <div className="min-h-0 flex-1 overflow-y-auto">{list}</div>
       </section>
       <section aria-label="Details" className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <PaneHeader title={detailTitle ?? ''} level={2} actions={detailActions} />
+        <PaneHeader title={detailTitle ?? ''} level={2} actions={<TopBarActions>{detailActions}</TopBarActions>} />
         <div className="min-h-0 flex-1 overflow-y-auto">{detail}</div>
       </section>
       {overlay}

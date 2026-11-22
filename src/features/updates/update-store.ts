@@ -40,6 +40,30 @@ const tauriDeps: UpdaterDeps = {
 };
 
 const DISMISSED_KEY = 'updates.dismissed';
+
+/** Put a found update in the bell (once per version), and banner it like any other notification. */
+async function notifyUpdate(version: string) {
+  try {
+    const added = await ipc().notificationsAdd(
+      {
+        key: `update:${version}`,
+        kind: 'update',
+        title: `SlayBudget ${version} is available`,
+        body: "See what's new and install when you like.",
+        target: { kind: 'update' },
+        profileId: null,
+      },
+      false,
+    );
+    if (!added) return;
+    const { useNotificationsStore } = await import('@/features/notifications/notifications-store');
+    const { useInboxStore } = await import('@/features/notifications/inbox-store');
+    await useInboxStore.getState().load();
+    await useNotificationsStore.getState().deliverPending();
+  } catch {
+    /* the bell is best-effort; the update dialog still works */
+  }
+}
 const FIRST_CHECK_MS = 5_000;
 const EVERY_MS = 6 * 3_600_000;
 
@@ -107,6 +131,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         return;
       }
       const notes = update.body ?? '';
+      void notifyUpdate(update.version);
       const dismissed = auto ? await ipc().getSetting(DISMISSED_KEY) : null;
       set({
         status: 'available',

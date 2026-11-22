@@ -1,0 +1,29 @@
+{
+  "quietHours": { "enabled": true, "start": "22:00", "end": "08:00" },
+  "kinds": {
+    "billMissed": { "bell": true, "banner": true },
+    "billUpcoming": { "bell": true, "banner": true },
+    "doubleCharge": { "bell": true, "banner": true },
+    "largeTransaction": { "bell": true, "banner": true },
+    "moneyIn": { "bell": true, "banner": true },
+    "monthlyRecap": { "bell": true, "banner": true },
+    "overBudget": { "bell": true, "banner": true },
+    "priceUp": { "bell": true, "banner": true },
+    "reviewDigest": { "bell": true, "banner": true },
+    "update": { "bell": true, "banner": true }
+  },
+  "billLeadDays": 3,
+  "billDueDay": true,
+  "missedGraceDays": 3,
+  "priceUpPercent": 2.0,
+  "priceUpMinCents": 50,
+  "doubleChargeDays": 1,
+  "largeCents": 50000,
+  "budgetOnPace": true,
+  "budgetWarnPercent": 100,
+  "digestWeekday": 1,
+  "digestMin": 5,
+  "moneyInPaychecks": true,
+  "moneyInRefunds": true,
+  "moneyInMinCents": 0
+}

@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
 import { createMemoryIpc, ipc, setIpc } from '@/lib/ipc';
@@ -251,4 +251,15 @@ describe('RecurringPage actions menu', () => {
   });
 });
 
+});
+
+describe('RecurringPage opened from a notification', () => {
+  it('selects the bill the notification is about, then clears the request', async () => {
+    const { useNavStore } = await import('@/lib/stores/nav-store');
+    await setup();
+    const netflix = (await ipc().listRecurring(null)).find((r) => r.merchant === 'netflix')!.saved!.id;
+    await act(async () => useNavStore.getState().openIntent({ kind: 'recurring', id: netflix }));
+    await waitFor(() => expect(within(details()).getByRole('heading', { name: 'Netflix' })).toBeInTheDocument());
+    expect(useNavStore.getState().intent).toBeNull();
+  });
 });

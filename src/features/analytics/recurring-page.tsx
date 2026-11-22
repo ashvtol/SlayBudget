@@ -2,6 +2,7 @@ import { useScreen } from '@/app/shell/screen';
 import { CategoryIcon } from '@/components/category-icon';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { SplitPage } from '@/app/shell/page';
+import { useNavStore } from '@/lib/stores/nav-store';
 import { CategoryPill } from '@/components/category-pill';
 import { Money } from '@/components/money';
 import { IconCheck, IconMore, IconPlus, IconTriangleDown, IconTriangleRight } from '@/components/icons';
@@ -118,6 +119,22 @@ export function RecurringPage() {
     };
   }, [menuOpen]);
   const all = model ? [...model.thisMonth, ...model.future, ...model.stale, ...model.paused, ...model.archived] : [];
+  // A notification asked for a bill: select it once the list is in.
+  const intent = useNavStore((s) => s.intent);
+  const clearIntent = useNavStore((s) => s.clearIntent);
+  const [handledIntent, setHandledIntent] = useState(0);
+  if (model && intent?.target.kind === 'recurring' && intent.seq !== handledIntent) {
+    const id = intent.target.id;
+    const item = all.find((i) => i.recurring.saved?.id === id);
+    setHandledIntent(intent.seq);
+    if (item) {
+      setSelected(item.key);
+      if (model.archived.includes(item)) setShowArchived(true);
+    }
+  }
+  useEffect(() => {
+    if (intent?.target.kind === 'recurring' && intent.seq === handledIntent) clearIntent();
+  }, [intent, handledIntent, clearIntent]);
   const current = all.find((i) => i.key === selected) ?? all[0];
   const saved = current?.recurring.saved ?? null;
 

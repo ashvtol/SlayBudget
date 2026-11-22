@@ -1,3 +1,4 @@
+import type { NotificationTarget } from '@/lib/types';
 import { create } from 'zustand';
 
 export const SECTIONS = [
@@ -33,6 +34,13 @@ interface NavState {
   goForward(): void;
   canGoBack(): boolean;
   canGoForward(): boolean;
+  /**
+   * Something to open on arrival (a bill on Recurrings, a category and month on Categories), set by a notification.
+   * The screen applies it once its data is in, then clears it.
+   */
+  intent: { target: NotificationTarget; seq: number } | null;
+  openIntent(target: NotificationTarget): void;
+  clearIntent(): void;
   /** Bumped by Cmd+R / the refresh button; the shown screen re-reads its data. */
   refreshTick: number;
   refresh(): void;
@@ -56,6 +64,15 @@ export const useNavStore = create<NavState>((set, get) => ({
   cleanUpOther: false,
   openCleanUpOther: () => set((s) => ({ ...visit(s, 'categories'), settingsOpen: false, cleanUpOther: true })),
   clearCleanUpOther: () => set({ cleanUpOther: false }),
+  intent: null,
+  openIntent: (target) =>
+    set((s) => ({
+      ...visit(s, target.kind === 'recurring' ? 'recurring' : 'categories'),
+      settingsOpen: false,
+      settingsPane: null,
+      intent: { target, seq: (s.intent?.seq ?? 0) + 1 },
+    })),
+  clearIntent: () => set({ intent: null }),
   back: [],
   forward: [],
   goBack: () =>

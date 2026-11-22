@@ -173,3 +173,16 @@ describe('App updates', () => {
     useUpdateStore.getState().reset();
   });
 });
+
+describe('Notification bell', () => {
+  it('sits in the top bar of every screen', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    const nav = screen.getByRole('navigation', { name: /sections/i });
+    for (const name of ['Dashboard', 'Transactions', 'Cash flow', 'Categories', 'Recurrings', 'Insights', 'Import']) {
+      await user.click(within(nav).getByRole('link', { name: new RegExp(`^${name}`) }));
+      const shown = await screen.findAllByRole('button', { name: /^Notifications/ });
+      expect(shown.filter((b) => b.closest('[aria-hidden="true"], [hidden]') == null).length).toBeGreaterThan(0);
+    }
+  });
+});

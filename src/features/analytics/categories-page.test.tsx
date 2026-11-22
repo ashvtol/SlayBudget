@@ -412,3 +412,20 @@ describe('CategoriesPage transaction drawer', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Transaction' })).toBeNull());
   });
 });
+
+describe('CategoriesPage opened from a notification', () => {
+  it('selects the category and the month the notification is about', async () => {
+    await setup();
+    await act(async () => useNavStore.getState().openIntent({ kind: 'category', id: 20, month: '2026-10' }));
+    await waitFor(() => expect(within(details()).getByText('Spent in October 2026')).toBeInTheDocument());
+    expect(within(details()).getByRole('heading', { name: 'Groceries' })).toBeInTheDocument();
+    expect(useNavStore.getState().intent).toBeNull();
+  });
+
+  it('a recap for All categories shows that month for everything', async () => {
+    await setup();
+    await act(async () => useNavStore.getState().openIntent({ kind: 'category', id: null, month: '2026-10' }));
+    await waitFor(() => expect(within(details()).getByRole('heading', { name: 'All categories' })).toBeInTheDocument());
+    expect(details()).toHaveTextContent('Spent in October 2026');
+  });
+});

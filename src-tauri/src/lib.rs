@@ -1,6 +1,7 @@
 //! Tauri shell: owns the database connection and exposes core use cases as commands.
 
 mod commands;
+mod notify_native;
 
 use rusqlite::Connection;
 use std::sync::Mutex;
@@ -79,7 +80,6 @@ pub fn run() {
             commands::fx_latest,
             commands::fx_convert_cents,
             commands::search_transactions,
-            commands::reminders_due,
             commands::list_category_groups,
             commands::list_categories,
             commands::create_category,
@@ -96,6 +96,15 @@ pub fn run() {
             commands::import_ft_model,
             commands::backup_database,
             commands::export_rules,
+            commands::notifications_list,
+            commands::notifications_add,
+            commands::notifications_mark_read,
+            commands::notifications_mark_all_read,
+            commands::notifications_dismiss,
+            commands::notifications_pending,
+            commands::notifications_mark_delivered,
+            commands::notifications_refresh,
+            notify_native::notify_banner,
             commands::move_category_to_group,
             commands::rename_group,
             commands::ungroup_group,

@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { sectionFor } from '../src/lib/changelog.ts';
 
 const PENDING = '.release-rehearsal.json';
 const KEY = join(homedir(), '.tauri', 'slaybudget.key');
@@ -67,12 +68,13 @@ run('open', [APP]);
 
 writeFileSync(PENDING, `${JSON.stringify({ version, commit }, null, 2)}\n`);
 
-const notes = readFileSync('CHANGELOG.md', 'utf8').split(`## [${version}]`)[1]?.split('\n## [')[0]?.trim() ?? '';
+const notes = sectionFor(readFileSync('CHANGELOG.md', 'utf8'), version)?.body ?? '(no changelog section found)';
 console.log(`
 Test SlayBudget ${version} (now open), then approve or fix:
   [ ] Settings > Updates shows "Installed version ${version}"
   [ ] Your data is all there: Dashboard, Transactions, Categories, Recurrings, Cash flow, Insights
   [ ] An import still works (Import, or your watched folder)
+  [ ] README.md describes what's new (features table, FAQ, screenshots from sample data)
   [ ] What's new in this release works:
 ${notes.split('\n').map((l) => `      ${l}`).join('\n')}
 

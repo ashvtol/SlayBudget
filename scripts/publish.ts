@@ -5,6 +5,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, rmSync } from 'node:fs';
 import { checkApproval, isPublished, parseBlocklist } from './release-lib.ts';
+import { cleanupRehearsal } from './cleanup.ts';
 
 const REMOTE = 'git@github.com:ashvtol/SlayBudget.git';
 const AUTHOR = { name: 'ashvtol', email: 'ashvtol@users.noreply.github.com' };
@@ -73,4 +74,7 @@ if (tag) {
   git(['tag', '-a', name, commit, '-m', `SlayBudget ${name}`]);
   git(['push', REMOTE, `refs/tags/${name}`]);
   console.log(`publish: pushed ${name}; the release workflow is building the DMG (draft release).`);
+  // The rehearsal did its job: remove its build, records and older backups.
+  const removed = cleanupRehearsal();
+  if (removed.length) console.log(`publish: cleaned up the rehearsal (${removed.length} items).`);
 }

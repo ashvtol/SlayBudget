@@ -84,3 +84,23 @@ export function checkApproval(marker: string | null, version: string, commit: st
   if (saved.commit !== commit) return `The code changed since v${version} was tested. ${redo}`;
   return null;
 }
+
+/** What a rehearsal leaves in the repo: its single-use records and its release build folders (rebuilt each time). */
+export const REHEARSAL_LEFTOVERS = [
+  '.release-rehearsal.json',
+  '.release-approved.json',
+  'target/aarch64-apple-darwin',
+  'target/x86_64-apple-darwin',
+  'target/universal-apple-darwin',
+];
+
+const REHEARSAL_BACKUP = /^slaybudget\.before-rehearsal-.+-(\d{8}T\d{6})\.db$/;
+
+/** Rehearsal database backups to delete: all but the newest. Other backups and the database itself are never listed. */
+export function rehearsalBackupsToDelete(files: string[]): string[] {
+  const backups = files
+    .map((f) => ({ f, stamp: REHEARSAL_BACKUP.exec(f)?.[1] }))
+    .filter((x): x is { f: string; stamp: string } => x.stamp != null)
+    .sort((a, b) => a.stamp.localeCompare(b.stamp));
+  return backups.slice(0, -1).map((x) => x.f);
+}

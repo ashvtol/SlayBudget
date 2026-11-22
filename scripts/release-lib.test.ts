@@ -70,3 +70,26 @@ describe('release rehearsal approval', async () => {
     expect(checkApproval('garbage', '0.3.0', 'abc123')).toMatch(/release:rehearse/);
   });
 });
+
+describe('release cleanup', async () => {
+  const { rehearsalBackupsToDelete, REHEARSAL_LEFTOVERS } = await import('./release-lib.ts');
+  it('keeps only the newest rehearsal backup and never touches other backups or the database', () => {
+    const files = [
+      'slaybudget.db',
+      'slaybudget.before-rehearsal-0.2.1-20261122T190646.db',
+      'slaybudget.before-rehearsal-0.2.0-20261101T090000.db',
+      'slaybudget.before-rehearsal-0.3.0-20261201T080000.db',
+      'slaybudget.before-notifications-20261122-085538.db',
+    ];
+    expect(rehearsalBackupsToDelete(files)).toEqual([
+      'slaybudget.before-rehearsal-0.2.0-20261101T090000.db',
+      'slaybudget.before-rehearsal-0.2.1-20261122T190646.db',
+    ]);
+    expect(rehearsalBackupsToDelete(['slaybudget.db'])).toEqual([]);
+  });
+  it('lists the build folders and records a rehearsal leaves behind', () => {
+    expect(REHEARSAL_LEFTOVERS).toEqual(
+      expect.arrayContaining(['.release-rehearsal.json', '.release-approved.json', 'target/aarch64-apple-darwin', 'target/universal-apple-darwin']),
+    );
+  });
+});

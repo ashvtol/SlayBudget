@@ -36,6 +36,8 @@ SlayBudget gives you the polish of a premium personal finance app as an **open-s
 - 🔒 **Private by design**: one SQLite file on your Mac. No account, no telemetry, no third-party data aggregator.
 - ⚡ **Fast and native**: a Rust core and a Tauri app (not Electron). Every screen answers in well under a second.
 - 🧠 **Learns how you categorize**: correct a transaction once and similar ones follow.
+- 🔔 **Tells you what matters**: bills coming up or missed, price increases, double charges and budgets running over,
+  in an in-app bell and Mac banners that open exactly what they're about.
 - 🎨 **Beautiful**: four themes, crisp charts, keyboard shortcuts and accessibility settings.
 
 If you've been looking for a **Copilot Money alternative, a YNAB alternative or a Mint replacement** that keeps your data
@@ -54,6 +56,8 @@ on your own computer, this is it.
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
+| 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price increases, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
+| ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
 | 👨‍👩‍👧 **Profiles** | Keep household members' accounts separate, or view everything combined. |
 | 🛡️ **Your data, your rules** | One-click database backup, and a rules export that leaves out anything identifying you. |
 | ♿ **Accessible** | Light, dark and system themes, reduced motion, signed amounts and full keyboard navigation. |
@@ -72,6 +76,20 @@ on your own computer, this is it.
 ![SlayBudget category detail with a side pane for editing a restaurant transaction](docs/screenshots/transaction-pane.png)
 
 <table>
+<tr>
+<td width="50%">
+
+**Notifications: the bell**
+![SlayBudget notification bell listing an update, a missed bill, transactions to review, budgets over and a paycheck](docs/screenshots/notifications.png)
+
+</td>
+<td width="50%">
+
+**Tune every alert**
+![SlayBudget notification settings with macOS-style toggles for the bell and Mac banners, quiet hours and thresholds](docs/screenshots/notification-settings.png)
+
+</td>
+</tr>
 <tr>
 <td width="50%">
 
@@ -184,6 +202,14 @@ from Settings > Data and backup, or with Time Machine.
 
 Yes. Import transactions from a JSON export, and import categorization rules so your merchants are categorized the way
 you're used to.
+</details>
+
+<details>
+<summary><b>Will it remind me about bills?</b></summary>
+
+Yes. The bell in the top bar and Mac banners tell you about upcoming bills (as many days ahead as you like), bills
+that look missed, price increases, possible double charges, large purchases and budgets running over. Banners appear
+while SlayBudget is open, and quiet hours hold them overnight.
 </details>
 
 <details>

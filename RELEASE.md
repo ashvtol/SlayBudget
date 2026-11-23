@@ -37,8 +37,12 @@ for updates on launch and every 6 hours and show the changelog for every version
    anything matches your git-ignored `.publish-blocklist`, pushes it, and pushes the `vX.Y.Z` tag.
    Then it cleans up after the rehearsal: the release build folders, the single-use rehearsal and approval records,
    and all but the newest rehearsal database backup (`npm run release:cleanup` does the same on its own).
-6. **Wait for the workflow** (`.github/workflows/release.yml`, about 15 minutes). It builds the DMG and the signed
-   updater files, uses the changelog section as the release text, and puts the full changelog into `latest.json`.
+6. **Wait for the workflow** (`.github/workflows/release.yml`, about 45 minutes). It builds the Mac DMG, then the
+   Windows (.exe, .msi) and Linux (.AppImage, .deb) builds, one at a time, each with signed updater files. It uses the
+   changelog section as the release text and puts the full changelog into `latest.json`. Windows and Linux are
+   untested: if one of them fails, the Mac build is still released; check the run and fix it in a later release.
+   To try the builds without releasing, run the workflow by hand from the Actions tab ("Run workflow"): the
+   installers are kept as workflow artifacts.
 7. **Publish the draft release** on GitHub after a quick look. Check it says "Latest" and not "Draft"; installed apps
    can't see a draft. GitHub's "latest" address can take a few minutes to switch over.
 

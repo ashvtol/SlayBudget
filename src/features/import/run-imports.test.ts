@@ -51,7 +51,7 @@ describe('runImports', () => {
     const d = deps(ipc);
     const results = await runImports([file('a.csv'), file('b.qfx'), file('c.pdf'), file('d.txt')], 1, d);
     expect(results.map((r) => r.error ?? r.report!.sourceName)).toEqual(['Amex', 'Citi', 'Citi-Checking', 'Unsupported file type']);
-    expect(ipc.importCsvText).toHaveBeenCalledWith(1, 'a.csv', 'data');
+    expect(ipc.importCsvText).toHaveBeenCalledWith(1, 'a.csv', 'data', undefined);
     expect(d.extractPdf).toHaveBeenCalledOnce();
   });
 
@@ -70,6 +70,6 @@ describe('runImports', () => {
       { name: 'b', report: report({ inserted: 5, duplicates: 2 }) },
       { name: 'c', error: 'nope' },
     ];
-    expect(summarize(results)).toEqual({ imported: 8, duplicates: 3, failed: 1 });
+    expect(summarize(results)).toEqual({ imported: 8, duplicates: 3, failed: 1, waiting: 0 });
   });
 });

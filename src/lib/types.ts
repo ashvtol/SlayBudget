@@ -14,6 +14,78 @@ export interface Source {
   kind: 'csv' | 'pdf' | 'ofx' | 'bank' | 'manual';
   institution: string | null;
   currency: string;
+  /** Card, checking or savings (null until you say). */
+  accountType?: AccountType | null;
+  color?: string | null;
+  /** Put on every transaction imported into this account. */
+  defaultTagId?: number | null;
+}
+
+export type AccountType = 'card' | 'checking' | 'savings';
+
+/** What a statement says about its account (crates/core/src/import/clues.rs). */
+export interface StatementClues {
+  last4: string | null;
+  bank: string | null;
+  layout: string | null;
+  folder: string | null;
+}
+
+export interface NewAccount {
+  name: string;
+  institution: string | null;
+  accountType: AccountType | null;
+  color: string | null;
+  defaultTagId: number | null;
+}
+
+/** What an account is recognized by: "last4" ("<bank>|1004") or "layout" (a file layout). */
+export interface AccountClue {
+  id: number;
+  kind: 'last4' | 'layout';
+  value: string;
+}
+
+/** Changes to an account (left out: unchanged; null: cleared). */
+export interface AccountPatch {
+  name?: string;
+  institution?: string | null;
+  accountType?: AccountType | null;
+  color?: string | null;
+}
+
+/** A file that may be a statement, found in the watched folder or Downloads. */
+export interface StatementCandidate {
+  path: string;
+  name: string;
+  modifiedMs: number;
+  size: number;
+  from: 'watched' | 'downloads';
+}
+
+export interface MoveReport {
+  moved: number;
+  /** Rows the account already had, removed instead of moved. */
+  dropped: number;
+}
+
+/** Your answer to "Which account is this?". */
+export type AccountChoice =
+  | { kind: 'existing'; sourceId: number; remember: boolean }
+  | { kind: 'new'; account: NewAccount; remember: boolean };
+
+/** The import paused: which account is this file? */
+export interface NeedsAccount {
+  clues: StatementClues;
+  /** The likeliest account, listed first. */
+  guess: number | null;
+  suggestedName: string;
+  preview: {
+    rows: number;
+    first: string | null;
+    last: string | null;
+    sample: { postedOn: string; description: string; amountCents: number }[];
+  };
 }
 
 export interface CategoryGroup {
@@ -272,6 +344,8 @@ export interface ImportReport {
   alreadyImported: boolean;
   /** Rows tagged "Possible duplicate" by this import. */
   flags?: DuplicateFlag[];
+  /** Set when the account couldn't be recognized: nothing was imported yet. */
+  needsAccount?: NeedsAccount | null;
 }
 
 export interface PdfItemDto { x: number; text: string }
@@ -354,7 +428,8 @@ export type NotificationKind =
   | 'monthlyRecap'
   | 'reviewDigest'
   | 'moneyIn'
-  | 'possibleDuplicates';
+  | 'possibleDuplicates'
+  | 'statements';
 
 /** Where clicking a notification goes. */
 export type NotificationTarget =
@@ -362,7 +437,8 @@ export type NotificationTarget =
   | { kind: 'recurring'; id: number }
   | { kind: 'transaction'; id: number }
   | { kind: 'category'; id: number | null; month: string }
-  | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates'; text?: string };
+  | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates'; text?: string }
+  | { kind: 'import' };
 
 export interface NewNotification {
   key: string;

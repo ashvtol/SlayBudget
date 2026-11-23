@@ -1,17 +1,26 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Page } from '@/app/shell/page';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { createDefaultImportDeps } from './default-deps';
 import { RecentImports } from './recent-imports';
 import { DUPLICATE_TAG_COLOR } from '@/lib/duplicates-memory';
 import { openTarget } from '@/features/notifications/route';
-import type { ImportReport } from '@/lib/types';
-import { runImports, summarize, type FileResult, type ImportDeps } from './run-imports';
+import type { AccountChoice, ImportReport, Source, Tag } from '@/lib/types';
+import { WhichAccount } from './which-account';
+import { useBackgroundImports } from './background-imports';
+import { importOne, runImports, summarize, type FileResult, type ImportDeps } from './run-imports';
 
-/** "17 added · 298 already imported · 3 to check" */
-function fileLine(r: ImportReport): string {
-  if (r.alreadyImported) return `${r.inserted} added (already imported)`;
-  const parts = [`${r.inserted} added`];
+/** "Amex Gold · 17 added · 298 already imported · 3 to check" */
+function fileLine(r: FileResult): string {
+  if (r.error) return r.error;
+  if (r.skipped) return 'skipped';
+  const report = r.report as ImportReport;
+  if (report.needsAccount) return 'needs an account';
+  if (report.alreadyImported) return `${report.inserted} added (already imported)`;
+  return reportLine(report);
+}
+function reportLine(r: ImportReport): string {
+  const parts = [r.sourceName ? `${r.sourceName} · ${r.inserted} added` : `${r.inserted} added`];
   if (r.duplicates > 0) parts.push(`${r.duplicates} already imported`);
   const flags = r.flags?.length ?? 0;
   if (flags > 0) parts.push(`${flags} to check`);
@@ -83,6 +92,36 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
 
   const summary = status.phase === 'done' ? summarize(status.results) : null;
 
+  // Files that need an account: your accounts and tags, to choose from.
+  const [accounts, setAccounts] = useState<Source[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const found = useBackgroundImports((s) => s.waiting);
+  const answerFound = useBackgroundImports((s) => s.answer);
+  const skipFound = useBackgroundImports((s) => s.skip);
+  const waiting = (summary?.waiting ?? 0) + found.length;
+  useEffect(() => {
+    if (!waiting) return;
+    void Promise.resolve()
+      .then(() => deps.ipc.listSources())
+      .then((all) => setAccounts(all.filter((a) => a.profileId === targetProfileId)))
+      .catch(() => setAccounts([]));
+    void Promise.resolve()
+      .then(() => deps.ipc.listTags())
+      .then(setTags)
+      .catch(() => setTags([]));
+  }, [waiting, deps, targetProfileId]);
+
+  const replace = (index: number, result: FileResult) =>
+    setStatus((s) => (s.phase === 'done' ? { phase: 'done', results: s.results.map((r, i) => (i === index ? result : r)) } : s));
+  async function answer(index: number, choice: AccountChoice) {
+    if (status.phase !== 'done' || targetProfileId == null) return;
+    const file = status.results[index].file;
+    if (!file) return;
+    replace(index, await importOne(file, targetProfileId, deps, choice));
+    setImportsVersion((v) => v + 1);
+    onImported?.();
+  }
+
   return (
     <Page title="Import" subtitle={targetProfileId == null ? 'Create a profile first' : undefined}>
       <div
@@ -133,20 +172,55 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
         </div>
       )}
 
+      {found.length > 0 && (
+        <section aria-label="Found in your folders" className="flex flex-col gap-3 rounded-2xl border p-5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <h2 className="m-0 text-base font-semibold">
+            {found.length === 1 ? '1 statement found in your folders needs an account' : `${found.length} statements found in your folders need an account`}
+          </h2>
+          {found.map((f) => (
+            <WhichAccount
+              key={f.path}
+              fileName={f.name}
+              needs={f.needs}
+              accounts={accounts}
+              tags={tags}
+              onAnswer={(choice) =>
+                void answerFound(f.path, choice).then(() => {
+                  setImportsVersion((v) => v + 1);
+                  onImported?.();
+                })
+              }
+              onSkip={() => skipFound(f.path)}
+            />
+          ))}
+        </section>
+      )}
       {status.phase === 'done' && summary && (
         <section aria-label="Import results" className="flex flex-col gap-3 rounded-2xl border p-5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           <h2 className="m-0 text-base font-semibold">
             Imported {summary.imported} transactions
             {summary.duplicates > 0 && `, skipped ${summary.duplicates} already seen`}
             {summary.failed > 0 && `, ${summary.failed} failed`}
+            {summary.waiting > 0 && `, ${summary.waiting} ${summary.waiting === 1 ? 'needs an account' : 'need an account'}`}
           </h2>
+          {status.results.map((r, i) =>
+            r.report?.needsAccount && !r.skipped ? (
+              <WhichAccount
+                key={`${r.name}-${i}`}
+                fileName={r.name}
+                needs={r.report.needsAccount}
+                accounts={accounts}
+                tags={tags}
+                onAnswer={(choice) => void answer(i, choice)}
+                onSkip={() => replace(i, { ...r, skipped: true })}
+              />
+            ) : null,
+          )}
           <ul className="flex flex-col gap-1 text-sm">
             {status.results.map((r) => (
               <li key={r.name} className="flex justify-between">
                 <span className="truncate">{r.name}</span>
-                <span style={{ color: r.error ? 'var(--neg)' : 'var(--muted)' }}>
-                  {r.error ?? fileLine(r.report!)}
-                </span>
+                <span style={{ color: r.error ? 'var(--neg)' : 'var(--muted)' }}>{fileLine(r)}</span>
               </li>
             ))}
           </ul>

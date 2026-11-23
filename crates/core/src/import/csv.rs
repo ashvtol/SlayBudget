@@ -31,7 +31,7 @@ const HEADER_STARTS: &[&str] = &[
 ];
 
 /// Drop metadata lines (e.g. Citi's "Time period of report") before the header row.
-fn strip_preamble(text: &str) -> &str {
+pub(crate) fn strip_preamble(text: &str) -> &str {
     for (offset, line) in text.split_inclusive('\n').scan(0usize, |pos, line| {
         let start = *pos;
         *pos += line.len();

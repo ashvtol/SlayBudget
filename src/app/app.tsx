@@ -13,7 +13,6 @@ import { InsightsPage } from '@/features/analytics/insights-page';
 import { SearchPalette } from '@/features/search/search-palette';
 import { useSearchStore } from '@/features/search/search-store';
 import { useNotificationsStore } from '@/features/notifications/notifications-store';
-import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { useTransactionsStore } from '@/features/transactions/transactions-store';
 import { sectionForShortcut, useNavStore } from '@/lib/stores/nav-store';
@@ -22,6 +21,9 @@ import { useDisplayStore } from '@/lib/stores/display-store';
 import { useUpdateStore } from '@/features/updates/update-store';
 import { UpdateDialog } from '@/features/updates/update-ui';
 import { UndoToast, useUndoKeys } from '@/features/undo/undo';
+import { SCAN_EVERY_MS, useBackgroundImports } from '@/features/import/background-imports';
+import { useInboxStore } from '@/features/notifications/inbox-store';
+import { shortcutKey } from '@/lib/platform';
 
 const SCREENS: [SectionId, (activeProfile: number | null) => React.ReactNode][] = [
   ['dashboard', () => <DashboardPage />],
@@ -50,13 +52,27 @@ export function App() {
 
   useEffect(() => {
     void loadTheme();
-    void loadProfiles();
     void useDisplayStore.getState().load();
-    // Auto-import any new files in the watched folder, then run reminders.
-    void ipc()
-      .scanWatchedFolder()
-      .catch(() => undefined)
+    // Statements in the watched folder (and Downloads, if on): imported in the background now and every few minutes,
+    // through the same import as a file you drop in. Then reminders.
+    const background = useBackgroundImports;
+    background.setState({
+      onImported: () => {
+        void useTransactionsStore.getState().refresh();
+        useNavStore.getState().refresh();
+      },
+    });
+    const scan = () =>
+      background
+        .getState()
+        .scan()
+        .catch(() => undefined)
+        .then(() => useInboxStore.getState().load());
+    void loadProfiles()
+      .then(scan)
       .then(() => useNotificationsStore.getState().load());
+    const timer = setInterval(() => void scan(), SCAN_EVERY_MS);
+    return () => clearInterval(timer);
   }, [loadTheme, loadProfiles]);
 
   // Notifications: check on launch and hourly; a clicked macOS banner opens its item (or the bell).
@@ -80,7 +96,7 @@ export function App() {
         useSearchStore.getState().openPalette();
         return;
       }
-      if (!e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!shortcutKey(e) || e.altKey) return;
       const nav = useNavStore.getState();
       if (e.key === 'r' || e.key === 'R') {
         e.preventDefault();

@@ -63,6 +63,9 @@ export const UNDO_LABELS: Record<string, (args: Args) => string> = {
   setRollover: () => 'Change Rollover',
   applyRebalance: () => 'Rebalance Budgets',
   deleteTransactions: (a) => ((a[0] as number[]).length === 1 ? 'Delete Transaction' : `Delete ${(a[0] as number[]).length} Transactions`),
+  setAccountDefaultTag: () => 'Change Default Tag',
+  updateAccount: () => 'Edit Account',
+  forgetAccountClue: () => 'Forget How an Account Is Recognized',
   resolveDuplicate: (a) => (a[1] === 'kept' ? 'Not a Duplicate' : 'Delete Transaction'),
 };
 

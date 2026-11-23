@@ -76,4 +76,17 @@ describe('undo and redo from the keyboard', () => {
     menuStep('undo', performance.now() + 1000);
     await waitFor(async () => expect(await category()).toBeNull());
   });
+
+  it('on Windows and Linux, Ctrl+Z undoes and Ctrl+Y or Ctrl+Shift+Z redoes', async () => {
+    const user = userEvent.setup();
+    render(<Harness />);
+    await ipc().setTransactionCategory(1, 11);
+    await user.keyboard('{Control>}z{/Control}');
+    await waitFor(async () => expect(await category()).toBeNull());
+    await user.keyboard('{Control>}y{/Control}');
+    await waitFor(async () => expect(await category()).toBe(11));
+    await user.keyboard('{Control>}z{/Control}');
+    await user.keyboard('{Control>}{Shift>}z{/Shift}{/Control}');
+    await waitFor(async () => expect(await category()).toBe(11));
+  });
 });

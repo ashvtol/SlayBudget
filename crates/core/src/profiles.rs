@@ -59,6 +59,14 @@ pub struct Source {
     pub kind: SourceKind,
     pub institution: Option<String>,
     pub currency: String,
+    /// "card", "checking" or "savings" (None until you say).
+    #[serde(default)]
+    pub account_type: Option<String>,
+    #[serde(default)]
+    pub color: Option<String>,
+    /// Put on every transaction imported into this account.
+    #[serde(default)]
+    pub default_tag_id: Option<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -168,7 +176,7 @@ pub fn find_or_create_source(
 
 pub fn list_sources(conn: &Connection, profile_id: ProfileId) -> Result<Vec<Source>> {
     let mut stmt = conn.prepare(
-        "SELECT id, profile_id, name, kind, institution, currency FROM sources WHERE profile_id = ?1 ORDER BY id",
+        "SELECT id, profile_id, name, kind, institution, currency, account_type, color, default_tag_id FROM sources WHERE profile_id = ?1 ORDER BY id",
     )?;
     let rows = stmt.query_map([profile_id], |r| {
         let kind: String = r.get(3)?;
@@ -180,6 +188,9 @@ pub fn list_sources(conn: &Connection, profile_id: ProfileId) -> Result<Vec<Sour
                 kind: SourceKind::Csv,
                 institution: r.get(4)?,
                 currency: r.get(5)?,
+                account_type: r.get(6)?,
+                color: r.get(7)?,
+                default_tag_id: r.get(8)?,
             },
             kind,
         ))
@@ -196,7 +207,7 @@ pub fn list_sources(conn: &Connection, profile_id: ProfileId) -> Result<Vec<Sour
 /// Every source across all profiles, for building lookups in the UI.
 pub fn list_all_sources(conn: &Connection) -> Result<Vec<Source>> {
     let mut stmt = conn.prepare(
-        "SELECT id, profile_id, name, kind, institution, currency FROM sources ORDER BY profile_id, id",
+        "SELECT id, profile_id, name, kind, institution, currency, account_type, color, default_tag_id FROM sources ORDER BY profile_id, id",
     )?;
     let rows = stmt.query_map([], |r| {
         let kind: String = r.get(3)?;
@@ -208,6 +219,9 @@ pub fn list_all_sources(conn: &Connection) -> Result<Vec<Source>> {
                 kind: SourceKind::Csv,
                 institution: r.get(4)?,
                 currency: r.get(5)?,
+                account_type: r.get(6)?,
+                color: r.get(7)?,
+                default_tag_id: r.get(8)?,
             },
             kind,
         ))

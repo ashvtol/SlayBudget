@@ -2,8 +2,22 @@
 //! click blocks), then the app comes forward and the webview gets `notification-click` with the item's id.
 //! Verified on macOS 27.2 in the T0 spike (docs/superpowers/plans/2026-11-22-notification-center.md).
 
+#[cfg(target_os = "macos")]
 use tauri::{AppHandle, Emitter, Manager};
 
+/// Elsewhere the app falls back to the notification plugin (no click-through).
+#[cfg(not(target_os = "macos"))]
+#[tauri::command]
+pub fn notify_banner(
+    _app: tauri::AppHandle,
+    _id: String,
+    _title: String,
+    _body: String,
+) -> Result<(), String> {
+    Err("clickable banners are macOS only".into())
+}
+
+#[cfg(target_os = "macos")]
 #[tauri::command]
 pub fn notify_banner(
     app: AppHandle,

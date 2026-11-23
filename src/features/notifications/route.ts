@@ -38,6 +38,10 @@ export async function openTarget(target: NotificationTarget): Promise<void> {
       await useTransactionsStore.getState().applyFilter({ ...clearAllPatch(), ...patch });
       return;
     }
+    case 'import':
+      nav.closeSettings();
+      nav.go('import');
+      return;
     case 'recurring':
     case 'category':
       nav.openIntent(target);

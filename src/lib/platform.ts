@@ -10,3 +10,6 @@ export function applyPlatform(el: HTMLElement, env: { tauri: boolean; mac: boole
 export function isMac(): boolean {
   return typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent);
 }
+
+/** The app's shortcut key: ⌘ on a Mac, Ctrl on Windows and Linux (exactly one of them, so ⌘⌃ combos pass through). */
+export const shortcutKey = (e: KeyboardEvent): boolean => e.metaKey !== e.ctrlKey;

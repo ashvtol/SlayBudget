@@ -10,6 +10,7 @@ use crate::categorize::{extract_merchant, heuristics, learning, rules};
 use crate::error::Result;
 use crate::profiles::{self, ProfileId, SourceId, SourceKind};
 use crate::transactions::{self, InsertOutcome, NewTransaction};
+use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -39,6 +40,9 @@ pub struct ImportReport {
     /// Rows that look like ones you already had (tagged "Possible duplicate"), for the results to show.
     #[serde(default)]
     pub flags: Vec<crate::duplicates::DuplicateFlag>,
+    /// Set when the file's account couldn't be recognized: nothing was imported; ask, then import with a choice.
+    #[serde(default)]
+    pub needs_account: Option<crate::accounts::NeedsAccount>,
 }
 
 pub fn content_hash(content: &[u8]) -> String {
@@ -114,6 +118,7 @@ pub fn import_rows(
             skipped: 0,
             already_imported: true,
             flags: Vec::new(),
+            needs_account: None,
         });
     }
     conn.execute(
@@ -173,6 +178,7 @@ pub fn import_rows(
         skipped: 0,
         already_imported: false,
         flags,
+        needs_account: None,
     })
 }
 
@@ -236,6 +242,7 @@ fn already_imported_anywhere(
             skipped: 0,
             already_imported: true,
             flags: Vec::new(),
+            needs_account: None,
         }),
     )
 }
@@ -340,5 +347,165 @@ pub fn import_ofx(
         parsed.rows,
     )?;
     report.skipped = parsed.skipped;
+    Ok(report)
+}
+
+/// A statement file's content, as the app reads it.
+pub enum StatementFile<'a> {
+    Csv(&'a str),
+    Ofx(&'a str),
+    Pdf { doc: &'a PdfText, hash: &'a str },
+}
+
+/// Import a statement into the account it belongs to: the one you chose, or the one its clues point to. When the
+/// account can't be recognized and you haven't chosen, nothing is imported and the report says `needs_account`.
+pub fn import_file(
+    conn: &Connection,
+    profile_id: ProfileId,
+    path: &str,
+    file: StatementFile<'_>,
+    choice: Option<crate::accounts::Choice>,
+) -> Result<ImportReport> {
+    use crate::accounts::{self, Choice, NeedsAccount, Preview, Recognized, SampleRow};
+    use crate::import::clues;
+
+    let (clues, hash, source_kind) = match &file {
+        StatementFile::Csv(text) => (
+            clues::from_csv(path, text),
+            content_hash(text.as_bytes()),
+            SourceKind::Csv,
+        ),
+        StatementFile::Ofx(text) => (
+            clues::from_ofx(path, text),
+            content_hash(text.as_bytes()),
+            SourceKind::Ofx,
+        ),
+        StatementFile::Pdf { doc, hash } => {
+            let text: Vec<String> = doc
+                .lines
+                .iter()
+                .map(|l| {
+                    l.items
+                        .iter()
+                        .map(|i| i.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
+                .collect();
+            (
+                clues::from_pdf(path, &text.join("\n")),
+                hash.to_string(),
+                SourceKind::Pdf,
+            )
+        }
+    };
+    let amex_clue = clues.bank.as_deref() == Some("American Express");
+    // Rows, the statement kind and rows skipped, read as a given kind of account.
+    let read = |amex: bool,
+                account_type: Option<&str>|
+     -> Result<(Vec<ParsedRow>, StatementKind, usize)> {
+        Ok(match &file {
+            StatementFile::Csv(text) => {
+                let parsed = parse_csv_from(text, amex)?;
+                let kind = match parsed.layout {
+                    CsvLayout::Amex | CsvLayout::CitiCostco => StatementKind::Card,
+                    CsvLayout::Generic => match account_type {
+                        Some("card") => StatementKind::Card,
+                        Some("checking") | Some("savings") => StatementKind::Checking,
+                        _ => StatementKind::Generic,
+                    },
+                };
+                (parsed.rows, kind, parsed.skipped)
+            }
+            StatementFile::Ofx(text) => {
+                let parsed = parse_ofx(text)?;
+                let kind = if text.contains("<CCSTMTRS>") {
+                    StatementKind::Card
+                } else {
+                    StatementKind::Checking
+                };
+                (parsed.rows, kind, parsed.skipped)
+            }
+            StatementFile::Pdf { doc, .. } => {
+                let parsed = parse_pdf(doc)?;
+                let kind = match parsed.kind {
+                    PdfStatementKind::CitiCard => StatementKind::Card,
+                    PdfStatementKind::CitiChecking => StatementKind::Checking,
+                };
+                (parsed.rows, kind, 0)
+            }
+        })
+    };
+    let (rows, _, _) = read(amex_clue, None)?;
+    // The same file imported before: nothing to ask, nothing new.
+    if let Some(report) = already_imported_anywhere(conn, profile_id, &hash, rows.len())? {
+        if let StatementFile::Csv(_) = file {
+            fill_details(conn, profile_id, report.source_id, &rows)?;
+        }
+        return Ok(report);
+    }
+
+    let (source_id, remember) = match choice {
+        Some(Choice::Existing {
+            source_id,
+            remember,
+        }) => (source_id, remember),
+        Some(Choice::New { account, remember }) => (
+            accounts::create(conn, profile_id, source_kind, &account)?,
+            remember,
+        ),
+        None => match accounts::recognize(conn, profile_id, &clues)? {
+            Recognized::Account(id) => (id, true),
+            Recognized::Ask(guess) => {
+                let mut dates: Vec<NaiveDate> = rows.iter().map(|r| r.posted_on).collect();
+                dates.sort();
+                let preview = Preview {
+                    rows: rows.len(),
+                    first: dates.first().map(|d| d.to_string()),
+                    last: dates.last().map(|d| d.to_string()),
+                    sample: rows
+                        .iter()
+                        .take(3)
+                        .map(|r| SampleRow {
+                            posted_on: r.posted_on.to_string(),
+                            description: r.description.clone(),
+                            amount_cents: r.amount_cents,
+                        })
+                        .collect(),
+                };
+                return Ok(ImportReport {
+                    import_id: None,
+                    source_id: 0,
+                    source_name: String::new(),
+                    inserted: 0,
+                    duplicates: 0,
+                    skipped: 0,
+                    already_imported: false,
+                    flags: Vec::new(),
+                    needs_account: Some(NeedsAccount {
+                        suggested_name: accounts::suggested_name(&clues),
+                        clues,
+                        guess,
+                        preview,
+                    }),
+                });
+            }
+        },
+    };
+    if remember {
+        accounts::remember(conn, source_id, &clues)?;
+    }
+    let amex = amex_clue || accounts::is_amex(conn, source_id)?;
+    let account_type = accounts::account_type(conn, source_id)?;
+    let (rows, kind, skipped) = read(amex, account_type.as_deref())?;
+    let file_name = match &file {
+        StatementFile::Pdf { doc, .. } => doc.filename.clone(),
+        _ => path.rsplit(['/', '\\']).next().unwrap_or(path).to_string(),
+    };
+    let mut report = import_rows(conn, profile_id, source_id, &file_name, &hash, kind, rows)?;
+    report.skipped = skipped;
+    if let Some(import_id) = report.import_id.filter(|_| !report.already_imported) {
+        accounts::tag_import(conn, source_id, import_id)?;
+    }
     Ok(report)
 }

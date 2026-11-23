@@ -1,0 +1,16 @@
+{
+  "app": {
+    "windows": [
+      {
+        "title": "SlayBudget",
+        "width": 1360,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 600
+      }
+    ]
+  },
+  "bundle": {
+    "targets": ["deb", "appimage"]
+  }
+}

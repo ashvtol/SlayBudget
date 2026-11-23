@@ -37,7 +37,13 @@ pub fn run() {
             app.manage(AppState {
                 db: Mutex::new(conn),
                 undo: Mutex::new(slaybudget_core::undo::UndoStack::new()),
-                edit_menu: edit_menu::EditMenu::install(app.handle()).ok(),
+                // Mac apps have a menu bar; on Windows and Linux a menu would sit inside the window, so ⌘Z there is
+                // the keyboard shortcut alone.
+                edit_menu: if cfg!(target_os = "macos") {
+                    edit_menu::EditMenu::install(app.handle()).ok()
+                } else {
+                    None
+                },
             });
             Ok(())
         })
@@ -117,6 +123,14 @@ pub fn run() {
             commands::undo_import,
             commands::duplicate_flag_for,
             commands::resolve_duplicate,
+            commands::move_import,
+            commands::statement_candidates,
+            commands::read_statement,
+            commands::update_account,
+            commands::create_account_folders,
+            commands::set_account_default_tag,
+            commands::account_clues,
+            commands::forget_account_clue,
             commands::undo,
             commands::redo,
             commands::undo_state,

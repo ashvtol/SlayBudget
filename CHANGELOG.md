@@ -5,6 +5,23 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+### Added
+- **Statements land in the right account.** SlayBudget recognizes which account a statement belongs to from the file
+  (the last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once, "Which
+  account is this?", showing what's in the file and its best guess, or lets you make a new account. It remembers your
+  answer. Two cards from the same bank aren't mixed up.
+- **Settings > Accounts**: name, bank, type (card, checking, savings), a default tag for everything an account imports
+  (and, if you like, what it already has), what each account is recognized by, and a folder for each account in your
+  watched folder.
+- **Move an import** to another account from Recent imports (rows that account already has are dropped). Undoable.
+- **Statements from your folders, automatically**: the watched folder is checked every few minutes (including account
+  folders inside it), and optionally your Downloads folder too. The bell tells you what was imported, or which
+  statement needs an account. Nothing else in those folders is touched.
+- **Windows and Linux builds (untested).** Each release now includes a Windows installer (.exe and .msi) and Linux
+  packages (.AppImage and .deb), built automatically from the same code. They haven't been tried on a real Windows or
+  Linux machine yet: if something doesn't work, please open an issue. Shortcuts there use Ctrl (Ctrl+Z / Ctrl+Y).
+
 ## [0.4.0] - 2026-11-22
 ### Added
 - **Undo and redo.** ⌘Z takes back your last change and ⇧⌘Z puts it back, up to 15 steps: categories (including

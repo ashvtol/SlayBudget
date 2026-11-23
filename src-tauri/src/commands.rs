@@ -120,6 +120,9 @@ pub struct SourceDto {
     pub kind: String,
     pub institution: Option<String>,
     pub currency: String,
+    pub account_type: Option<String>,
+    pub color: Option<String>,
+    pub default_tag_id: Option<i64>,
 }
 
 #[tauri::command]
@@ -134,6 +137,9 @@ pub fn list_sources(state: State<'_, AppState>) -> IpcResult<Vec<SourceDto>> {
             kind: s.kind.as_str().to_string(),
             institution: s.institution,
             currency: s.currency,
+            account_type: s.account_type,
+            color: s.color,
+            default_tag_id: s.default_tag_id,
         })
         .collect())
 }
@@ -592,6 +598,7 @@ pub struct ImportReportDto {
     pub skipped: usize,
     pub already_imported: bool,
     pub flags: Vec<slaybudget_core::duplicates::DuplicateFlag>,
+    pub needs_account: Option<slaybudget_core::accounts::NeedsAccount>,
 }
 
 impl From<ImportReport> for ImportReportDto {
@@ -604,6 +611,7 @@ impl From<ImportReport> for ImportReportDto {
             skipped: r.skipped,
             already_imported: r.already_imported,
             flags: r.flags,
+            needs_account: r.needs_account,
         }
     }
 }
@@ -614,9 +622,16 @@ pub fn import_csv_text(
     profile_id: i64,
     path: String,
     text: String,
+    account: Option<slaybudget_core::accounts::Choice>,
 ) -> IpcResult<ImportReportDto> {
     recorded(&state, format!("Import {}", file_name(&path)), |c| {
-        pipeline::import_csv(c, profile_id, &path, &text)
+        pipeline::import_file(
+            c,
+            profile_id,
+            &path,
+            pipeline::StatementFile::Csv(&text),
+            account,
+        )
     })
     .map(Into::into)
 }
@@ -627,9 +642,16 @@ pub fn import_ofx_text(
     profile_id: i64,
     path: String,
     text: String,
+    account: Option<slaybudget_core::accounts::Choice>,
 ) -> IpcResult<ImportReportDto> {
     recorded(&state, format!("Import {}", file_name(&path)), |c| {
-        pipeline::import_ofx(c, profile_id, &path, &text)
+        pipeline::import_file(
+            c,
+            profile_id,
+            &path,
+            pipeline::StatementFile::Ofx(&text),
+            account,
+        )
     })
     .map(Into::into)
 }
@@ -662,6 +684,7 @@ pub fn import_pdf_doc(
     path: String,
     doc: PdfTextDto,
     file_hash: String,
+    account: Option<slaybudget_core::accounts::Choice>,
 ) -> IpcResult<ImportReportDto> {
     let today = chrono::Local::now().date_naive();
     let pdf = PdfText {
@@ -684,7 +707,16 @@ pub fn import_pdf_doc(
         today,
     };
     recorded(&state, format!("Import {}", file_name(&path)), |c| {
-        pipeline::import_pdf(c, profile_id, &path, &pdf, &file_hash)
+        pipeline::import_file(
+            c,
+            profile_id,
+            &path,
+            pipeline::StatementFile::Pdf {
+                doc: &pdf,
+                hash: &file_hash,
+            },
+            account,
+        )
     })
     .map(Into::into)
 }
@@ -1521,6 +1553,171 @@ pub fn resolve_duplicate(
     })
 }
 
+/// Move what an import brought in to another account (rows it already has are dropped).
+#[tauri::command]
+pub fn move_import(
+    state: State<'_, AppState>,
+    import_id: i64,
+    source_id: i64,
+) -> IpcResult<slaybudget_core::accounts::MoveReport> {
+    let (file, account): (String, String) = {
+        let conn = lock(&state);
+        let file = conn
+            .query_row(
+                "SELECT file_name FROM imports WHERE id = ?1",
+                [import_id],
+                |r| r.get(0),
+            )
+            .unwrap_or_else(|_| "import".to_string());
+        let account = conn
+            .query_row("SELECT name FROM sources WHERE id = ?1", [source_id], |r| {
+                r.get(0)
+            })
+            .unwrap_or_else(|_| "account".to_string());
+        (file, account)
+    };
+    recorded(&state, format!("Move {file} to {account}"), |c| {
+        slaybudget_core::accounts::move_import(c, import_id, source_id)
+    })
+}
+
+/// Set or clear an account's default tag; returns how many existing transactions were tagged.
+#[tauri::command]
+pub fn set_account_default_tag(
+    state: State<'_, AppState>,
+    source_id: i64,
+    tag_id: Option<i64>,
+    also_existing: bool,
+) -> IpcResult<usize> {
+    recorded(&state, "Change Default Tag".to_string(), |c| {
+        slaybudget_core::accounts::set_default_tag(c, source_id, tag_id, also_existing)
+    })
+}
+
+/// What an account is recognized by.
+#[tauri::command]
+pub fn account_clues(
+    state: State<'_, AppState>,
+    source_id: i64,
+) -> IpcResult<Vec<slaybudget_core::accounts::AccountClue>> {
+    Ok(slaybudget_core::accounts::clues_of(
+        &lock(&state),
+        source_id,
+    )?)
+}
+
+#[tauri::command]
+pub fn forget_account_clue(state: State<'_, AppState>, clue_id: i64) -> IpcResult<()> {
+    recorded(
+        &state,
+        "Forget How an Account Is Recognized".to_string(),
+        |c| slaybudget_core::accounts::forget_clue(c, clue_id),
+    )
+}
+
+#[tauri::command]
+pub fn update_account(
+    state: State<'_, AppState>,
+    source_id: i64,
+    patch: slaybudget_core::accounts::AccountPatch,
+) -> IpcResult<()> {
+    recorded(&state, "Edit Account".to_string(), |c| {
+        slaybudget_core::accounts::update(c, source_id, &patch)
+    })
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AccountFoldersDto {
+    pub folder: String,
+    /// Folders made now (ones already there are left as they are).
+    pub created: Vec<String>,
+}
+
+/// Make a folder for each account inside the watched folder; a statement dropped in one belongs to that account.
+#[tauri::command]
+pub fn create_account_folders(
+    state: State<'_, AppState>,
+    profile_id: i64,
+) -> IpcResult<AccountFoldersDto> {
+    let conn = lock(&state);
+    let folder = slaybudget_core::settings::get(&conn, "watched_folder")?
+        .filter(|f| !f.trim().is_empty())
+        .ok_or_else(|| CoreError::Invalid("choose a watched folder first".into()))?;
+    let mut created = Vec::new();
+    for name in slaybudget_core::accounts::folder_names(&conn, profile_id)? {
+        let dir = std::path::Path::new(&folder).join(&name);
+        if !dir.exists() {
+            std::fs::create_dir_all(&dir).map_err(|e| CoreError::Invalid(e.to_string()))?;
+            created.push(name);
+        }
+    }
+    Ok(AccountFoldersDto { folder, created })
+}
+
+/// The watched folder, and Downloads with the time watching began (ms).
+type WatchPlaces = (
+    Option<std::path::PathBuf>,
+    Option<(std::path::PathBuf, i64)>,
+);
+
+/// The places background imports may look in: the watched folder, and Downloads when you turned that on (with the
+/// time you did, in ms: only files that arrived after count).
+fn watch_places(conn: &rusqlite::Connection, app: &tauri::AppHandle) -> IpcResult<WatchPlaces> {
+    use tauri::Manager;
+    let watched = settings::get(conn, "watched_folder")?
+        .filter(|f| !f.trim().is_empty())
+        .map(std::path::PathBuf::from);
+    let downloads = if settings::get(conn, "watch_downloads")?.as_deref() == Some("true") {
+        let since = settings::get(conn, "watch_downloads_since")?
+            .and_then(|s| s.parse::<i64>().ok())
+            .unwrap_or(i64::MAX);
+        app.path().download_dir().ok().map(|d| (d, since))
+    } else {
+        None
+    };
+    Ok((watched, downloads))
+}
+
+/// Statement-looking files to import in the background (watched folder and, if on, Downloads).
+#[tauri::command]
+pub fn statement_candidates(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+) -> IpcResult<Vec<slaybudget_core::watch::Candidate>> {
+    let (watched, downloads) = watch_places(&lock(&state), &app)?;
+    Ok(slaybudget_core::watch::candidates(
+        watched.as_deref(),
+        downloads.as_ref().map(|(d, since)| (d.as_path(), *since)),
+    ))
+}
+
+/// The bytes of a file in the watched folder or Downloads (nothing else can be read).
+#[tauri::command]
+pub fn read_statement(
+    state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    path: String,
+) -> IpcResult<tauri::ipc::Response> {
+    let (watched, downloads) = watch_places(&lock(&state), &app)?;
+    let roots: Vec<std::path::PathBuf> = watched
+        .into_iter()
+        .chain(downloads.map(|(d, _)| d))
+        .collect();
+    let path = std::path::PathBuf::from(path);
+    if !slaybudget_core::watch::is_allowed(&path, &roots) {
+        return Err(IpcError {
+            code: "invalid",
+            message: "that file isn't in your watched folder or Downloads".into(),
+        });
+    }
+    let bytes = std::fs::read(&path).map_err(|e| IpcError {
+        code: "io",
+        message: e.to_string(),
+    })?;
+    Ok(tauri::ipc::Response::new(bytes))
+}
+
 /// Take back the latest change; returns what was undone (None when there's nothing to undo).
 #[tauri::command]
 pub fn undo(state: State<'_, AppState>) -> IpcResult<Option<String>> {
@@ -1611,6 +1808,8 @@ mod undo_tests {
             "notifications_refresh",
             "backup_database",
             "export_rules",
+            // Makes folders on disk, not changes to your data.
+            "create_account_folders",
             // Reads that may save what they detect (recurring bills seen for the first time).
             "list_recurring",
             "analytics_recurring",

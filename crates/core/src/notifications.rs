@@ -28,6 +28,7 @@ pub enum Kind {
     ReviewDigest,
     MoneyIn,
     PossibleDuplicates,
+    Statements,
 }
 
 impl Kind {
@@ -44,6 +45,7 @@ impl Kind {
             Kind::ReviewDigest => "reviewDigest",
             Kind::MoneyIn => "moneyIn",
             Kind::PossibleDuplicates => "possibleDuplicates",
+            Kind::Statements => "statements",
         }
     }
     fn parse(s: &str) -> Kind {

@@ -4,8 +4,8 @@
  * swap in the in-memory implementation.
  */
 
-import type { AppNotification, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
-import { UNDO_LABELS, createUndoStack } from './undo-memory';
+import type { AccountChoice, AccountClue, AccountPatch, AppNotification, StatementCandidate, MoveReport, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
+import { UNDO_LABELS, createUndoStack, fileName } from './undo-memory';
 import { DUPLICATE_TAG_NAME, duplicatesBeforeDelete, openFlagFor, settle, stillFlagged } from './duplicates-memory';
 import type {
   BudgetStatus,
@@ -125,6 +125,19 @@ export interface Ipc {
   duplicateFlagFor(txId: number): Promise<DuplicateFlag | null>;
   /** Delete this one, delete the other one, or keep both (the pair is never flagged again). */
   resolveDuplicate(flagId: number, resolution: DuplicateResolution): Promise<void>;
+  /** Move what an import brought in to another account (rows it already has are dropped). */
+  moveImport(importId: number, sourceId: number): Promise<MoveReport>;
+  /** Set or clear an account's default tag; returns how many existing transactions were tagged. */
+  setAccountDefaultTag(sourceId: number, tagId: number | null, alsoExisting: boolean): Promise<number>;
+  accountClues(sourceId: number): Promise<AccountClue[]>;
+  /** Statement-looking files in the watched folder and (if on) Downloads. */
+  statementCandidates(): Promise<StatementCandidate[]>;
+  /** A found file's bytes (only files in those places can be read). */
+  readStatement(path: string): Promise<ArrayBuffer>;
+  updateAccount(sourceId: number, patch: AccountPatch): Promise<void>;
+  /** Make a folder for each account in the watched folder (desktop app). */
+  createAccountFolders(profileId: number): Promise<{ folder: string; created: string[] }>;
+  forgetAccountClue(clueId: number): Promise<void>;
   /** Take back the latest change; returns what was undone, or null when there's nothing to undo. */
   undo(): Promise<string | null>;
   /** Put back the latest undone change; returns what was redone, or null. */
@@ -211,9 +224,10 @@ export interface Ipc {
   migrateLegacyJson(transactionsJson: string, modelJson?: string | null): Promise<LegacyReport>;
   scanWatchedFolder(): Promise<WatchScan>;
 
-  importCsvText(profileId: number, path: string, text: string): Promise<ImportReport>;
-  importOfxText(profileId: number, path: string, text: string): Promise<ImportReport>;
-  importPdfDoc(profileId: number, path: string, doc: PdfTextDto, fileHash: string): Promise<ImportReport>;
+  /** Import a statement; without `account`, an unrecognized one comes back with `needsAccount` (nothing imported). */
+  importCsvText(profileId: number, path: string, text: string, account?: AccountChoice): Promise<ImportReport>;
+  importOfxText(profileId: number, path: string, text: string, account?: AccountChoice): Promise<ImportReport>;
+  importPdfDoc(profileId: number, path: string, doc: PdfTextDto, fileHash: string, account?: AccountChoice): Promise<ImportReport>;
 }
 
 let current: Ipc | null = null;
@@ -251,6 +265,10 @@ export interface MemoryIpcSeed {
   tags?: Omit<Tag, 'count'>[];
   /** Possible duplicates found by earlier imports. */
   duplicateFlags?: DuplicateFlag[];
+  /** What each account is recognized by. */
+  accountClues?: (AccountClue & { sourceId: number })[];
+  /** Files in the watched folder or Downloads, for background imports. */
+  files?: { path: string; text: string; modifiedMs: number; from: 'watched' | 'downloads' }[];
   /** Statement file and columns by transaction id. */
   statements?: Record<number, Omit<StatementInfo, 'sourceName'>>;
 }
@@ -338,6 +356,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   // ----- tags (mirror `tags.rs`) -----
   const tags: Omit<Tag, 'count'>[] = (seed.tags ?? []).map((t) => ({ ...t }));
   const duplicateFlags: DuplicateFlag[] = (seed.duplicateFlags ?? []).map((f) => ({ ...f }));
+  const accountClues = (seed.accountClues ?? []).map((c) => ({ ...c }));
   /** Take "Possible duplicate" off a row once no open flag needs it. */
   const untagDuplicate = (txId: number) => {
     if (stillFlagged(duplicateFlags, txId)) return;
@@ -1170,14 +1189,146 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       members.forEach((c, i) => (c.groupId = targets[i].id));
       pruneEmptyGroups();
     },
-    async importCsvText() {
-      throw new Error('import is only available in the desktop app');
+    // A simple CSV import for tests and the preview (date, description and amount columns), mirroring how the app
+    // recognizes the account or asks which one it is. The app's importer reads many more layouts.
+    async importCsvText(profileId, path, text, account) {
+      const lines = text.trim().split(/\r?\n/).map((l) => l.split(',').map((c) => c.trim()));
+      const head = lines[0].map((h) => h.toLowerCase());
+      const col = (re: RegExp) => head.findIndex((h) => re.test(h));
+      const [dateCol, descCol, amountCol] = [col(/date/), col(/description|memo/), col(/amount/)];
+      if (dateCol < 0 || descCol < 0 || amountCol < 0) throw new Error('unrecognized CSV header');
+      const rows = lines.slice(1).map((c) => ({ postedOn: c[dateCol], description: c[descCol], amountCents: Math.round(Number(c[amountCol]) * 100) }));
+      const name = fileName(path);
+      const spaced = name.replace(/[_.-]/g, ' ').replace(/([a-z])(\d)/gi, '$1 $2');
+      const last4 = /[a-z](\d{4})(?:\D|$)/i.exec(name)?.[1] ?? null;
+      const bank = /\bchase\b/i.test(spaced) ? 'Chase' : /\bamex\b|american express/i.test(spaced) ? 'American Express' : null;
+      const layout = `csv:${[...head].sort().join('|')}`;
+      const clueValue = last4 ? `${bank ?? ''}|${last4}` : null;
+      let sourceId: number | null = null;
+      if (account?.kind === 'existing') sourceId = account.sourceId;
+      else if (account?.kind === 'new') {
+        sourceId = Math.max(0, ...sources.map((x) => x.id)) + 1;
+        sources.push({ id: sourceId, profileId, name: account.account.name.trim(), kind: 'csv', institution: account.account.institution, currency: 'USD', accountType: account.account.accountType, color: account.account.color, defaultTagId: account.account.defaultTagId });
+      } else {
+        const owners = (kind: string, value: string | null) => [...new Set(accountClues.filter((c) => c.kind === kind && value != null && c.value.endsWith(value)).map((c) => c.sourceId))];
+        const byEnding = last4 ? owners('last4', `|${last4}`) : [];
+        const byLayout = owners('layout', layout);
+        if (byEnding.length === 1) sourceId = byEnding[0];
+        else if (byLayout.length === 1 && !(last4 && accountClues.some((c) => c.sourceId === byLayout[0] && c.kind === 'last4' && !c.value.endsWith(`|${last4}`)))) sourceId = byLayout[0];
+        if (sourceId == null) {
+          const dates = rows.map((r) => r.postedOn).sort();
+          return {
+            sourceName: '', inserted: 0, duplicates: 0, skipped: 0, alreadyImported: false,
+            needsAccount: {
+              clues: { last4, bank, layout, folder: null },
+              guess: byEnding[0] ?? byLayout[0] ?? null,
+              suggestedName: bank && last4 ? `${bank} ••${last4}` : bank ?? (last4 ? `Account ••${last4}` : 'New account'),
+              preview: { rows: rows.length, first: dates[0] ?? null, last: dates.at(-1) ?? null, sample: rows.slice(0, 3) },
+            },
+          };
+        }
+      }
+      const target = sources.find((x) => x.id === sourceId);
+      if (!target) throw new Error('not_found');
+      if (!account || account.remember) {
+        for (const [kind, value] of [['last4', clueValue], ['layout', layout]] as const) {
+          if (value && !accountClues.some((c) => c.sourceId === target.id && c.kind === kind && c.value === value)) {
+            accountClues.push({ id: Math.max(0, ...accountClues.map((c) => c.id)) + 1, sourceId: target.id, kind, value });
+          }
+        }
+      }
+      const added: number[] = [];
+      let duplicates = 0;
+      for (const r of rows) {
+        if (transactions.some((t) => t.sourceId === target.id && t.postedOn === r.postedOn && t.description === r.description && t.amountCents === r.amountCents)) {
+          duplicates++;
+          continue;
+        }
+        const id = nextTxId++;
+        transactions.push({ id, profileId, sourceId: target.id, postedOn: r.postedOn, description: r.description, merchant: r.description.toLowerCase(), amountCents: r.amountCents, currency: 'USD', categoryId: null, categoryLocked: false, reviewed: false, notes: null, refundOf: null, tagIds: target.defaultTagId != null ? [target.defaultTagId] : [] });
+        added.push(id);
+      }
+      importsLog.push({ id: Math.max(0, ...importsLog.map((i) => i.id)) + 1, sourceId: target.id, sourceName: target.name, fileName: name, importedAt: new Date().toISOString(), importedRows: added.length, skippedRows: duplicates, transactionIds: added });
+      return { sourceName: target.name, inserted: added.length, duplicates, skipped: 0, alreadyImported: false };
     },
     async importOfxText() {
       throw new Error('import is only available in the desktop app');
     },
     async importPdfDoc() {
       throw new Error('import is only available in the desktop app');
+    },
+    async moveImport(importId, sourceId) {
+      const imp = importsLog.find((i) => i.id === importId);
+      const target = sources.find((s) => s.id === sourceId);
+      if (!imp || !target) throw new Error('not_found');
+      const key = (t: Transaction) => `${t.postedOn}|${t.description.trim().toLowerCase().split(/\s+/).join(' ')}|${t.amountCents}`;
+      const report: MoveReport = { moved: 0, dropped: 0 };
+      const dropped: number[] = [];
+      for (const id of imp.transactionIds) {
+        const row = transactions.find((t) => t.id === id);
+        if (!row) continue;
+        if (transactions.some((t) => t.id !== id && t.sourceId === sourceId && key(t) === key(row))) dropped.push(id);
+        else {
+          row.sourceId = sourceId;
+          row.profileId = target.profileId;
+          report.moved++;
+        }
+      }
+      if (dropped.length) await this.deleteTransactions(dropped);
+      report.dropped = dropped.length;
+      imp.sourceId = sourceId;
+      imp.sourceName = target.name;
+      return report;
+    },
+    async setAccountDefaultTag(sourceId, tagId, alsoExisting) {
+      const account = sources.find((s) => s.id === sourceId);
+      if (!account) throw new Error('not_found');
+      account.defaultTagId = tagId;
+      if (tagId == null || !alsoExisting) return 0;
+      let tagged = 0;
+      for (const t of transactions) {
+        if (t.sourceId !== sourceId || t.tagIds?.includes(tagId)) continue;
+        t.tagIds = [...(t.tagIds ?? []), tagId].sort((a, b) => a - b);
+        tagged++;
+      }
+      return tagged;
+    },
+    async accountClues(sourceId) {
+      return accountClues.filter((c) => c.sourceId === sourceId).map(({ id, kind, value }) => ({ id, kind, value }));
+    },
+    async updateAccount(sourceId, patch) {
+      const account = sources.find((x) => x.id === sourceId);
+      if (!account) throw new Error('not_found');
+      if (patch.name !== undefined) {
+        const name = patch.name.trim();
+        if (!name) throw new Error('an account needs a name');
+        if (sources.some((x) => x.id !== sourceId && x.profileId === account.profileId && x.name.toLowerCase() === name.toLowerCase())) {
+          throw new Error(`an account named “${name}” already exists`);
+        }
+        account.name = name;
+        for (const imp of importsLog) if (imp.sourceId === sourceId) imp.sourceName = name;
+      }
+      if (patch.institution !== undefined) account.institution = patch.institution?.trim() || null;
+      if (patch.accountType !== undefined) account.accountType = patch.accountType;
+      if (patch.color !== undefined) account.color = patch.color;
+    },
+    async statementCandidates() {
+      return (seed.files ?? []).map((f) => ({ path: f.path, name: fileName(f.path), modifiedMs: f.modifiedMs, size: f.text.length, from: f.from }));
+    },
+    async readStatement(path) {
+      const f = (seed.files ?? []).find((x) => x.path === path);
+      if (!f) throw new Error("that file isn't in your watched folder or Downloads");
+      return new TextEncoder().encode(f.text).buffer as ArrayBuffer;
+    },
+    async createAccountFolders(profileId) {
+      const folder = settings.get('watched_folder')?.trim();
+      if (!folder) throw new Error('choose a watched folder first');
+      const created = [...new Set(sources.filter((x) => x.profileId === profileId).map((x) => x.name.replace(/\s*[/\\:*?<>|]+\s*/g, ' - ').trim()))];
+      return { folder, created };
+    },
+    async forgetAccountClue(clueId) {
+      const i = accountClues.findIndex((c) => c.id === clueId);
+      if (i >= 0) accountClues.splice(i, 1);
     },
     async undo() {
       return history.undo();
@@ -1194,7 +1345,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   const fill = <T,>(target: T[], from: T[]) => target.splice(0, target.length, ...structuredClone(from));
   const capture = () =>
     structuredClone({
-      profiles, sources, transactions, groups, categories, children, importsLog, plan, tags, duplicateFlags, saved,
+      profiles, sources, transactions, groups, categories, children, importsLog, plan, tags, duplicateFlags, saved, accountClues,
       optedOut, dismissed, learned, rules,
       counters: { nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId },
     });
@@ -1208,6 +1359,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     fill(importsLog, s.importsLog);
     fill(tags, s.tags);
     fill(duplicateFlags, s.duplicateFlags);
+    fill(accountClues, s.accountClues);
     fill(saved, s.saved);
     fill(rules, s.rules);
     children.clear();
@@ -1227,6 +1379,13 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     if (!method) continue;
     (ipc as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => history.record(label(args), () => method.apply(ipc, args));
   }
+  // Moving an import names the file and the account, as the app does.
+  const moveImport = ipc.moveImport;
+  ipc.moveImport = (importId, sourceId) =>
+    history.record(
+      `Move ${importsLog.find((i) => i.id === importId)?.fileName ?? 'import'} to ${sources.find((s) => s.id === sourceId)?.name ?? 'account'}`,
+      () => moveImport.call(ipc, importId, sourceId),
+    );
   // Undo Import names the file, as the app does.
   const undoImport = ipc.undoImport;
   ipc.undoImport = (id) => history.record(`Undo Import ${importsLog.find((i) => i.id === id)?.fileName ?? 'import'}`, () => undoImport.call(ipc, id));

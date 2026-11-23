@@ -1,5 +1,6 @@
 //! SlayBudget core: all business logic, independent of the Tauri shell.
 
+pub mod accounts;
 pub mod analytics;
 pub mod budgets;
 pub mod categories;
@@ -19,5 +20,6 @@ pub mod sources_merge;
 pub mod tags;
 pub mod transactions;
 pub mod undo;
+pub mod watch;
 
 pub use error::CoreError;

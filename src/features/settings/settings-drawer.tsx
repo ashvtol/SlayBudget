@@ -1,6 +1,6 @@
 import { type ComponentType, type ReactNode } from 'react';
 import { Drawer } from '@/components/drawer';
-import { IconBank, IconChevronRight, IconImport, IconNote, IconRefresh, IconSettings, IconHelp, IconTag, IconCategories, IconCalendar } from '@/components/icons';
+import { IconBank, IconCard, IconChevronRight, IconImport, IconNote, IconRefresh, IconSettings, IconHelp, IconTag, IconCategories, IconCalendar } from '@/components/icons';
 import { useNavStore } from '@/lib/stores/nav-store';
 import { THEMES, useThemeStore } from '@/lib/stores/theme-store';
 import { useCurrencyStore } from '@/features/currency/currency-store';
@@ -10,6 +10,7 @@ import { AppearancePane } from './appearance-pane';
 import { ProfilesPane } from './profiles-pane';
 import { DataPane } from './data-pane';
 import { ImportSourcesPane } from './import-sources-pane';
+import { AccountsPane } from './accounts-pane';
 import { UpdatesPane } from './updates-pane';
 import { AboutPane } from './about-pane';
 import { BankConnectionsPane } from './bank-connections-pane';
@@ -17,9 +18,10 @@ import { TagsPane } from './tags-pane';
 import { RolloversPane } from './rollovers-pane';
 import { AccessibilityPane } from './accessibility-pane';
 
-type PaneId = 'tags' | 'rollovers' | 'accessibility' | 'theme' | 'profiles' | 'currency' | 'sources' | 'bank' | 'notifications' | 'data' | 'updates' | 'about';
+type PaneId = 'accounts' | 'tags' | 'rollovers' | 'accessibility' | 'theme' | 'profiles' | 'currency' | 'sources' | 'bank' | 'notifications' | 'data' | 'updates' | 'about';
 
 const PANES: Record<PaneId, { title: string; render: () => ReactNode }> = {
+  accounts: { title: 'Accounts', render: () => <AccountsPane /> },
   tags: { title: 'Tags', render: () => <TagsPane /> },
   rollovers: { title: 'Rollovers', render: () => <RolloversPane /> },
   accessibility: { title: 'Accessibility', render: () => <AccessibilityPane /> },
@@ -79,6 +81,7 @@ function SettingsList({ onOpen }: { onOpen: (p: PaneId) => void }) {
       <Group label="General">
         <Row icon={IconSettings} label="Profiles" onClick={() => onOpen('profiles')} />
         <Row icon={IconTag} label="Currency" value={display} onClick={() => onOpen('currency')} />
+        <Row icon={IconCard} label="Accounts" onClick={() => onOpen('accounts')} />
         <Row icon={IconImport} label="Import sources" onClick={() => onOpen('sources')} />
         <Row icon={IconBank} label="Bank connections" onClick={() => onOpen('bank')} />
       </Group>

@@ -40,4 +40,25 @@ describe('RecentImports', () => {
     render(<RecentImports />);
     expect(await screen.findByText('Nothing imported yet.')).toBeInTheDocument();
   });
+
+  it('moves an import to another account after a confirm, saying what happened', async () => {
+    const user = userEvent.setup();
+    setIpc(createMemoryIpc({
+      sources: [
+        { id: 1, profileId: 1, name: 'Freedom', kind: 'csv', institution: 'Chase', currency: 'USD' },
+        { id: 2, profileId: 1, name: 'Sapphire', kind: 'csv', institution: 'Chase', currency: 'USD' },
+      ],
+      transactions: [{ ...tx(1, 'COFFEE'), sourceId: 2 }, tx(2, 'COFFEE'), tx(3, 'GAS')],
+      imports: [{ id: 5, sourceId: 1, sourceName: 'Freedom', fileName: 'nov.csv', importedAt: '2026-11-22T10:00:00Z', importedRows: 2, skippedRows: 0, transactionIds: [2, 3] }],
+    }));
+    render(<RecentImports />);
+    const section = await screen.findByRole('region', { name: 'Recent imports' });
+    await user.click(within(section).getByRole('button', { name: 'Move nov.csv to another account' }));
+    const dialog = screen.getByRole('dialog', { name: 'Move "nov.csv"' });
+    expect(dialog).toHaveTextContent('Its 2 transactions move');
+    await user.selectOptions(within(dialog).getByRole('combobox', { name: 'Account' }), 'Sapphire');
+    await user.click(within(dialog).getByRole('button', { name: 'Move' }));
+    await waitFor(() => expect(within(section).getAllByRole('listitem')[0]).toHaveTextContent('Sapphire'));
+    expect(within(section).getByRole('status')).toHaveTextContent('Moved 1 transaction to Sapphire; 1 was already there.');
+  });
 });

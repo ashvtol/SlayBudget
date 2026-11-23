@@ -8,13 +8,13 @@ Import your bank statements, let SlayBudget categorize every transaction, and se
 **No subscription. No bank login. No cloud.** Your financial data never leaves your Mac.
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-3b82f6.svg)](LICENSE)
-[![Platform: macOS](https://img.shields.io/badge/platform-macOS-111827?logo=apple&logoColor=white)](#install)
+[![Platform: macOS](https://img.shields.io/badge/platform-macOS-111827?logo=apple&logoColor=white)](#install) [![Windows and Linux: untested](https://img.shields.io/badge/Windows%20%7C%20Linux-untested-6b7280)](#windows-and-linux-untested)
 [![Built with Tauri 2](https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white)](https://tauri.app)
 [![Rust](https://img.shields.io/badge/Rust-core-b7410e?logo=rust&logoColor=white)](crates/core)
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](src)
 [![GitHub stars](https://img.shields.io/github/stars/ashvtol/SlayBudget?style=social)](https://github.com/ashvtol/SlayBudget/stargazers)
 
-**[⬇️ Download for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)**<br><br>[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
+**[⬇️ Download for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)** · [Windows and Linux (untested)](#windows-and-linux-untested)<br><br>[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
 
 <br>
 
@@ -47,7 +47,8 @@ on your own computer, this is it.
 
 | Feature | What it does |
 |---|---|
-| 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Exact repeats are skipped, and a watched folder imports new statements automatically. |
+| 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Exact repeats are skipped. Drop files in, or let SlayBudget pick up statements from a watched folder or, if you like, your Downloads folder. |
+| 🧭 **Statements land in the right account** | SlayBudget works out which account a statement belongs to from the file itself (the account's last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once ("Which account is this?") with its best guess first, and remembers your answer. Two cards from the same bank never get mixed up. Each account can have a default tag (say "Business"), and an import that went to the wrong account can be moved. |
 | 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. |
@@ -140,6 +141,9 @@ on your own computer, this is it.
 </tr>
 </table>
 
+### Which account is this? Asked once, then remembered
+![SlayBudget import page asking which account a Chase statement belongs to, showing its dates, first transactions and Chase ending 7781, with existing accounts or a new account with bank, type and default tag](docs/screenshots/which-account.png)
+
 ### Four themes: Navy, Daylight, Aurora and Graphite
 ![SlayBudget dashboard in the Navy, Daylight, Aurora and Graphite themes](docs/screenshots/themes.png)
 
@@ -172,6 +176,22 @@ for Apple Silicon and Intel, macOS 13 or later).
 
 **Updates are automatic.** SlayBudget checks for new versions when it opens and every 6 hours, shows you what's new
 since your version, and installs only when you click. See the [changelog](CHANGELOG.md).
+
+### Windows and Linux (untested)
+
+Every release also builds SlayBudget for Windows and Linux, from the same code. **These builds haven't been tested on a
+real Windows or Linux machine yet**, so expect rough edges. If something doesn't work, please
+[open an issue](https://github.com/ashvtol/SlayBudget/issues) with your OS version and what you saw.
+
+- **Windows 10 or 11 (64-bit):** download **SlayBudget_*_x64-setup.exe** (or the **.msi**) from the
+  [latest release](https://github.com/ashvtol/SlayBudget/releases/latest) and run it. The installer isn't code-signed
+  yet, so SmartScreen may say "Windows protected your PC": choose **More info > Run anyway**.
+- **Linux (64-bit):** download the **.AppImage**, make it executable (`chmod +x SlayBudget_*.AppImage`) and run it, or
+  install the **.deb** on Debian and Ubuntu (`sudo apt install ./SlayBudget_*.deb`).
+
+What's different from the Mac app: shortcuts use **Ctrl** instead of ⌘ (Ctrl+Z / Ctrl+Y to undo and redo), the window
+has the system's own title bar, and notifications are the system's standard ones (clicking one doesn't open the item
+yet). Updates are automatic here too.
 
 ### Build from source
 
@@ -233,6 +253,24 @@ while SlayBudget is open, and quiet hours hold them overnight.
 </details>
 
 <details>
+<summary><b>How does SlayBudget know which account a statement is?</b></summary>
+
+From the file itself: the account's last 4 digits (in a PDF, a QFX file, an Amex CSV or a file name like
+`Chase1004_Activity.csv`), the bank, the CSV's columns, or the account folder it sits in. When that's not enough, it
+asks you once, with its best guess first, and remembers your answer, so next month's statement goes straight in. You
+can see and change what each account is recognized by in Settings > Accounts, move an import to another account from
+Recent imports, and have SlayBudget make a folder for each account in your watched folder.
+</details>
+
+<details>
+<summary><b>Can it import statements from my Downloads folder?</b></summary>
+
+Yes, if you turn it on in Settings > Import sources. Statements you download from then on are imported on their own
+(ones it can't place wait on the Import page), anything that isn't a statement is ignored, and your files are never
+moved or changed.
+</details>
+
+<details>
 <summary><b>Can I undo a mistake?</b></summary>
 
 Yes. ⌘Z undoes your last change and ⇧⌘Z redoes it, up to 15 steps back: categories (including "apply to others"),
@@ -254,8 +292,10 @@ imports on the Import page.
 <details>
 <summary><b>Windows or Linux?</b></summary>
 
-The app is built with Tauri, which supports both, but SlayBudget is designed and tested on macOS today. Contributions
-are welcome.
+Yes, but untested: every release includes Windows and Linux builds, made automatically from the same code, which
+haven't been tried on a real Windows or Linux machine yet. See [Windows and Linux (untested)](#windows-and-linux-untested)
+for how to install them, and please open an issue if something doesn't work. SlayBudget is designed and tested on
+macOS. Contributions are welcome.
 </details>
 
 ## Tech stack

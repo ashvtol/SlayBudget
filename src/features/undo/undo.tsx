@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { isTauri } from '@/lib/tauri-ipc';
+import { shortcutKey } from '@/lib/platform';
 import { useUndoStore } from './undo-store';
 
 /** Typing in a field: ⌘Z belongs to the field (its own text undo), as everywhere on macOS. */
@@ -26,11 +27,15 @@ export function menuStep(which: 'undo' | 'redo', now = performance.now()) {
 export function useUndoKeys() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (!e.metaKey || e.ctrlKey || e.altKey || e.key.toLowerCase() !== 'z') return;
+      if (!shortcutKey(e) || e.altKey) return;
+      const key = e.key.toLowerCase();
+      // ⌘Z / ⇧⌘Z on a Mac; Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z on Windows and Linux.
+      const redo = (key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey);
+      if (key !== 'z' && !redo) return;
       if (typingIn(e.target as Element)) return;
       e.preventDefault();
       keyedAt = performance.now();
-      void (e.shiftKey ? useUndoStore.getState().redo() : useUndoStore.getState().undo());
+      void (redo ? useUndoStore.getState().redo() : useUndoStore.getState().undo());
     };
     window.addEventListener('keydown', onKey);
     // The Edit menu's Undo and Redo: in a field they undo typing, elsewhere your last change.

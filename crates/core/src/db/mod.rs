@@ -30,6 +30,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
         12,
         include_str!("../../migrations/0012_duplicate_flags.sql"),
     ),
+    (13, include_str!("../../migrations/0013_account_clues.sql")),
 ];
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.

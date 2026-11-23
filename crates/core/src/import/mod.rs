@@ -1,5 +1,6 @@
 //! Statement import: parsers produce `ParsedRow`s, the pipeline categorizes and stores them.
 
+pub mod clues;
 pub mod csv;
 pub mod ft_model;
 pub mod legacy;

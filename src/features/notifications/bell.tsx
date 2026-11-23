@@ -17,6 +17,7 @@ const ICON: Record<NotificationKind, string> = {
   reviewDigest: '✅',
   moneyIn: '💰',
   possibleDuplicates: '👯',
+  statements: '📥',
 };
 
 /** "Just now", "5m", "3h", "2d" (or the date after a week). */

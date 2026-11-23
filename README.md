@@ -283,10 +283,12 @@ while SlayBudget is open, and quiet hours hold them overnight.
 <details>
 <summary><b>I don't see Mac banners. What's wrong?</b></summary>
 
-Open Settings > Notifications and reminders and click **Send a test banner** at the bottom. If nothing shows, macOS
-is holding SlayBudget's banners: allow them in System Settings > Notifications > SlayBudget (the **Open System
-Settings** button takes you there), and check that a Focus mode isn't on. Also note that quiet hours hold banners
-overnight (the settings say so while they're on), and an alert you already read in the bell doesn't become a banner.
+Open Settings > Notifications and reminders. Under "Mac banners" SlayBudget says what macOS does with its banners:
+shows them, only puts them in Notification Center (set SlayBudget's alert style to Banners), blocks them, or hasn't
+been asked yet (click **Allow banners**). **Open System Settings** takes you straight there. **Send a test banner** at
+the bottom shows one right away. Banners pop up even while SlayBudget is in front. They don't while it's quit, during
+quiet hours (held until they end), for kinds whose Banner switch is off, for alerts you already read in the bell, or
+in a Focus mode; more than 3 at once arrive as one summary banner.
 </details>
 
 <details>

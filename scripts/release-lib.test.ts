@@ -93,3 +93,14 @@ describe('release cleanup', async () => {
     );
   });
 });
+
+describe('release rehearsal leaves your Mac app alone', () => {
+  it('never installs into /Applications or opens the installed app (you update it yourself)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const script = readFileSync('scripts/rehearse.ts', 'utf8');
+    expect(script).not.toMatch(/\/Applications/);
+    expect(script).not.toMatch(/'ditto'/);
+    expect(script).not.toMatch(/quit app/);
+    expect(script).toMatch(/tauri dev/);
+  });
+});

@@ -1,6 +1,7 @@
 // npm run release:rehearse
 // Builds the release app exactly as GitHub will (release config, signed updater files, DMG), checks it, backs up your
-// database, installs it into /Applications and opens it, then prints what to test. Approve with npm run release:approve.
+// database, then prints what to review in the development window (npm run tauri dev). It never touches your installed
+// app: you update that yourself through the in-app updater. Approve with npm run release:approve.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -10,7 +11,6 @@ import { sectionFor } from '../src/lib/changelog.ts';
 const PENDING = '.release-rehearsal.json';
 const KEY = join(homedir(), '.tauri', 'slaybudget.key');
 const DATA = join(homedir(), 'Library', 'Application Support', 'dev.ashvtol.slaybudget');
-const APP = '/Applications/SlayBudget.app';
 
 const run = (cmd: string, args: string[], env: Record<string, string> = {}) =>
   execFileSync(cmd, args, { encoding: 'utf8', env: { ...process.env, ...env } }).trim();
@@ -59,19 +59,13 @@ const backup = join(DATA, `slaybudget.before-rehearsal-${version}-${stamp}.db`);
 run('sqlite3', [join(DATA, 'slaybudget.db'), `.backup '${backup}'`]);
 console.log(`  ${backup}`);
 
-step(`Installing into ${APP} and opening it`);
-spawnSync('osascript', ['-e', 'quit app "SlayBudget"']);
-spawnSync('sleep', ['2']);
-run('rm', ['-rf', APP]);
-run('ditto', [built, APP]);
-run('open', [APP]);
 
 writeFileSync(PENDING, `${JSON.stringify({ version, commit }, null, 2)}\n`);
 
 const notes = sectionFor(readFileSync('CHANGELOG.md', 'utf8'), version)?.body ?? '(no changelog section found)';
 console.log(`
-Test SlayBudget ${version} (now open), then approve or fix:
-  [ ] Settings > Updates shows "Installed version ${version}"
+Your installed SlayBudget was not touched: update it yourself from the app once ${version} is published.
+Review ${version} in the development window (npm run tauri dev: the real app on your data, nothing installed):
   [ ] Your data is all there: Dashboard, Transactions, Categories, Recurrings, Cash flow, Insights
   [ ] An import still works (Import, or your watched folder)
   [ ] README.md describes what's new (features table, FAQ, screenshots from sample data)

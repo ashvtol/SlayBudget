@@ -7,7 +7,7 @@ import { todayStr } from '@/features/analytics/analytics-store';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { inQuietHours, loadConfig } from './config';
 import { useInboxStore } from './inbox-store';
-import { ensurePermission, sendBanner } from './notify';
+import { bannerPermission, requestBannerPermission, sendBanner, type BannerPermission } from './notify';
 import { openTarget } from './route';
 import { useNavStore } from '@/lib/stores/nav-store';
 
@@ -20,14 +20,17 @@ const BATCH_OVER = 3;
 export interface DeliveryDeps {
   sendBanner(id: string, title: string, body: string): Promise<void>;
   now(): Date;
+  permission(): Promise<BannerPermission>;
+  requestPermission(): Promise<BannerPermission>;
 }
-let deps: DeliveryDeps = { sendBanner, now: () => new Date() };
+let deps: DeliveryDeps = { sendBanner, now: () => new Date(), permission: bannerPermission, requestPermission: requestBannerPermission };
 
 interface NotificationsState {
   /** macOS banners on or off (the bell always collects). */
   enabled: boolean;
   loaded: boolean;
-  configure(d: DeliveryDeps): void;
+  /** Swap what delivery uses (tests); anything left out keeps the real one. */
+  configure(d: Partial<DeliveryDeps>): void;
   load(): Promise<void>;
   setEnabled(v: boolean): Promise<void>;
   /** Run the producers, refresh the bell, then deliver banners. */
@@ -38,6 +41,9 @@ interface NotificationsState {
   sendTest(): Promise<void>;
   /** The time banners go by (the clock, or a test's). */
   now(): Date;
+  /** What macOS does with SlayBudget's banners, and asking it to allow them. */
+  permission(): Promise<BannerPermission>;
+  requestPermission(): Promise<BannerPermission>;
   /** A clicked banner: open its item, or the bell for a summary. */
   handleClick(id: string): Promise<void>;
   startScheduler(): () => void;
@@ -49,15 +55,18 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   enabled: false,
   loaded: false,
   configure(d) {
-    deps = d;
+    deps = { sendBanner, now: () => new Date(), permission: bannerPermission, requestPermission: requestBannerPermission, ...d };
   },
   async load() {
-    set({ enabled: (await ipc().getSetting(KEY_ENABLED)) === 'true', loaded: true });
+    const enabled = (await ipc().getSetting(KEY_ENABLED)) === 'true';
+    set({ enabled, loaded: true });
+    // macOS asks once (later calls just answer), so banners are allowed before the first one arrives.
+    if (enabled) await deps.requestPermission();
   },
   async setEnabled(v) {
     set({ enabled: v });
     await ipc().setSetting(KEY_ENABLED, String(v));
-    if (v) await ensurePermission();
+    if (v) await deps.requestPermission();
   },
   async checkNow({ baseline = false } = {}) {
     try {
@@ -92,6 +101,12 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
   },
   now() {
     return deps.now();
+  },
+  permission() {
+    return deps.permission();
+  },
+  requestPermission() {
+    return deps.requestPermission();
   },
   async handleClick(id) {
     if (id === 'bell') {

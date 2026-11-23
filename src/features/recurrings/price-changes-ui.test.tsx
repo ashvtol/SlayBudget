@@ -96,7 +96,7 @@ describe('price changes on the Recurrings page', () => {
     expect(pill.compareDocumentPosition(arrow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const d = screen.getByRole('region', { name: 'Details' });
     expect(await within(d).findByText('Price went up: $22.11 → $100.18')).toBeInTheDocument();
-    const history = within(d).getByRole('list', { name: 'Price history' });
+    const history = await within(d).findByRole('list', { name: 'Price history' });
     expect(within(history).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['Nov 21, 2026$22.11 → $100.18']);
   });
 

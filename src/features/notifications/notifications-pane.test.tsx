@@ -123,4 +123,44 @@ describe('NotificationsPane', () => {
     // Quiet hours are on by default, 22:00 to 08:00.
     expect(within(row('Quiet hours')).getByText('Quiet now: banners wait until 08:00.')).toBeInTheDocument();
   });
+
+  describe('what macOS allows', () => {
+    const withPermission = async (permission: string, extra: Record<string, unknown> = {}) => {
+      useNotificationsStore.getState().configure({ sendBanner: vi.fn(), now: () => new Date(2026, 10, 23, 12, 0), permission: async () => permission, ...extra } as never);
+      await renderPane();
+      return permission === 'unknown' ? null : screen.findByRole('status', { name: 'macOS banners' });
+    };
+
+    it('says when macOS allows banners', async () => {
+      expect(await withPermission('allowed')).toHaveTextContent('macOS shows SlayBudget’s banners.');
+    });
+
+    it('explains alerts that only reach Notification Center, with a way to fix it', async () => {
+      const s = (await withPermission('quiet'))!;
+      expect(s).toHaveTextContent('macOS only puts SlayBudget’s alerts in Notification Center. Set its alert style to Banners in System Settings > Notifications > SlayBudget.');
+      expect(within(s).getByRole('button', { name: 'Open System Settings' })).toBeInTheDocument();
+    });
+
+    it('says when macOS blocks banners', async () => {
+      const s = (await withPermission('denied'))!;
+      expect(s).toHaveTextContent('macOS isn’t allowing SlayBudget’s notifications. Turn on Allow notifications in System Settings > Notifications > SlayBudget.');
+      expect(within(s).getByRole('button', { name: 'Open System Settings' })).toBeInTheDocument();
+    });
+
+    it('asks macOS when it has not been asked yet', async () => {
+      const user = userEvent.setup();
+      const requestPermission = vi.fn().mockResolvedValue('allowed');
+      const s = (await withPermission('notAsked', { requestPermission }))!;
+      expect(s).toHaveTextContent('macOS hasn’t been asked to show SlayBudget’s banners yet.');
+      await user.click(within(s).getByRole('button', { name: 'Allow banners' }));
+      expect(requestPermission).toHaveBeenCalled();
+      expect(await screen.findByRole('status', { name: 'macOS banners' })).toHaveTextContent('macOS shows SlayBudget’s banners.');
+    });
+
+    it('shows nothing when it cannot tell (the browser, or a development build)', async () => {
+      await withPermission('unknown');
+      await screen.findByRole('button', { name: 'Send a test banner' });
+      expect(screen.queryByRole('status', { name: 'macOS banners' })).not.toBeInTheDocument();
+    });
+  });
 });

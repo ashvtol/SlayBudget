@@ -2718,7 +2718,10 @@ version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9df9128cbbfef73cda168416ccf7f837b62737d748333bfe9ab71c245d76613e"
 dependencies = [
+ "bitflags 2.13.2",
+ "block2",
  "objc2",
+ "objc2-core-location",
  "objc2-foundation",
 ]
 
@@ -3843,10 +3846,14 @@ checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
 name = "slaybudget"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
+ "block2",
  "chrono",
  "mac-notification-sys",
+ "objc2",
+ "objc2-foundation",
+ "objc2-user-notifications",
  "rusqlite",
  "serde",
  "serde_json",
@@ -3862,7 +3869,7 @@ dependencies = [
 
 [[package]]
 name = "slaybudget-core"
-version = "0.6.1"
+version = "0.6.2"
 dependencies = [
  "chrono",
  "csv",

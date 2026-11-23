@@ -2,12 +2,24 @@
 
 import { isTauri } from '@/lib/tauri-ipc';
 
-export async function ensurePermission(): Promise<boolean> {
-  if (!isTauri()) return false;
-  const { isPermissionGranted, requestPermission } = await import('@tauri-apps/plugin-notification');
-  let granted = await isPermissionGranted();
-  if (!granted) granted = (await requestPermission()) === 'granted';
-  return granted;
+/**
+ * What macOS does with SlayBudget's banners: shows them ("allowed"), only puts them in Notification Center ("quiet",
+ * alert style None), blocks them ("denied"), hasn't been asked ("notAsked"), or can't tell ("unknown": the browser, a
+ * development build, or another platform).
+ */
+export type BannerPermission = 'allowed' | 'quiet' | 'denied' | 'notAsked' | 'unknown';
+
+export async function bannerPermission(): Promise<BannerPermission> {
+  if (!isTauri()) return 'unknown';
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<BannerPermission>('notification_permission').catch(() => 'unknown' as const);
+}
+
+/** Ask macOS to allow banners (it prompts once); returns what it allows now. */
+export async function requestBannerPermission(): Promise<BannerPermission> {
+  if (!isTauri()) return 'unknown';
+  const { invoke } = await import('@tauri-apps/api/core');
+  return invoke<BannerPermission>('request_notification_permission').catch(() => 'unknown' as const);
 }
 
 /**

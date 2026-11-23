@@ -5,6 +5,15 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-11-23
+### Fixed
+- **Mac banners pop up even while SlayBudget is in front.** Before, macOS only put them in Notification Center.
+
+### Added
+- Notification settings say what macOS does with SlayBudget's banners (shows them, only in Notification Center,
+  blocked, or not asked yet) and how to fix it, with **Allow banners** and **Open System Settings**.
+- With banners on, SlayBudget asks macOS once at launch, so the first banner isn't lost.
+
 ## [0.6.1] - 2026-11-23
 ### Added
 - **Resizable panes.** Drag the line between a list and its detail (Transactions, Categories, Recurrings) to give

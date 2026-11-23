@@ -90,3 +90,21 @@ describe('clicked banners', () => {
   });
 });
 
+
+describe('asking macOS', () => {
+  it('asks once at launch when banners are on, so they are allowed before the first one', async () => {
+    const requestPermission = vi.fn().mockResolvedValue('allowed');
+    useNotificationsStore.getState().configure({ sendBanner: vi.fn(), now: () => new Date(), requestPermission });
+    await ipc().setSetting('notifications_enabled', 'true');
+    await useNotificationsStore.getState().load();
+    expect(requestPermission).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not ask when banners are off', async () => {
+    const requestPermission = vi.fn().mockResolvedValue('notAsked');
+    useNotificationsStore.getState().configure({ sendBanner: vi.fn(), now: () => new Date(), requestPermission });
+    await ipc().setSetting('notifications_enabled', 'false');
+    await useNotificationsStore.getState().load();
+    expect(requestPermission).not.toHaveBeenCalled();
+  });
+});

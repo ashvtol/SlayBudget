@@ -4,7 +4,7 @@ import { isTauri } from '@/lib/tauri-ipc';
 import type { NotificationKind } from '@/lib/types';
 import { DEFAULT_CONFIG, loadConfig, saveConfig, validateConfig, type NotificationConfig } from './config';
 import { useNotificationsStore } from './notifications-store';
-import { isAutostartEnabled, openNotificationSettings, setAutostart } from './notify';
+import { isAutostartEnabled, openNotificationSettings, setAutostart, type BannerPermission } from './notify';
 import { inQuietHours } from '@/lib/notification-config';
 import { Switch } from '@/components/switch';
 import { Select } from '@/components/select';
@@ -106,7 +106,8 @@ function KindRow({ kind, title, hint, config, error, onSwitch, children }: { kin
 
 /** Settings > Notifications: Mac banners, quiet hours, and each kind's switches and thresholds. */
 export function NotificationsPane() {
-  const { enabled, load, setEnabled, checkNow, sendTest, now } = useNotificationsStore();
+  const { enabled, load, setEnabled, checkNow, sendTest, now, permission, requestPermission } = useNotificationsStore();
+  const [allowed, setAllowed] = useState<BannerPermission>('unknown');
   const [tested, setTested] = useState(false);
   // Re-checking notifications is heavy; wait until a burst of changes stops so toggles stay smooth.
   const recheck = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -122,7 +123,8 @@ export function NotificationsPane() {
     void load();
     void loadConfig(ipc()).then(setConfig);
     void isAutostartEnabled().then(setAuto);
-  }, [load]);
+    void permission().then(setAllowed);
+  }, [load, permission]);
 
   if (!config) return null;
 
@@ -152,6 +154,10 @@ export function NotificationsPane() {
         </span>
         <Switch label="Mac banners" hideLabel size="md" checked={enabled} onChange={(v) => void setEnabled(v)} />
       </label>
+      <MacPermission
+        status={allowed}
+        onAllow={() => void requestPermission().then(setAllowed)}
+      />
 
       <div role="group" aria-label="Quiet hours" className="flex flex-wrap items-center justify-between gap-3 py-3" style={{ borderTop: '1px solid var(--line)' }}>
         <span className="flex flex-col">
@@ -263,5 +269,41 @@ export function NotificationsPane() {
         </button>
       </div>
     </section>
+  );
+}
+
+const PERMISSION_TEXT: Record<Exclude<BannerPermission, 'unknown'>, string> = {
+  allowed: 'macOS shows SlayBudget’s banners.',
+  quiet: 'macOS only puts SlayBudget’s alerts in Notification Center. Set its alert style to Banners in System Settings > Notifications > SlayBudget.',
+  denied: 'macOS isn’t allowing SlayBudget’s notifications. Turn on Allow notifications in System Settings > Notifications > SlayBudget.',
+  notAsked: 'macOS hasn’t been asked to show SlayBudget’s banners yet.',
+};
+
+/** What macOS does with SlayBudget's banners, and the way to fix it when it isn't showing them. */
+function MacPermission({ status, onAllow }: { status: BannerPermission; onAllow: () => void }) {
+  if (status === 'unknown') return null;
+  const ok = status === 'allowed';
+  return (
+    <div
+      role="status"
+      aria-label="macOS banners"
+      className="mb-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg px-3 py-2 text-[12px]"
+      style={{ background: `color-mix(in srgb, ${ok ? 'var(--pos)' : 'var(--warn)'} 10%, transparent)` }}
+    >
+      <span className="min-w-0 flex-1" style={{ color: ok ? 'var(--text)' : 'var(--warn)' }}>
+        {ok ? '✓ ' : ''}
+        {PERMISSION_TEXT[status]}
+      </span>
+      {(status === 'quiet' || status === 'denied') && (
+        <button type="button" onClick={() => void openNotificationSettings()} className="font-semibold" style={{ color: 'var(--accent)' }}>
+          Open System Settings
+        </button>
+      )}
+      {status === 'notAsked' && (
+        <button type="button" onClick={onAllow} className="font-semibold" style={{ color: 'var(--accent)' }}>
+          Allow banners
+        </button>
+      )}
+    </div>
   );
 }

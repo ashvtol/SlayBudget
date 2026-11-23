@@ -29,6 +29,7 @@ pub fn run() {
         ))
         .on_menu_event(|app, event| edit_menu::on_menu_event(app, event.id().as_ref()))
         .setup(|app| {
+            notify_native::install(app.handle());
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
             let db_path = dir.join("slaybudget.db");
@@ -145,6 +146,8 @@ pub fn run() {
             commands::undo_state,
             notify_native::notify_banner,
             notify_native::open_notification_settings,
+            notify_native::notification_permission,
+            notify_native::request_notification_permission,
             commands::move_category_to_group,
             commands::rename_group,
             commands::ungroup_group,

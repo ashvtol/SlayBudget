@@ -50,3 +50,20 @@ pub fn notify_banner(
     });
     Ok(())
 }
+
+/// Open System Settings > Notifications, where SlayBudget's banners are allowed or not.
+#[tauri::command]
+pub fn open_notification_settings() -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("x-apple.systempreferences:com.apple.Notifications-Settings.extension")
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Err("notification settings are macOS only".into())
+    }
+}

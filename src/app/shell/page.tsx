@@ -1,5 +1,5 @@
 import { NotificationBell } from '@/features/notifications/bell';
-import type { ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 
 /**
  * The slim header bar every page and panel uses: title, then a toolbar right
@@ -96,11 +96,13 @@ export function SplitPage({
   /** A dialog drawn over the page (e.g. a delete confirmation). */
   overlay?: ReactNode;
 }) {
+  const [width, setWidth] = useListWidth(title, listWidth);
   return (
     <main aria-label={title} className="flex min-w-0 flex-1" style={{ background: 'var(--bg)' }}>
-      <section className="flex min-h-0 shrink-0 flex-col border-r" style={{ width: listWidth, borderColor: 'var(--line)' }}>
+      <section className="relative flex min-h-0 shrink-0 flex-col border-r" style={{ width, borderColor: 'var(--line)' }}>
         <PaneHeader title={title} leading={leading} toolbar={toolbar} />
         <div className="min-h-0 flex-1 overflow-y-auto">{list}</div>
+        <Divider width={width} onChange={setWidth} />
       </section>
       <section aria-label="Details" className="flex min-h-0 min-w-0 flex-1 flex-col">
         <PaneHeader title={detailTitle ?? ''} level={2} actions={<TopBarActions>{detailActions}</TopBarActions>} />
@@ -108,5 +110,67 @@ export function SplitPage({
       </section>
       {overlay}
     </main>
+  );
+}
+
+const MIN_LIST = 360;
+const MAX_LIST = 900;
+const STEP = 16;
+const clampWidth = (w: number) => Math.round(Math.min(MAX_LIST, Math.max(MIN_LIST, w)));
+
+/** The list's width on this page: what you dragged it to (remembered per page), or the page's default. */
+function useListWidth(page: string, fallback: number): [number, (w: number | null) => void] {
+  const key = `split-width:${page}`;
+  const [width, setState] = useState(() => {
+    const saved = Number(localStorage.getItem(key));
+    return saved > 0 ? clampWidth(saved) : fallback;
+  });
+  const set = (w: number | null) => {
+    if (w == null) {
+      localStorage.removeItem(key);
+      setState(fallback);
+      return;
+    }
+    const next = clampWidth(w);
+    localStorage.setItem(key, String(next));
+    setState(next);
+  };
+  return [width, set];
+}
+
+/** The line between list and detail: drag it (or use ← →) to resize the list; double-click puts it back. */
+function Divider({ width, onChange }: { width: number; onChange: (w: number | null) => void }) {
+  const drag = useRef<{ x: number; width: number } | null>(null);
+  return (
+    <div
+      role="separator"
+      aria-label="Resize the list"
+      aria-orientation="vertical"
+      aria-valuenow={width}
+      aria-valuemin={MIN_LIST}
+      aria-valuemax={MAX_LIST}
+      tabIndex={0}
+      title="Drag to resize. Double-click to reset."
+      className="absolute -right-[3px] top-0 z-20 h-full w-[6px] cursor-col-resize outline-none hover:bg-[var(--accent)]/30 focus-visible:bg-[var(--accent)]/40"
+      onPointerDown={(e) => {
+        drag.current = { x: e.clientX, width };
+        e.currentTarget.setPointerCapture?.(e.pointerId);
+        e.preventDefault();
+      }}
+      onPointerMove={(e) => {
+        if (drag.current) onChange(drag.current.width + e.clientX - drag.current.x);
+      }}
+      onPointerUp={(e) => {
+        drag.current = null;
+        e.currentTarget.releasePointerCapture?.(e.pointerId);
+      }}
+      onDoubleClick={() => onChange(null)}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+          e.preventDefault();
+          onChange(width + (e.key === 'ArrowRight' ? STEP : -STEP));
+        }
+      }}
+    />
   );
 }

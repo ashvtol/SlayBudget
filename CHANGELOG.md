@@ -5,6 +5,17 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-11-23
+### Added
+- **Resizable panes.** Drag the line between a list and its detail (Transactions, Categories, Recurrings) to give
+  either side more room. It's remembered per page; double-click to reset, or use the arrow keys.
+- **Send a test banner**, at the bottom of Notification settings. If it doesn't show, SlayBudget tells you where to
+  allow its banners (with a button to open System Settings > Notifications).
+- Notification settings say when quiet hours are holding banners right now.
+
+### Changed
+- A recent price change on Recurrings is a green arrow beside the bill's tag, so names are no longer cut short.
+
 ## [0.6.0] - 2026-11-22
 ### Added
 - **Subscriptions that change price.** When a bill's merchant charges well above or below its usual amount (an

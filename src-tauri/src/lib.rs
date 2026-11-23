@@ -144,6 +144,7 @@ pub fn run() {
             commands::redo,
             commands::undo_state,
             notify_native::notify_banner,
+            notify_native::open_notification_settings,
             commands::move_category_to_group,
             commands::rename_group,
             commands::ungroup_group,

@@ -4,7 +4,8 @@ import { isTauri } from '@/lib/tauri-ipc';
 import type { NotificationKind } from '@/lib/types';
 import { DEFAULT_CONFIG, loadConfig, saveConfig, validateConfig, type NotificationConfig } from './config';
 import { useNotificationsStore } from './notifications-store';
-import { isAutostartEnabled, setAutostart } from './notify';
+import { isAutostartEnabled, openNotificationSettings, setAutostart } from './notify';
+import { inQuietHours } from '@/lib/notification-config';
 import { Switch } from '@/components/switch';
 import { Select } from '@/components/select';
 
@@ -105,7 +106,8 @@ function KindRow({ kind, title, hint, config, error, onSwitch, children }: { kin
 
 /** Settings > Notifications: Mac banners, quiet hours, and each kind's switches and thresholds. */
 export function NotificationsPane() {
-  const { enabled, load, setEnabled, checkNow } = useNotificationsStore();
+  const { enabled, load, setEnabled, checkNow, sendTest, now } = useNotificationsStore();
+  const [tested, setTested] = useState(false);
   // Re-checking notifications is heavy; wait until a burst of changes stops so toggles stay smooth.
   const recheck = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => {
@@ -155,6 +157,9 @@ export function NotificationsPane() {
         <span className="flex flex-col">
           <span className="text-sm font-medium">Quiet hours</span>
           <span className="text-xs" style={muted}>Hold banners overnight; they arrive when quiet hours end.</span>
+          {inQuietHours(config.quietHours, now()) && (
+            <span className="text-xs font-medium" style={{ color: 'var(--warn)' }}>Quiet now: banners wait until {config.quietHours.end}.</span>
+          )}
         </span>
         <span className="flex items-center gap-2 text-[12px]">
           <Check label="On" checked={config.quietHours.enabled} onChange={(v) => void update({ quietHours: { ...config.quietHours, enabled: v } })} />
@@ -236,6 +241,27 @@ export function NotificationsPane() {
           />
         </label>
       )}
+
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-3 text-[12px]" style={{ borderTop: '1px solid var(--line)' }}>
+        {tested && (
+          <span style={muted}>
+            Didn’t see it? Allow SlayBudget in System Settings &gt; Notifications, and check Focus.{' '}
+            {desktop && (
+              <button type="button" onClick={() => void openNotificationSettings()} className="font-semibold" style={{ color: 'var(--accent)' }}>
+                Open System Settings
+              </button>
+            )}
+          </span>
+        )}
+        <button
+          type="button"
+          onClick={() => void sendTest().then(() => setTested(true))}
+          className="ml-auto text-[12px] font-semibold"
+          style={{ color: 'var(--accent)' }}
+        >
+          Send a test banner
+        </button>
+      </div>
     </section>
   );
 }

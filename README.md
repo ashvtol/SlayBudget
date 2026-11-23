@@ -56,6 +56,7 @@ on your own computer, this is it.
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. |
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
+| ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
 | 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
 | 💱 **Your currency, offline** | Show every amount in your currency (30+ to choose from): transactions, totals, budgets, charts and bills, each converted at its own month's rate. The European Central Bank's rates are built into the app, so nothing goes online to convert, and your data keeps its original currency. Changing numbers roll like a ticker. |
@@ -275,8 +276,17 @@ you're used to.
 <summary><b>Will it remind me about bills?</b></summary>
 
 Yes. The bell in the top bar and Mac banners tell you about upcoming bills (as many days ahead as you like), bills
-that look missed, price increases, possible double charges, large purchases and budgets running over. Banners appear
+that look missed, price changes, possible double charges, large purchases and budgets running over. Banners appear
 while SlayBudget is open, and quiet hours hold them overnight.
+</details>
+
+<details>
+<summary><b>I don't see Mac banners. What's wrong?</b></summary>
+
+Open Settings > Notifications and reminders and click **Send a test banner** at the bottom. If nothing shows, macOS
+is holding SlayBudget's banners: allow them in System Settings > Notifications > SlayBudget (the **Open System
+Settings** button takes you there), and check that a Focus mode isn't on. Also note that quiet hours hold banners
+overnight (the settings say so while they're on), and an alert you already read in the bell doesn't become a banner.
 </details>
 
 <details>

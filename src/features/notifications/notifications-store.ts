@@ -34,6 +34,10 @@ interface NotificationsState {
   checkNow(opts?: { baseline?: boolean }): Promise<void>;
   /** Show banners for items not yet bannered (unless quiet hours hold them). */
   deliverPending(): Promise<void>;
+  /** A banner right now (quiet hours or not), to check macOS shows SlayBudget's banners. */
+  sendTest(): Promise<void>;
+  /** The time banners go by (the clock, or a test's). */
+  now(): Date;
   /** A clicked banner: open its item, or the bell for a summary. */
   handleClick(id: string): Promise<void>;
   startScheduler(): () => void;
@@ -82,6 +86,12 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       for (const n of wanted) await deps.sendBanner(String(n.id), n.title, n.body);
     }
     await ipc().notificationsMarkDelivered(pending.map((n) => n.id));
+  },
+  async sendTest() {
+    await deps.sendBanner('test', 'SlayBudget banners work', 'This is how alerts will look.');
+  },
+  now() {
+    return deps.now();
   },
   async handleClick(id) {
     if (id === 'bell') {

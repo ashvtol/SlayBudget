@@ -14,7 +14,7 @@ afterEach(() => cleanup());
 let nextId = 1;
 const claude = (postedOn: string, cents: number): Transaction => ({
   id: nextId++, profileId: 1, sourceId: 1, postedOn, description: 'ANTHROPIC* CLAUDE SUSAN FRANCISCO CA', merchant: 'anthropic claude',
-  amountCents: -cents, currency: 'USD', categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+  amountCents: -cents, currency: 'USD', categoryId: 10, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
 });
 const sources: Source[] = [{ id: 1, profileId: 1, name: 'Visa', kind: 'csv', institution: null, currency: 'USD' }];
 /** Claude at $22.11 on the 5th since June, then $100.18 on Nov 21 (the upgrade). Returns the upgrade's id. */
@@ -86,8 +86,14 @@ describe('price changes on the Recurrings page', () => {
     const b = await within(details).findByRole('region', { name: 'Possible new price' });
     expect(b).toHaveTextContent('Nov 21');
     await user.click(within(b).getByRole('button', { name: 'Yes, new price' }));
-    const badge = await screen.findByText('Price went up');
-    expect(badge.closest('li')).toBe(screen.getByRole('listitem', { name: /Anthropic Claude/ }));
+    // A green arrow beside the category tag; the name and frequency keep their room.
+    const arrow = await screen.findByRole('img', { name: 'Price went up' });
+    const row = screen.getByRole('listitem', { name: /Anthropic Claude/ });
+    expect(arrow.closest('li')).toBe(row);
+    expect(arrow).toHaveTextContent('↑');
+    expect(within(row).queryByText('Price went up')).not.toBeInTheDocument();
+    const pill = within(row).getByText('Groceries');
+    expect(pill.compareDocumentPosition(arrow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const d = screen.getByRole('region', { name: 'Details' });
     expect(await within(d).findByText('Price went up: $22.11 → $100.18')).toBeInTheDocument();
     const history = within(d).getByRole('list', { name: 'Price history' });
@@ -102,6 +108,7 @@ describe('price changes on the Recurrings page', () => {
     await renderRecurrings();
     await user.click(within(await screen.findByRole('region', { name: 'Possible new price' })).getByRole('button', { name: 'Yes, new price' }));
     expect(await within(screen.getByRole('region', { name: 'Details' })).findByText('Price went down: $22.11 → $10.00')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Price went down' })).toHaveTextContent('↓');
   });
 
   it('suggests merging look-alike bills; Merge keeps one, Not the same stops asking', async () => {

@@ -37,3 +37,10 @@ export async function setAutostart(enabled: boolean): Promise<void> {
   if (enabled) await mod.enable();
   else await mod.disable();
 }
+
+/** Open System Settings > Notifications, where you allow SlayBudget's banners. */
+export async function openNotificationSettings(): Promise<void> {
+  if (!isTauri()) return;
+  const { invoke } = await import('@tauri-apps/api/core');
+  await invoke('open_notification_settings');
+}

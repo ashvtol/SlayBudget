@@ -104,8 +104,23 @@ describe('NotificationsPane', () => {
     await waitFor(() => expect(refresh).toHaveBeenCalledTimes(1), { timeout: 2000 });
   });
 
-  it('has no test banner button', async () => {
+  it('sends a test banner from a small button at the bottom, and says where macOS allows banners', async () => {
+    const user = userEvent.setup();
+    const sendBanner = vi.fn().mockResolvedValue(undefined);
+    useNotificationsStore.getState().configure({ sendBanner, now: () => new Date(2026, 10, 23, 12, 0) });
     await renderPane();
-    expect(screen.queryByRole('button', { name: /test banner/i })).toBeNull();
+    const buttons = screen.getAllByRole('button');
+    const test = screen.getByRole('button', { name: 'Send a test banner' });
+    expect(buttons.at(-1)).toBe(test);
+    await user.click(test);
+    expect(sendBanner).toHaveBeenCalledWith('test', 'SlayBudget banners work', 'This is how alerts will look.');
+    expect(await screen.findByText(/Didn’t see it\? Allow SlayBudget in System Settings > Notifications/)).toBeInTheDocument();
+  });
+
+  it('says when quiet hours are holding banners right now', async () => {
+    useNotificationsStore.getState().configure({ sendBanner: vi.fn(), now: () => new Date(2026, 10, 23, 23, 30) });
+    await renderPane();
+    // Quiet hours are on by default, 22:00 to 08:00.
+    expect(within(row('Quiet hours')).getByText('Quiet now: banners wait until 08:00.')).toBeInTheDocument();
   });
 });

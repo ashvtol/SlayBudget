@@ -438,17 +438,21 @@ function BillList({
               <CategoryIcon emoji={cat?.emoji} color={cat?.color} className="w-4" />
               <span className="truncate">{i.rules.name}</span>
               <span className="truncate text-[12px]" style={{ color: 'var(--muted)' }}>{CADENCE_LABEL[i.recurring.cadence]}</span>
-              {(() => {
-                const c = recentChange(src, i.recurring.saved?.id, today);
-                if (!c) return null;
-                const up = c.toCents > c.fromCents;
-                return (
-                  <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold" style={{ color: up ? 'var(--warn)' : 'var(--pos)' }}>
-                    {up ? 'Price went up' : 'Price went down'}
-                  </span>
-                );
-              })()}
-              <span className="ml-auto shrink-0">{cat && <CategoryPill category={cat} />}</span>
+
+              <span className="relative ml-auto shrink-0">
+                {cat && <CategoryPill category={cat} />}
+                {/* Tucked into the gap before the amount, so it takes no room from the name. */}
+                {(() => {
+                  const c = recentChange(src, i.recurring.saved?.id, today);
+                  if (!c) return null;
+                  const label = c.toCents > c.fromCents ? 'Price went up' : 'Price went down';
+                  return (
+                    <span role="img" aria-label={label} title={label} className="absolute -right-[18px] top-1/2 -translate-y-1/2 text-[13px] font-bold" style={{ color: 'var(--pos)' }}>
+                      {c.toCents > c.fromCents ? '↑' : '↓'}
+                    </span>
+                  );
+                })()}
+              </span>
               <Money cents={i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
               <span className="flex w-3 shrink-0 justify-center" style={{ color: 'var(--text)' }}>
                 {i.paid && <span role="img" aria-label="Paid" className="flex"><IconCheck size={13} /></span>}

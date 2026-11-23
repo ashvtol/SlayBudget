@@ -51,9 +51,9 @@ on your own computer, this is it.
 | 🧭 **Statements land in the right account** | SlayBudget works out which account a statement belongs to from the file itself (the account's last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once ("Which account is this?") with its best guess first, and remembers your answer. Two cards from the same bank never get mixed up. Each account can have a default tag (say "Business"), and an import that went to the wrong account can be moved. |
 | 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
-| 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. |
-| 🗂️ **Categories** | 24 months of spending against budget. Click any month to see that month, then open and edit any transaction in place. |
-| 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. |
+| 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
+| 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
+| 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. |
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
@@ -359,7 +359,7 @@ macOS. Contributions are welcome.
 
 ## Tech stack
 
-**Tauri 2** · **Rust** (rusqlite, SQLite) · **React 19** · **TypeScript** · **Vite** · **Tailwind CSS** · **ECharts** ·
+**Tauri 2** · **Rust** (rusqlite, SQLite) · **React 19** · **TypeScript** · **Vite** · **Tailwind CSS** · **visx** ·
 **Zustand** · **Vitest**
 
 ```

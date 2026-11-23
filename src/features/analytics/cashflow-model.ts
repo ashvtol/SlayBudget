@@ -27,6 +27,8 @@ export interface MonthPoint extends Totals {
 export interface SpendSeries {
   name: string;
   color: string;
+  /** The category's emoji, for the hover card (none for Uncategorized and Other). */
+  emoji: string | null;
   values: number[];
 }
 export interface YearMetrics {
@@ -182,11 +184,11 @@ export function buildCashflow(input: {
   });
   const ranked = [...perCat.entries()].sort((a, b) => b[1].reduce((s, v) => s + v, 0) - a[1].reduce((s, v) => s + v, 0));
   const keep = ranked.length > 7 ? ranked.slice(0, 6) : ranked;
-  const spendSeries: SpendSeries[] = keep.map(([key, values]) => ({ name: describe(key).name, color: describe(key).color, values }));
+  const spendSeries: SpendSeries[] = keep.map(([key, values]) => ({ ...describe(key), values }));
   if (ranked.length > 7) {
     const other = new Array<number>(12).fill(0);
     for (const [, values] of ranked.slice(6)) values.forEach((v, i) => (other[i] += v));
-    spendSeries.push({ name: 'Other', color: OTHER_COLOR, values: other });
+    spendSeries.push({ name: 'Other', color: OTHER_COLOR, emoji: null, values: other });
   }
 
   // Per-year metrics: last year over 12 months, this year over months elapsed (by days).

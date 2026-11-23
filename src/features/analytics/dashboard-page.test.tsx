@@ -1,4 +1,3 @@
-import '@/test/echarts-mock';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
@@ -151,6 +150,8 @@ describe('DashboardPage', () => {
     setIpc(createMemoryIpc({ sources, transactions: [tx({ id: 1, postedOn: '2026-11-05', amountCents: -100000, categoryId: 10 })] }));
     useAnalyticsStore.setState({ today: TODAY });
     render(<DashboardPage />);
-    expect(await screen.findByText(/over$/)).toHaveTextContent('$250 over');
+    // The header says how far over the budget; the chart's pill says how far ahead of the even pace.
+    const overs = await screen.findAllByText(/over$/);
+    expect(overs.map((o) => o.textContent)).toContain('$250 over');
   });
 });

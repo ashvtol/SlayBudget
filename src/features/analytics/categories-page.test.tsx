@@ -1,5 +1,5 @@
-import '@/test/echarts-mock';
-import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { historyArea } from '@/features/charts/svg/budget-history-chart';
 import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
 import { createMemoryIpc, setIpc, ipc } from '@/lib/ipc';
@@ -362,18 +362,29 @@ describe('CategoriesPage budgets (Copilot)', () => {
 });
 
 describe('CategoriesPage month picked on the history chart', () => {
+  it('hovering a month shows its spending in the header without picking it', async () => {
+    await setup();
+    const chart = within(details()).getByRole('img', { name: 'Budget history' });
+    const area = historyArea(560, 120);
+    const spentIn = () => within(details()).getByText(/^Spent in/).textContent;
+    fireEvent.pointerMove(chart, { clientX: area.left + (area.width / 24) * 22.5 });
+    expect(spentIn()).toBe('Spent in October 2026');
+    fireEvent.pointerLeave(chart);
+    expect(spentIn()).toBe('Spent in Nov');
+  });
+
   it('clicking a month bar shows that month in the detail, and Back returns to this month', async () => {
     const user = userEvent.setup();
-    const echarts = (await import('echarts')) as unknown as { __chart: { on: { mock: { calls: [string, (p: unknown) => void][] } } } };
     await setup();
-    const clicks = echarts.__chart.on.mock.calls.filter(([ev]) => ev === 'click');
-    const click = clicks[clicks.length - 1][1];
+    const chart = within(details()).getByRole('img', { name: 'Budget history' });
+    const area = historyArea(560, 120);
     // 24 months ending Nov 2026: index 22 is October.
-    act(() => click({ componentType: 'series', dataIndex: 22 }));
-    expect(details()).toHaveTextContent('Spent in October 2026');
+    fireEvent.click(chart, { clientX: area.left + (area.width / 24) * 22.5 });
+    const spentIn = () => within(details()).getByText(/^Spent in/).textContent;
+    expect(spentIn()).toBe('Spent in October 2026');
     expect(within(details()).getByRole('table', { name: 'Category budgets' })).toHaveTextContent('Groceries');
     await user.click(within(details()).getByRole('button', { name: 'Back to this month' }));
-    expect(details()).not.toHaveTextContent('October 2026');
+    expect(spentIn()).toBe('Spent in Nov');
     expect(within(details()).queryByRole('button', { name: 'Back to this month' })).toBeNull();
   });
 });

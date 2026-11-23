@@ -112,6 +112,19 @@ describe('buildCashflow spend by category', () => {
     expect(c.spendSeries.find((s) => s.name === 'Plain')?.color).toBe('#e8743b');
     expect(c.spendSeries.map((s) => s.name)).toContain('Uncategorized');
   });
+
+  it("carries each category's emoji for the Spend hover card (none for Uncategorized and Other)", () => {
+    const c = buildCashflow({
+      transactions: [tx('2026-05-01', -100, 30), tx('2026-05-02', -50)],
+      categories: [{ ...cat(30, 'Plain', null), emoji: '🛒' }],
+      groups,
+      today: TODAY,
+      period: 'ytd',
+      compare: 'previousPeriod',
+      includeExcluded: false,
+    });
+    expect(c.spendSeries.map((s) => [s.name, s.emoji])).toEqual([['Plain', '🛒'], ['Uncategorized', null]]);
+  });
 });
 
 describe('buildCashflow drawer details', () => {

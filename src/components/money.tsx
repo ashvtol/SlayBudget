@@ -36,6 +36,7 @@ export function Money({
   sign = 'none',
   decimals = true,
   className = '',
+  still = false,
 }: {
   cents: number;
   currency?: string;
@@ -45,11 +46,14 @@ export function Money({
   sign?: 'none' | 'negative' | 'always';
   decimals?: boolean;
   className?: string;
+  /** Change at once, never roll (a chart header following the pointer). */
+  still?: boolean;
 }) {
   const display = useCurrencyStore((s) => s.displayCurrency);
   const currency = given ?? display;
   const { symbol, number } = moneyParts(cents, currency, { decimals });
-  const roll = useRoll(number, `${currency}${decimals}`);
+  const rolled = useRoll(number, `${currency}${decimals}`);
+  const roll = still ? null : rolled;
   const resolved = tone === 'auto' ? (cents > 0 ? 'pos' : 'default') : tone;
   const prefix = sign === 'always' ? (cents > 0 ? '+' : cents < 0 ? '-' : '') : sign === 'negative' && cents < 0 ? '-' : '';
   return (

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
-import { buildSpendMap, labelPlan, previousWindow, spendMapOption } from './spend-map';
+import { buildSpendMap, labelPlan, previousWindow } from './spend-map';
 
 const groups: CategoryGroup[] = [
   { id: 1, name: 'Food & Drink', emoji: '🍔', color: '#e8743b', sortOrder: 0 },
@@ -90,47 +90,6 @@ describe('buildSpendMap', () => {
   });
 });
 
-describe('spendMapOption', () => {
-  const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-  it('builds a two-level treemap with tiles colored by change', () => {
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      series: { type: string; data: { name: string; value: number; children?: { name: string; value: number; itemStyle: { color: string } }[] }[] }[];
-    };
-    const series = option.series[0];
-    expect(series.type).toBe('treemap');
-    const food = series.data.find((d) => d.name === 'Food & Drink')!;
-    const [restaurants, groceries] = food.children!;
-    expect(restaurants.value).toBe(9000);
-    expect(restaurants.itemStyle.color).not.toBe(groceries.itemStyle.color);
-    // Rising spend leans red, falling leans green, new uses the accent.
-    expect(restaurants.itemStyle.color).toContain('e34e3a');
-    expect(groceries.itemStyle.color).toContain('57bd57');
-    const rent = series.data.find((d) => d.name === 'Home')!.children![0];
-    expect(rent.itemStyle.color).toContain('77a5f2');
-  });
-
-  it('lays the tooltip out like the other charts: heading, then label and value rows', () => {
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      tooltip: { formatter: (p: { data: unknown }) => string; backgroundColor?: string };
-      series: { data: { name: string; children?: unknown[] }[] }[];
-    };
-    // The same default card as the Cash flow and Dashboard charts (no custom colors).
-    expect(option.tooltip.backgroundColor).toBeUndefined();
-    const restaurants = option.series[0].data.find((d) => d.name === 'Food & Drink')!.children![0];
-    const html = option.tooltip.formatter({ data: restaurants });
-    const rows = [...html.matchAll(/data-row="([^"]+)"[^>]*>(.*?)<\/div>/g)].map((m) => [m[1], m[2].replace(/<[^>]+>/g, '').trim()]);
-    expect(html).toMatch(/Restaurants/);
-    expect(rows).toEqual([
-      ['Spent', 'Spent$90.00'],
-      ['Share', 'Share4.2%'],
-      ['vs previous period', 'vs previous period+$45.00 (+100%)'],
-      ['Transactions', 'Transactions4'],
-      ['Average', 'Average$22.50'],
-      ['Din Tai', 'Din Tai$90.00'],
-    ]);
-  });
-});
-
 describe('comparing only with full history', () => {
   it('does not compare when the data starts partway into the previous period', () => {
     const late = [tx('2026-10-25', -1000, 10), tx('2026-11-05', -3000, 10)];
@@ -163,78 +122,9 @@ describe('spending map V2', () => {
     expect(m.groups[0].children[0].share).toBeCloseTo(9000 / 14000);
   });
 
-  it('puts merchants under each category tile and drills one level at a time', () => {
-    const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      series: { leafDepth: number; data: { name: string; children?: { name: string; children?: { name: string; value: number }[] }[] }[] }[];
-    };
-    expect(option.series[0].leafDepth).toBe(2);
-    const restaurants = option.series[0].data.find((d) => d.name === 'Food & Drink')!.children![0];
-    expect(restaurants.children!.map((m) => [m.name, m.value])).toEqual([['Din Tai', 9000]]);
-  });
-});
-
-describe('spending map resets its zoom when categories are hidden', () => {
-  const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-  it('names the series after the hidden set, so a change starts from the top', () => {
-    const a = spendMapOption(build(), tokens, { compare: true, animate: false, hiddenKey: '' }) as unknown as { series: { id: string }[] };
-    const b = spendMapOption(build(), tokens, { compare: true, animate: false, hiddenKey: '99' }) as unknown as { series: { id: string }[] };
-    expect(a.series[0].id).not.toBe(b.series[0].id);
-  });
-});
-
-describe('spending map animation', () => {
-  it('reshapes in 0.3 s, or not at all when motion is reduced', () => {
-    const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-    const on = spendMapOption(build(), tokens, { compare: true, animate: true }) as { animationDurationUpdate?: number; animation?: boolean };
-    expect(on.animationDurationUpdate).toBe(300);
-    const off = spendMapOption(build(), tokens, { compare: true, animate: false }) as { animationDurationUpdate?: number; animation?: boolean };
-    expect(off.animation).toBe(false);
-  });
-});
-
-describe('spendMapOption clicks', () => {
-  const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-  it('opens a category on click but does not zoom into a single merchant tile', () => {
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      series: { nodeClick: unknown; leafDepth: number; data: { children?: { children?: { link?: string }[] }[] }[] }[];
-    };
-    const s = option.series[0];
-    // ECharts drills into a category (a leaf root at leafDepth 2) whatever nodeClick is;
-    // 'link' with no links makes a merchant click do nothing instead of zooming into one tile.
-    expect(s.leafDepth).toBe(2);
-    expect(s.nodeClick).toBe('link');
-    const merchants = s.data.flatMap((g) => g.children ?? []).flatMap((c) => c.children ?? []);
-    expect(merchants.length).toBeGreaterThan(0);
-    expect(merchants.every((m) => m.link == null)).toBe(true);
-  });
 });
 
 describe('spend map labels', () => {
-  const tokens = { pos: '#57bd57', neg: '#e34e3a', accent: '#77a5f2', muted: '#8a97ad', panel: '#06101a', text: '#ffffff' };
-
-  it('sets the name and a bold amount apart, with room between them', () => {
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      series: { label: { formatter: (p: unknown) => string; rich: Record<string, { fontWeight?: string; lineHeight?: number; fontSize?: number }> } }[];
-    };
-    const label = option.series[0].label;
-    expect(label.formatter({ data: { name: 'Fuel', value: 31215, tile: { emoji: '⛽' } } })).toBe('{name|⛽ Fuel}\n{amount|$312.15}');
-    expect(label.rich.amount.fontWeight).toBe('bold');
-    expect(label.rich.amount.fontSize).toBeGreaterThan(12);
-    expect(label.rich.name.lineHeight).toBeGreaterThanOrEqual(20);
-  });
-
-  it('keeps labels centred in their tiles and group headings as plain names', () => {
-    const option = spendMapOption(build(), tokens, { compare: true, animate: false }) as unknown as {
-      series: { label: { position: string; align: string; verticalAlign: string; rich: Record<string, { align?: string }> }; levels: { upperLabel?: { show?: boolean; formatter?: unknown } }[] }[];
-    };
-    const s = option.series[0];
-    expect([s.label.position, s.label.align, s.label.verticalAlign]).toEqual(['inside', 'center', 'middle']);
-    expect([s.label.rich.name.align, s.label.rich.amount.align]).toEqual(['center', 'center']);
-    // Group headings use their own plain formatter, not the tile's rich one.
-    expect(s.levels[1].upperLabel?.formatter).toBe('{b}');
-  });
-
   it('plans each label for its tile: full, one line, vertical, or left to truncate', () => {
     // Plenty of room.
     expect(labelPlan(200, 120, '🍜 Restaurants')).toBe('full');

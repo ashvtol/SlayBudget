@@ -5,6 +5,25 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-23
+### Changed
+- **New charts everywhere.** Every chart is redrawn in Copilot's style and follows your pointer with no lag:
+  - **Cash flow**: move across a chart and the card's header shows that month against the same month last year; the
+    month lights up (a brighter green or red) while the others dim, with no tooltip box. **Spend** stacks each month by
+    category and lists that month's categories in a small card.
+  - **Dashboard**: the monthly spending line turns from green to yellow to orange as you get ahead of your budget's
+    pace, with a "$37 over" or "$120 under" pill at today, money and day axes, and a card for any day showing what you'd
+    spent and what the budget allowed by then.
+  - **Categories**: 24 months as rounded bars (green within budget, orange over), the budget as a stepped line with
+    its amount, and months with nothing spent shown as dashes. Point at a month to see it, click to open it.
+  - **Insights**: the spending map keeps its tiles, colors and drill-in, with a matching hover card.
+
+### Fixed
+- **Rolling numbers no longer jump when they stop.** The digits rolled a few pixels lower than the number's resting
+  place, so the whole number hopped once the roll ended.
+- **Charts follow your pointer smoothly.** Dragging across any chart (Dashboard, Cash flow, Categories, Insights), the
+  tooltip and guide line now stay with the pointer instead of trailing behind and stuttering.
+
 ## [0.6.2] - 2026-11-23
 ### Fixed
 - **Mac banners pop up even while SlayBudget is in front.** Before, macOS only put them in Notification Center.

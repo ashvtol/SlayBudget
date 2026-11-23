@@ -1,5 +1,5 @@
-import '@/test/echarts-mock';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { plotArea } from '@/features/charts/svg/frame';
 import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
 import { createMemoryIpc, setIpc } from '@/lib/ipc';
@@ -55,6 +55,47 @@ describe('CashflowPage', () => {
     expect(card('Spend')).toHaveTextContent('$120.00');
     expect(within(card('Spend')).getByLabelText(/^Up/)).toBeInTheDocument();
     expect(card('Income')).toHaveTextContent('$4,000.00');
+  });
+
+  it('hovering a month turns the card header into that month (no tooltip box), and leaving puts the period back', async () => {
+    await setup();
+    await waitFor(() => expect(card('Net income')).toHaveTextContent('$3,880.00'));
+    const chart = within(card('Net income')).getByRole('img', { name: 'Net income by month' });
+    const area = plotArea(560, 150);
+    const months = within(card('Net income')).getAllByRole('row').length - 1; // the screen-reader table
+    fireEvent.pointerMove(chart, { clientX: area.left + (area.width / months) * 1.5 }); // February
+    expect(card('Net income')).toHaveTextContent('Feb 2026');
+    expect(card('Net income')).toHaveTextContent('$4,000.00');
+    expect(card('Net income')).toHaveTextContent('vs $0.00 in Feb 2025');
+    expect(screen.queryByRole('tooltip')).toBeNull();
+    fireEvent.pointerLeave(chart);
+    expect(card('Net income')).toHaveTextContent('Jan 1, 2026 - Nov 21, 2026');
+    expect(card('Net income')).toHaveTextContent('$3,880.00');
+  });
+
+  it('Income scrubs the same way', async () => {
+    await setup();
+    await waitFor(() => expect(card('Income')).toHaveTextContent('$4,000.00'));
+    const chart = within(card('Income')).getByRole('img', { name: 'Income by month' });
+    const area = plotArea(560, 130);
+    const months = within(card('Income')).getAllByRole('row').length - 1;
+    fireEvent.pointerMove(chart, { clientX: area.left + (area.width / months) * 0.5 }); // January
+    expect(card('Income')).toHaveTextContent('Jan 2026');
+    expect(card('Income')).toHaveTextContent('$0.00');
+  });
+
+  it('Spend scrubs too, and shows a card with that month’s categories', async () => {
+    await setup();
+    await waitFor(() => expect(card('Spend')).toHaveTextContent('$120.00'));
+    const chart = within(card('Spend')).getByRole('img', { name: 'Spend by month' });
+    const area = plotArea(560, 150);
+    const months = within(card('Spend')).getAllByRole('row').length - 1;
+    fireEvent.pointerMove(chart, { clientX: area.left + (area.width / months) * 10.5 }); // November
+    expect(card('Spend')).toHaveTextContent('Nov 2026');
+    const monthCard = within(card('Spend')).getByRole('group', { name: 'Nov 2026: spending by category' });
+    expect(within(monthCard).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['🥑Groceries$120.00']);
+    fireEvent.pointerLeave(chart);
+    expect(within(card('Spend')).queryByRole('group')).toBeNull();
   });
 
   it('switches the period', async () => {

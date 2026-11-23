@@ -6,10 +6,9 @@ import { Card } from '@/components/card';
 import { Drawer } from '@/components/drawer';
 import { Money } from '@/components/money';
 import { DeltaBadge, percentChange } from '@/components/delta-badge';
-import { Chart } from '@/features/charts/chart';
-import { periodBars, stackedCategoryBars } from '@/features/charts/period-charts';
 import { monthInitial } from '@/features/charts/budget-history';
-import { prefersReducedMotion, readChartTokens, type ChartTokens } from '@/features/charts/tokens';
+import { BarChart } from '@/features/charts/svg/bar-chart';
+import { StackedBars } from '@/features/charts/svg/stacked-bars';
 import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
@@ -78,7 +77,6 @@ export function CashflowPage() {
     () => (src ? buildCashflow({ ...src, today, period, compare, includeExcluded }) : null),
     [src, today, period, compare, includeExcluded],
   );
-  const tokens = readChartTokens();
 
   return (
     <Page
@@ -95,13 +93,13 @@ export function CashflowPage() {
     >
       {cf && (
         <>
-          <FlowCard compare={compare !== 'none'} kind="net" cf={cf} tokens={tokens} onMore={() => setDrawer('net')} />
+          <FlowCard compare={compare !== 'none'} kind="net" cf={cf} onMore={() => setDrawer('net')} />
           <div className="grid grid-cols-2 gap-8">
-            <FlowCard compare={compare !== 'none'} kind="spend" cf={cf} tokens={tokens} onMore={() => setDrawer('spend')} />
-            <FlowCard compare={compare !== 'none'} kind="income" cf={cf} tokens={tokens} onMore={() => setDrawer('income')} />
+            <FlowCard compare={compare !== 'none'} kind="spend" cf={cf} onMore={() => setDrawer('spend')} />
+            <FlowCard compare={compare !== 'none'} kind="income" cf={cf} onMore={() => setDrawer('income')} />
           </div>
           <Drawer open={drawer != null} title={drawer ? KIND_TITLE[drawer] : ''} onClose={() => setDrawer(null)}>
-            {drawer && <FlowDetails kind={drawer} cf={cf} tokens={tokens} />}
+            {drawer && <FlowDetails kind={drawer} cf={cf} />}
           </Drawer>
         </>
       )}
@@ -112,39 +110,71 @@ export function CashflowPage() {
 const valueOf = (kind: Kind, t: { incomeCents: number; spendCents: number; netCents: number }) =>
   kind === 'net' ? t.netCents : kind === 'spend' ? t.spendCents : t.incomeCents;
 
-function FlowCard({ kind, cf, tokens, onMore, compare }: { kind: Kind; cf: Cashflow; tokens: ChartTokens; onMore: () => void; compare: boolean }) {
-  const current = valueOf(kind, cf.current);
-  const previous = valueOf(kind, cf.previous);
-  const reduceMotion = prefersReducedMotion();
-  const option = useMemo(() => {
-    const labels = cf.months.map((m) => m.label);
-    const prev = compare ? cf.months.map((m) => valueOf(kind, m.previous)) : undefined;
-    if (kind === 'spend') {
-      return stackedCategoryBars(labels, cf.spendSeries, tokens, { nowIndex: cf.nowIndex, previous: prev, reduceMotion });
-    }
-    return periodBars(
-      cf.months.map((m) => ({ label: m.label, valueCents: valueOf(kind, m) })),
-      tokens,
-      { nowIndex: cf.nowIndex, color: kind === 'net' ? 'sign' : tokens.income, previous: prev, reduceMotion },
-    );
-  }, [cf, kind, tokens, reduceMotion, compare]);
+const SHORT_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/** "Sep 2026" from "2026-09". */
+const monthTitle = (month: string) => `${SHORT_MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
+/** "2025-09" from "2026-09". */
+const yearBefore = (month: string) => `${Number(month.slice(0, 4)) - 1}${month.slice(4)}`;
+
+function FlowCard({ kind, cf, onMore, compare }: { kind: Kind; cf: Cashflow; onMore: () => void; compare: boolean }) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  // While you scrub across the chart the header changes at once (no rolling digits), until the data changes.
+  const [scrubbed, setScrubbed] = useState(false);
+  const [seen, setSeen] = useState(cf);
+  if (seen !== cf) {
+    setSeen(cf);
+    setScrubbed(false);
+    setHovered(null);
+  }
+  const month = hovered != null ? cf.months[hovered] : undefined;
+  const header = month
+    ? { label: monthTitle(month.month), current: valueOf(kind, month), previous: valueOf(kind, month.previous), previousLabel: monthTitle(yearBefore(month.month)) }
+    : { label: cf.range.label, current: valueOf(kind, cf.current), previous: valueOf(kind, cf.previous), previousLabel: cf.previousRange.label };
+  const prev = compare ? cf.months.map((m) => valueOf(kind, m.previous)) : undefined;
+  const onHover = (i: number | null) => {
+    setHovered(i);
+    if (i != null) setScrubbed(true);
+  };
 
   return (
     <Card title={KIND_TITLE[kind]} linkLabel="View more" onLink={onMore}>
-      <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{cf.range.label}</div>
+      <div className="text-[12px]" style={{ color: 'var(--muted)' }}>{header.label}</div>
       <div className="mt-1 text-[22px] font-semibold">
-        <Money cents={current} sign="negative" tone={kind === 'spend' ? 'default' : current < 0 ? 'neg' : 'pos'} />
+        <Money cents={header.current} sign="negative" tone={kind === 'spend' ? 'default' : header.current < 0 ? 'neg' : 'pos'} still={scrubbed} />
       </div>
       {compare && (
         <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--muted)' }}>
-          <DeltaBadge pct={percentChange(current, previous)} upIsGood={kind !== 'spend'} />
+          <DeltaBadge pct={percentChange(header.current, header.previous)} upIsGood={kind !== 'spend'} />
           <span>
-            vs <Money cents={previous} sign="negative" className="font-semibold" /> in {cf.previousRange.label}
+            vs <Money cents={header.previous} sign="negative" className="font-semibold" still={scrubbed} /> in {header.previousLabel}
           </span>
         </div>
       )}
-      <div role="img" aria-label={`${KIND_TITLE[kind]} by month`} className="mt-4">
-        <Chart option={option} height={kind === 'net' ? 150 : 130} />
+      <div className="mt-4">
+        {kind === 'spend' ? (
+          <StackedBars
+            label="Spend by month"
+            labels={cf.months.map((m) => m.label)}
+            titles={cf.months.map((m) => monthTitle(m.month))}
+            series={cf.spendSeries}
+            previous={prev}
+            nowIndex={cf.nowIndex}
+            height={150}
+            onHover={onHover}
+          />
+        ) : (
+          <BarChart
+            label={`${KIND_TITLE[kind]} by month`}
+            valueLabel={KIND_TITLE[kind]}
+            labels={cf.months.map((m) => m.label)}
+            values={cf.months.map((m) => valueOf(kind, m))}
+            color={kind === 'net' ? 'sign' : 'var(--income)'}
+            previous={prev}
+            nowIndex={cf.nowIndex}
+            height={kind === 'net' ? 150 : 130}
+            onHover={onHover}
+          />
+        )}
       </div>
     </Card>
   );
@@ -152,17 +182,8 @@ function FlowCard({ kind, cf, tokens, onMore, compare }: { kind: Kind; cf: Cashf
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
-function FlowDetails({ kind, cf, tokens }: { kind: Kind; cf: Cashflow; tokens: ChartTokens }) {
+function FlowDetails({ kind, cf }: { kind: Kind; cf: Cashflow }) {
   const last = cf.history[cf.history.length - 1];
-  const option = useMemo(
-    () =>
-      periodBars(
-        cf.history.map((m) => ({ label: monthInitial(m.month), valueCents: valueOf(kind, m) })),
-        tokens,
-        { nowIndex: cf.history.length - 1, color: kind === 'net' ? 'sign' : tokens.income, reduceMotion: prefersReducedMotion() },
-      ),
-    [cf, kind, tokens],
-  );
   const [, mm] = last.month.split('-').map(Number);
   return (
     <div className="flex flex-col gap-7 px-8 py-6">
@@ -175,9 +196,15 @@ function FlowDetails({ kind, cf, tokens }: { kind: Kind; cf: Cashflow; tokens: C
           </div>
         </div>
       </div>
-      <div role="img" aria-label={`${KIND_TITLE[kind]} over two years`}>
-        <Chart option={option} height={110} />
-      </div>
+      <BarChart
+        label={`${KIND_TITLE[kind]} over two years`}
+        valueLabel={KIND_TITLE[kind]}
+        labels={cf.history.map((m) => monthInitial(m.month))}
+        values={cf.history.map((m) => valueOf(kind, m))}
+        color={kind === 'net' ? 'sign' : kind === 'spend' ? 'var(--spend)' : 'var(--income)'}
+        nowIndex={cf.history.length - 1}
+        height={130}
+      />
 
       <table aria-label="Key metrics" className="w-full border-t pt-4 text-[13px]" style={{ borderColor: 'var(--line)' }}>
         <thead>

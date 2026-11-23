@@ -19,6 +19,18 @@ afterEach(() => {
 });
 
 describe('rolling numbers', () => {
+  it('a rolling digit sits exactly where a plain digit does, so nothing jumps when the roll ends', async () => {
+    // jsdom can't lay text out, so this pins the CSS that keeps rolling digits on the text's own line: the slot clips
+    // with clip-path (an overflow-hidden inline-block moves its baseline to its bottom edge) and keeps the line height.
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/app/styles.css', 'utf8');
+    const slot = /\.roll-slot\s*\{([^}]*)\}/.exec(css)![1];
+    expect(slot).toMatch(/clip-path:\s*inset\(0/);
+    expect(slot).not.toMatch(/overflow:\s*hidden/);
+    expect(slot).not.toMatch(/line-height/);
+    expect(slot).not.toMatch(/vertical-align/);
+  });
+
   it('rolls only the digits that changed: the old one goes up and out, the new one comes in from below', () => {
     const { rerender, container } = render(<Money cents={12345} currency="USD" />);
     expect(container.querySelectorAll('[data-roll]')).toHaveLength(0);
@@ -51,6 +63,13 @@ describe('rolling numbers', () => {
     const b = render(<Money cents={100} currency="USD" />);
     b.rerender(<Money cents={900} currency="USD" />);
     expect(b.container.querySelectorAll('[data-roll]')).toHaveLength(0);
+  });
+
+  it('stays still when told to (a chart header following the pointer must change at once)', () => {
+    const { rerender, container } = render(<Money cents={123456} currency="USD" still />);
+    rerender(<Money cents={128756} currency="USD" still />);
+    expect(container.querySelectorAll('[data-roll]')).toHaveLength(0);
+    expect(container.textContent).toBe('$1,287.56');
   });
 
   it('can be turned off in Settings > Accessibility', async () => {

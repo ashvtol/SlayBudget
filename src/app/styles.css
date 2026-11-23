@@ -8,7 +8,7 @@
   /* Category pill text: the category colour mixed toward this ink (lighter on dark themes). */
   --pill-tint: 82%; --pill-ink: white;
   --accent: #77a5f2; --on-accent: #06101f;
-  --pos: #57bd57; --neg: #e34e3a; --warn: #eaa64a; --current: #ebc769;
+  --pos: #57bd57; --neg: #e34e3a; --pos-bright: #2fe35c; --neg-bright: #ff5640; --warn: #eaa64a; --current: #ebc769;
   --income: #81aef2; --spend: #4c85ee; --track: #0f1f36; --grid: #0e1828;
   color-scheme: dark;
 }
@@ -17,7 +17,7 @@
   --line: #222225; --line-strong: #303034; --hover: #1c1c1f;
   --text: #f2f2f2; --muted: #9a9aa0; --subtle: #6c6c72;
   --accent: #e6e6e6; --on-accent: #111112;
-  --pos: #62c26a; --neg: #ec5d4c; --warn: #e6a74f; --current: #e9c86c;
+  --pos: #62c26a; --neg: #ec5d4c; --pos-bright: #3ee86c; --neg-bright: #ff6a58; --warn: #e6a74f; --current: #e9c86c;
   --income: #b8c4d6; --spend: #8f9bb0; --track: #232327; --grid: #1a1a1d;
   color-scheme: dark;
 }
@@ -27,7 +27,7 @@
   --text: #121826; --muted: #5d687a; --subtle: #8892a3;
   --pill-tint: 55%; --pill-ink: black;
   --accent: #2f63e0; --on-accent: #ffffff;
-  --pos: #1f8f3a; --neg: #cc3a2a; --warn: #c9801c; --current: #c9a21c;
+  --pos: #1f8f3a; --neg: #cc3a2a; --pos-bright: #16b13f; --neg-bright: #e5321f; --warn: #c9801c; --current: #c9a21c;
   --income: #5b8de8; --spend: #2f63e0; --track: #e6ebf3; --grid: #edf0f5;
   color-scheme: light;
 }
@@ -36,7 +36,7 @@
   --line: #221b36; --line-strong: #2f2648; --hover: #1a1530;
   --text: #efeaff; --muted: #a197c2; --subtle: #6f6690;
   --accent: #37d6c0; --on-accent: #06211d;
-  --pos: #5fdc9a; --neg: #ff6f83; --warn: #f2a84e; --current: #f2c14e;
+  --pos: #5fdc9a; --neg: #ff6f83; --pos-bright: #3ff7a6; --neg-bright: #ff4f6a; --warn: #f2a84e; --current: #f2c14e;
   --income: #7fe3d3; --spend: #37d6c0; --track: #1d1730; --grid: #171226;
   color-scheme: dark;
 }
@@ -179,7 +179,9 @@ textarea:focus-visible {
 }
 
 /* Rolling numbers: a changed digit leaves upward while the new one comes up from below. */
-.roll-slot { position: relative; display: inline-block; overflow: hidden; vertical-align: bottom; line-height: 1.15; }
+/* Clipped with clip-path, not overflow: an overflow-hidden inline-block moves its baseline to its bottom edge, so the
+   rolling digits sat lower than the plain ones and the number jumped when the roll ended. */
+.roll-slot { position: relative; display: inline-block; clip-path: inset(0 -0.1em); }
 .roll-slot > [data-roll-in] { display: inline-block; animation: roll-in 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; animation-delay: var(--roll-delay); }
 .roll-slot > [data-roll-out] { position: absolute; left: 0; top: 0; animation: roll-out 420ms cubic-bezier(0.4, 0, 0.6, 1) both; animation-delay: var(--roll-delay); }
 @keyframes roll-in { from { transform: translateY(100%); opacity: 0; } to { transform: none; opacity: 1; } }

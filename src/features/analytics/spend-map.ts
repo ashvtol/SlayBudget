@@ -1,7 +1,6 @@
 // The Insights spending map: where the money went in a period (treemap tiles sized by spend) and
 // how each category changed against the period before (tile color).
 
-import type { EChartsOption } from 'echarts';
 import { cleanMerchant } from '@/lib/merchant';
 import { isRegular, spendOf } from '@/lib/tx-type';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
@@ -187,10 +186,6 @@ export interface MapTokens {
   text: string;
 }
 
-const money = (cents: number) =>
-  `$${(Math.abs(cents) / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const signedMoney = (cents: number) => `${cents >= 0 ? '+' : '−'}${money(cents)}`;
-const escapeHtml = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] as string);
 /** `#rrggbb` with an alpha byte. */
 const withAlpha = (hex: string, alpha: number) => `${hex.slice(0, 7)}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0')}`;
 
@@ -202,157 +197,6 @@ export function tileColor(tile: Pick<SpendTile, 'changePct' | 'color'>, tokens: 
   if (Math.abs(tile.changePct) <= 5) return withAlpha(tokens.muted, 0.55);
   const strength = 0.4 + 0.6 * Math.min(1, Math.abs(tile.changePct) / 100);
   return withAlpha(tile.changePct > 0 ? tokens.neg : tokens.pos, strength);
-}
-
-interface TileDatum {
-  name: string;
-  value: number;
-  merchant?: MerchantTile;
-  categoryName?: string;
-  groupChange?: number | null;
-  tile?: SpendTile;
-  group?: SpendGroup;
-  share: number;
-  itemStyle: { color: string; borderColor?: string };
-  children?: TileDatum[];
-}
-
-// The same layout as ECharts' standard tooltip on the other charts: a grey heading, then rows of
-// a colored dot, a label and a bold value on the right.
-const marker = (color: string) =>
-  `<span style="display:inline-block;width:10px;height:10px;border-radius:10px;background:${color};flex:none"></span>`;
-const row = (label: string, value: string, color: string) =>
-  `<div data-row="${escapeHtml(label)}" style="display:flex;align-items:center;gap:6px;margin-top:10px;line-height:1;font-size:14px;color:#666">` +
-  `${marker(color)}<span>${escapeHtml(label)}</span>` +
-  `<span style="margin-left:auto;padding-left:20px;font-weight:900;color:#666">${escapeHtml(value)}</span></div>`;
-const heading = (text: string) => `<div style="font-size:14px;color:#666;line-height:1">${escapeHtml(text)}</div>`;
-const changeText = (now: number, before: number) => {
-  const pct = Math.round(((now - before) / before) * 100);
-  return `${signedMoney(now - before)} (${pct >= 0 ? '+' : ''}${pct}%)`;
-};
-
-function tooltipHtml(d: TileDatum, compared: boolean): string {
-  const color = d.itemStyle.color.slice(0, 7);
-  const parts: string[] = [];
-  if (d.merchant) {
-    const m = d.merchant;
-    parts.push(heading(`${m.name} · ${d.categoryName ?? ''}`));
-    parts.push(row('Spent', money(m.cents), color));
-    parts.push(row('Share', `${(d.share * 100).toFixed(1)}%`, color));
-    if (compared) parts.push(row('vs previous period', m.previousCents > 0 ? changeText(m.cents, m.previousCents) : 'New', color));
-    parts.push(row('Visits', String(m.count), color));
-    parts.push(row('Average', money(Math.round(m.cents / m.count)), color));
-    return parts.join('');
-  }
-  const t = d.tile;
-  const valueCents = t?.valueCents ?? d.group?.valueCents ?? d.value;
-  const previousCents = t?.previousCents ?? d.group?.previousCents ?? 0;
-  const title = t ? `${t.emoji ? `${t.emoji} ` : ''}${t.name}${t.groupName !== t.name ? ` · ${t.groupName}` : ''}` : d.name;
-  parts.push(heading(title));
-  parts.push(row('Spent', money(valueCents), color));
-  parts.push(row('Share', `${(d.share * 100).toFixed(1)}%`, color));
-  if (compared) parts.push(row('vs previous period', previousCents > 0 ? changeText(valueCents, previousCents) : 'New', color));
-  if (t) {
-    parts.push(row('Transactions', String(t.count), color));
-    parts.push(row('Average', money(t.avgCents), color));
-    for (const m of t.topMerchants.filter((x) => x.cents > 0)) parts.push(row(m.name, money(m.cents), '#c8ced8'));
-  }
-  return parts.join('');
-}
-
-export function spendMapOption(
-  map: SpendMap,
-  tokens: MapTokens,
-  opts: { compare: boolean; animate: boolean; /** Changes when the hidden set changes: the map starts from the top. */ hiddenKey?: string },
-): EChartsOption {
-  const compared = opts.compare && map.compared;
-  const data: TileDatum[] = map.groups.map((g) => {
-    const groupChange = g.previousCents > 0 ? Math.round(((g.valueCents - g.previousCents) / g.previousCents) * 100) : null;
-    return {
-      name: g.name,
-      value: g.valueCents,
-      group: g,
-      share: map.totalCents ? g.valueCents / map.totalCents : 0,
-      itemStyle: { color: tokens.panel, borderColor: tokens.panel },
-      groupChange,
-      children: g.children.map((t) => ({
-        name: t.name,
-        value: t.valueCents,
-        tile: t,
-        share: t.share,
-        itemStyle: { color: tileColor(t, tokens, compared) },
-        children: t.merchants
-          .filter((m) => m.cents > 0)
-          .map((m) => ({
-            name: m.name,
-            value: m.cents,
-            merchant: m,
-            categoryName: t.name,
-            share: map.totalCents ? m.cents / map.totalCents : 0,
-            itemStyle: { color: tileColor({ changePct: m.changePct, color: t.color }, tokens, compared) },
-          })),
-      })),
-    };
-  });
-  return {
-    animation: opts.animate,
-    animationDurationUpdate: opts.animate ? 300 : 0,
-    // Default tooltip card, as on the other charts.
-    tooltip: {
-      formatter: (p: unknown) => tooltipHtml((p as { data: TileDatum }).data, compared),
-    },
-    series: [
-      {
-        type: 'treemap',
-        id: `spending:${opts.hiddenKey ?? ''}`,
-        name: 'All spending',
-        data: data as never,
-        roam: false,
-        // A category (leaf root) still opens on click; a merchant tile has no link, so it does nothing
-        // (zoomToNode would zoom into that one tile).
-        nodeClick: 'link',
-        // Groups and categories show at once; clicking a category opens its merchants.
-        leafDepth: 2,
-        width: '100%',
-        bottom: 34,
-        top: 0,
-        breadcrumb: { show: true, bottom: 0, itemStyle: { color: tokens.panel, borderColor: tokens.muted, textStyle: { color: tokens.text } } },
-        label: {
-          show: true,
-          color: tokens.text,
-          fontSize: 12,
-          // Name, then the amount in bold with room between them. `fitTreemapLabels` then fits
-          // each label to its tile (on its side, or on one line) once the map is laid out.
-          formatter: (p: unknown) => {
-            const d = (p as { data: TileDatum }).data;
-            const emoji = d.tile?.emoji ? `${d.tile.emoji} ` : '';
-            return `{name|${emoji}${d.name}}\n{amount|${money(d.value)}}`;
-          },
-          position: 'inside',
-          align: 'center',
-          verticalAlign: 'middle',
-          rich: {
-            name: { fontSize: 12, lineHeight: 20, color: tokens.text, align: 'center' },
-            amount: { fontSize: 13, lineHeight: 18, fontWeight: 'bold', color: tokens.text, align: 'center' },
-          },
-        },
-        itemStyle: { borderColor: tokens.panel, borderWidth: 2, gapWidth: 2 },
-        levels: [
-          // The root: no frame of its own.
-          { itemStyle: { borderWidth: 0, gapWidth: 6 }, upperLabel: { show: false } },
-          // Groups: a labelled frame around their categories.
-          {
-            itemStyle: { borderColor: tokens.panel, borderWidth: 4, gapWidth: 2 },
-            upperLabel: { show: true, height: 20, color: tokens.muted, fontSize: 11, fontWeight: 'bold', formatter: '{b}' },
-          },
-          // Categories: the colored tiles.
-          { itemStyle: { borderColor: tokens.panel, borderWidth: 1, gapWidth: 1, borderRadius: 4 } },
-          // Merchants, once a category is opened.
-          { itemStyle: { borderColor: tokens.panel, borderWidth: 1, gapWidth: 1, borderRadius: 3 } },
-        ],
-      },
-    ],
-  };
 }
 
 export type LabelPlan = 'full' | 'inline' | 'name' | 'vertical' | 'verticalName' | 'squeezed';
@@ -377,80 +221,4 @@ export function labelPlan(width: number, height: number, name: string, measure: 
   if (height >= w && width >= 44) return 'vertical';
   if (height >= w && width >= 20) return 'verticalName';
   return 'squeezed';
-}
-
-interface ZrText {
-  style: { text?: string };
-  setStyle(s: Record<string, unknown>): void;
-  beforeUpdate?: () => void;
-  disableLabelLayout?: boolean;
-  __sbOriginal?: { text: string; beforeUpdate?: () => void };
-  __sbFit?: () => void;
-  /** Tile size the label was last fitted for. */
-  __sbSize?: string;
-}
-interface ZrRect {
-  shape?: { width?: number; height?: number };
-  getTextContent?(): ZrText | undefined;
-  setTextConfig(c: Record<string, unknown>): void;
-  markRedraw?(): void;
-}
-
-let measureCtx: CanvasRenderingContext2D | null | undefined;
-/** The name line's real width as ECharts draws it (12px sans-serif), with the "▶ " arrow and padding. */
-function measureName(name: string): number {
-  if (measureCtx === undefined) measureCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
-  if (!measureCtx) return nameWidth(name);
-  measureCtx.font = '12px sans-serif';
-  return measureCtx.measureText(`▶ ${name}`).width + 12;
-}
-
-/**
- * After the treemap draws, fit every tile label to its tile per `labelPlan`. ECharts sizes labels
- * to the tile horizontally on each update, so a vertical label also gets an update hook that sizes
- * it along the tile's height. Works on ECharts internals (zrender elements); harmless if absent.
- */
-export function fitTreemapLabels(chart: unknown): void {
-  const c = chart as {
-    getModel?(): { getSeriesByIndex(i: number): unknown } | undefined;
-    getViewOfSeriesModel?(m: unknown): { group: { traverse(fn: (el: ZrRect) => void): void } } | undefined;
-  };
-  const series = c.getModel?.()?.getSeriesByIndex(0);
-  const view = series ? c.getViewOfSeriesModel?.(series) : undefined;
-  if (!view) return;
-  view.group.traverse((el) => {
-    const text = el.getTextContent?.();
-    const w = el.shape?.width;
-    const h = el.shape?.height;
-    if (!text || text.disableLabelLayout || w == null || h == null) return;
-    const size = `${w}x${h}`;
-    const ours = !!text.__sbFit && text.beforeUpdate === text.__sbFit;
-    // Already fitted for this size since ECharts last drew it: nothing to do (and no redraw,
-    // so no loop). A resize (full window) without a redraw refits from the saved original.
-    if (ours && text.__sbSize === size) return;
-    // Otherwise ECharts re-set the text and its update hook: start from what it set.
-    const original = ours && text.__sbOriginal ? text.__sbOriginal : (text.__sbOriginal = { text: text.style.text ?? '', beforeUpdate: text.beforeUpdate });
-    text.__sbSize = size;
-    const nameMatch = /\{name\|([^}]*)\}/.exec(original.text);
-    const amountMatch = /\{amount\|([^}]*)\}/.exec(original.text);
-    if (!nameMatch) return;
-    const prefix = original.text.slice(0, original.text.indexOf('{name|'));
-    const plan = labelPlan(w, h, nameMatch[1], measureName);
-    const nameOnly = `${prefix}{name|${nameMatch[1]}}`;
-    const oneLine = amountMatch ? `${nameOnly}  {amount|${amountMatch[1]}}` : nameOnly;
-    const textFor: Record<LabelPlan, string> = { full: original.text, inline: oneLine, name: nameOnly, vertical: original.text, verticalName: nameOnly, squeezed: original.text };
-    text.setStyle({ text: textFor[plan] });
-    const vertical = plan === 'vertical' || plan === 'verticalName';
-    el.setTextConfig({ rotation: vertical ? Math.PI / 2 : 0 });
-    const base = original.beforeUpdate;
-    text.__sbFit = function fit(this: ZrText) {
-      base?.call(this);
-      if (plan === 'squeezed') return; // ECharts' own box: it truncates what doesn't fit
-      // The label fits: drop the tile-sized box so it centres in the tile; a vertical one runs
-      // along the tile's height.
-      this.setStyle(vertical ? { width: Math.max(h - 8, 0), height: null } : { height: null });
-    };
-    text.beforeUpdate = text.__sbFit;
-    el.markRedraw?.();
-  });
 }

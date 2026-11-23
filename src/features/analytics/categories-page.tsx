@@ -4,10 +4,8 @@ import { SplitPage } from '@/app/shell/page';
 import { Money } from '@/components/money';
 import { ToolbarButton } from '@/components/toolbar-button';
 import { pillColors } from '@/components/category-pill';
-import { Chart } from '@/features/charts/chart';
-import { budgetHistory } from '@/features/charts/budget-history';
+import { BudgetHistoryChart } from '@/features/charts/svg/budget-history-chart';
 import { Ring } from '@/features/charts/mini-charts';
-import { prefersReducedMotion, readChartTokens } from '@/features/charts/tokens';
 import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { BudgetPlan, Category, CategoryGroup, Recurring, Source, Transaction } from '@/lib/types';
@@ -393,8 +391,23 @@ function CategoryDetail({
   const picked = d.month !== thisMonth ? d.month : undefined;
   const groupLine = group ? model.tree.find((g) => g.group.id === group.id) : undefined;
   const sharedGroups = new Set(plan.groups.map((g) => g.groupId));
-  const tokens = readChartTokens();
-  const option = useMemo(() => budgetHistory(d.history, tokens, { reduceMotion: prefersReducedMotion(), picked }), [d.history, tokens, picked]);
+  // Hovering a month on the history shows it in the header (without picking it).
+  const [hovered, setHovered] = useState<number | null>(null);
+  // After scrubbing the header changes at once (no rolling digits back), until the data changes.
+  const [scrubbed, setScrubbed] = useState(false);
+  const [seen, setSeen] = useState(d);
+  if (seen !== d) {
+    setSeen(d);
+    setScrubbed(false);
+  }
+  const onHover = (i: number | null) => {
+    setHovered(i);
+    if (i != null) setScrubbed(true);
+  };
+  const hoveredMonth = hovered != null ? d.history[hovered] : undefined;
+  const headerMonth = hoveredMonth?.month ?? picked;
+  const headerSpent = hoveredMonth ? hoveredMonth.spentCents : d.spentCents;
+  const headerLeft = hoveredMonth ? (hoveredMonth.budgetCents != null ? hoveredMonth.budgetCents - hoveredMonth.spentCents : null) : d.leftCents;
   const shown = d.members.slice(0, 4);
   return (
     <article className="flex flex-col gap-7 px-8 py-8">
@@ -420,12 +433,13 @@ function CategoryDetail({
             )}
           </div>
         </div>
-        <div className="shrink-0 text-right">
-          <div className="text-[12px] font-semibold">Spent in {picked ? `${FULL_MONTHS[Number(picked.slice(5, 7)) - 1]} ${picked.slice(0, 4)}` : monthName}</div>
-          <div className="text-[20px] font-semibold"><Money cents={d.spentCents} /></div>
-          {d.leftCents != null && (
-            <div className="text-[12px]" style={{ color: d.leftCents < 0 ? 'var(--warn)' : 'var(--muted)' }}>
-              <Money cents={Math.abs(d.leftCents)} decimals={false} tone={d.leftCents < 0 ? 'neg' : 'muted'} /> {d.leftCents < 0 ? 'over' : 'left'}
+        {/* Wide enough for "Spent in September 2026", so hovering months doesn't push the pills around. */}
+        <div className="w-[170px] shrink-0 text-right">
+          <div className="text-[12px] font-semibold">Spent in {headerMonth ? `${FULL_MONTHS[Number(headerMonth.slice(5, 7)) - 1]} ${headerMonth.slice(0, 4)}` : monthName}</div>
+          <div className="text-[20px] font-semibold"><Money cents={headerSpent} still={scrubbed} /></div>
+          {headerLeft != null && (
+            <div className="text-[12px]" style={{ color: headerLeft < 0 ? 'var(--warn)' : 'var(--muted)' }}>
+              <Money cents={Math.abs(headerLeft)} decimals={false} tone={headerLeft < 0 ? 'neg' : 'muted'} still={scrubbed} /> {headerLeft < 0 ? 'over' : 'left'}
             </div>
           )}
           {rolloversOn && d.rolloverCents !== 0 && (
@@ -455,16 +469,13 @@ function CategoryDetail({
         />
       )}
 
-      <div role="img" aria-label="Budget history" className="-mx-8">
-        <Chart
-          option={option}
-          height={110}
-          onClick={(p) => {
-            const month = d.history[p.dataIndex]?.month;
-            if (month) onPickMonth(month === thisMonth || month === picked ? null : month);
-          }}
-        />
-      </div>
+      <BudgetHistoryChart
+        months={d.history}
+        picked={picked}
+        height={120}
+        onHover={onHover}
+        onPick={(month) => onPickMonth(month === thisMonth || month === picked ? null : month)}
+      />
       {picked && (
         <button type="button" onClick={() => onPickMonth(null)} className="-mt-5 self-start text-[12px] font-semibold" style={{ color: 'var(--accent)' }}>
           Back to this month

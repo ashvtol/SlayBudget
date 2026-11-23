@@ -27,3 +27,6 @@ slaybudget-backup-*.db
 # local release rehearsal records (npm run release:rehearse / release:approve)
 .release-rehearsal.json
 .release-approved.json
+
+# Screen recordings shared for reference (never committed)
+*.mov

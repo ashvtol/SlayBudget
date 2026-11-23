@@ -2,14 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CategoryIcon } from '@/components/category-icon';
 import { useScreen } from '@/app/shell/screen';
 import { Money } from '@/components/money';
-import { Chart } from '@/features/charts/chart';
-import { prefersReducedMotion, readChartTokens } from '@/features/charts/tokens';
+import { SpendTreemap } from '@/features/charts/svg/treemap';
 import { resolveRange } from '@/lib/analytics';
 import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
 import { useAnalyticsStore } from './analytics-store';
-import { buildSpendMap, fitTreemapLabels, previousWindow, spendMapOption } from './spend-map';
+import { buildSpendMap, previousWindow } from './spend-map';
 import { RangeSelector } from './range-selector';
 
 const HIDDEN_KEY = 'insights.hiddenCategories';
@@ -97,7 +96,6 @@ export function SpendingMap() {
   );
   const other = src?.categories.find((c) => c.isOther);
   const otherSpent = other != null && choices.some((t) => t.categoryId === other.id);
-  const option = useMemo(() => (map ? spendMapOption(map, readChartTokens(), { compare: true, animate: !prefersReducedMotion(), hiddenKey: [...hidden].sort().join(',') }) : null), [map, hidden]);
   const firstDay = window.from ?? src?.transactions.reduce<string | null>((min, t) => (min == null || t.postedOn < min ? t.postedOn : min), null);
   const period = firstDay ? `${shortDay(firstDay)} – ${shortDay(window.to ?? today)}` : '';
 
@@ -159,10 +157,11 @@ export function SpendingMap() {
         </p>
       )}
       {map && map.totalCents === 0 && <p className="m-0 text-[13px]" style={{ color: 'var(--muted)' }}>No spending in this period.</p>}
-      {map && option && map.totalCents > 0 && (
+      {map && map.totalCents > 0 && (
         <>
           <div className={expanded ? 'min-h-0 flex-1' : ''}>
-            <Chart option={option} height={expanded ? '100%' : 340} merge resetKey={[...hidden].sort().join(',')} onRendered={fitTreemapLabels} ariaLabel="Spending map: tiles sized by spending, colored by change against the previous period" />
+            {/* Hiding categories starts the map from the top again. */}
+            <SpendTreemap key={[...hidden].sort().join(',')} map={map} compared={map.compared} height={expanded ? Math.max(300, globalThis.innerHeight - 190) : 340} />
           </div>
           <div className="mt-2 flex gap-4 text-[11px]" style={{ color: 'var(--muted)' }}>
             {map.compared ? (

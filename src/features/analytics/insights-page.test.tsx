@@ -1,4 +1,3 @@
-import '@/test/echarts-mock';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
@@ -36,7 +35,7 @@ describe('Insights spending map', () => {
   it('shows the total and each category for the range', async () => {
     const card = await setup();
     await waitFor(() => expect(card).toHaveTextContent('$100.00'));
-    expect(within(card).getByRole('img', { name: /Spending map/ })).toBeInTheDocument();
+    expect(within(card).getByRole('group', { name: /Spending map/ })).toBeInTheDocument();
     const table = within(card).getByRole('table', { name: 'Spending by category' });
     expect(within(table).getAllByRole('row').map((r) => r.textContent)).toEqual([
       expect.stringContaining('Category'),
@@ -137,7 +136,7 @@ describe('Insights spending map: saved hidden categories', () => {
     expect(within(card).queryByRole('img', { name: /Spending map/ })).not.toBeInTheDocument();
     release();
     await waitFor(() => expect(card).toHaveTextContent('hidden: Restaurants'));
-    expect(within(card).getByRole('img', { name: /Spending map/ })).toBeInTheDocument();
+    expect(within(card).getByRole('group', { name: /Spending map/ })).toBeInTheDocument();
   });
 });
 

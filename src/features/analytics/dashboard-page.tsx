@@ -1,12 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { CategoryIcon } from '@/components/category-icon';
 import { Page } from '@/app/shell/page';
 import { Card } from '@/components/card';
 import { Money } from '@/components/money';
 import { DeltaBadge, percentChange } from '@/components/delta-badge';
-import { Chart } from '@/features/charts/chart';
-import { spendingPace } from '@/features/charts/period-charts';
-import { prefersReducedMotion, readChartTokens } from '@/features/charts/tokens';
+import { PaceLine } from '@/features/charts/svg/pace-line';
+import { useAnalyticsStore } from './analytics-store';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { cleanMerchant } from '@/lib/merchant';
 import { useTransactionsStore } from '@/features/transactions/transactions-store';
@@ -40,11 +39,7 @@ export function DashboardPage() {
 }
 
 function MonthlySpending({ month, onLink }: { month: DashboardModel['month']; onLink: () => void }) {
-  const tokens = readChartTokens();
-  const option = useMemo(
-    () => spendingPace(month.daily, month.daysInMonth, month.freeBudgetCents, tokens, { reduceMotion: prefersReducedMotion() }),
-    [month, tokens],
-  );
+  const today = useAnalyticsStore((s) => s.today);
   const over = month.freeLeftCents < 0;
   const budgeted = month.budgetCents > 0;
   return (
@@ -75,8 +70,8 @@ function MonthlySpending({ month, onLink }: { month: DashboardModel['month']; on
           </>
         )}
       </div>
-      <div aria-label="Spending this month against budget" role="img">
-        <Chart option={option} height={110} />
+      <div className="mt-2">
+        <PaceLine daily={month.daily} daysInMonth={month.daysInMonth} budgetCents={month.freeBudgetCents} month={today.slice(0, 7)} height={170} />
       </div>
     </Card>
   );

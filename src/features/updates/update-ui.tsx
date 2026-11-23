@@ -1,6 +1,7 @@
 import { Fragment, useEffect, type ReactNode } from 'react';
 import type { ChangelogSection } from '@/lib/changelog';
 import { useUpdateStore } from './update-store';
+import { Button } from '@/components/button';
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const longDate = (iso: string | null) => (iso ? `${MONTHS[Number(iso.slice(5, 7)) - 1]} ${Number(iso.slice(8, 10))}, ${iso.slice(0, 4)}` : '');
@@ -99,12 +100,12 @@ export function UpdateDialog() {
             </div>
           )}
           {error && !installing && <span className="mr-auto text-[12px]" style={{ color: 'var(--neg)' }}>{error}</span>}
-          <button type="button" disabled={installing} onClick={() => void later()} className="h-[30px] rounded-md border px-3 text-[12px] font-semibold disabled:opacity-50" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)', background: 'var(--bg)' }}>
+          <Button disabled={installing} onClick={() => void later()}>
             Later
-          </button>
-          <button type="button" autoFocus disabled={installing} onClick={() => void install()} className="h-[30px] rounded-md px-3 text-[12px] font-semibold disabled:opacity-60" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+          </Button>
+          <Button variant="primary" autoFocus disabled={installing} onClick={() => void install()}>
             {installing ? 'Installing…' : 'Install and restart'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

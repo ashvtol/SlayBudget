@@ -4,6 +4,7 @@ import { cleanMerchant } from '@/lib/merchant';
 import type { Category, OtherGroup } from '@/lib/types';
 import { Money } from '@/components/money';
 import { RecategorizeOffer } from '@/features/transactions/recategorize-offer';
+import { Select } from '@/components/select';
 
 interface Row {
   key: string;
@@ -129,18 +130,12 @@ export function CleanUpOther({
                   Review each
                 </button>
               ) : (
-                <select
-                  aria-label={`Category for ${r.name}`}
-                  value=""
-                  onChange={(e) => e.target.value && setOffer({ row: r, categoryId: Number(e.target.value) })}
-                  className="w-44 rounded-md border px-1.5 py-1 text-[12px]"
-                  style={{ borderColor: 'var(--line)', color: 'var(--text)', background: 'var(--panel)' }}
-                >
+                <Select className="w-44" aria-label={`Category for ${r.name}`} value="" onChange={(e) => e.target.value && setOffer({ row: r, categoryId: Number(e.target.value) })}>
                   <option value="">Choose category</option>
                   {choices.map((c) => (
                     <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
                   ))}
-                </select>
+                </Select>
               )}
             </span>
           </div>

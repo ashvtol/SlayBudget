@@ -253,8 +253,8 @@ pub fn apply_rebalance(
     Ok(())
 }
 
-/// Each category's effective budget in `month`, leaving out categories whose group has a shared
-/// budget (that budget is counted once for the group instead).
+/// Each category's effective budget in `month`, in the display currency, leaving out categories whose group has a
+/// shared budget (that budget is counted once for the group instead).
 pub fn effective_budgets(conn: &Connection, month: &str) -> Result<Vec<(CategoryId, i64)>> {
     let mut stmt = conn.prepare(
         "SELECT c.id, COALESCE(m.amount_cents, c.budget_cents)
@@ -263,6 +263,58 @@ pub fn effective_budgets(conn: &Connection, month: &str) -> Result<Vec<(Category
          LEFT JOIN category_budget_months m ON m.category_id = c.id AND m.month = ?1
          WHERE g.budget_cents IS NULL AND COALESCE(m.amount_cents, c.budget_cents) IS NOT NULL",
     )?;
-    let rows = stmt.query_map([month], |r| Ok((r.get(0)?, r.get(1)?)))?;
-    Ok(rows.collect::<std::result::Result<_, _>>()?)
+    let shown = crate::fx::Shown::of(conn);
+    let rows = stmt.query_map([month], |r| {
+        Ok((r.get::<_, CategoryId>(0)?, r.get::<_, i64>(1)?))
+    })?;
+    let rows: Vec<(CategoryId, i64)> = rows.collect::<std::result::Result<_, _>>()?;
+    Ok(rows
+        .into_iter()
+        .map(|(id, cents)| (id, shown.budget(cents)))
+        .collect())
+}
+
+/// Before you set a budget while showing another currency than budgets are kept in: move every budget to the display
+/// currency (at the latest rate), so what you type is stored exactly.
+pub fn adopt_display_currency(conn: &Connection) -> Result<()> {
+    let shown = crate::fx::Shown::of(conn);
+    let to = shown.display.currency.clone();
+    if shown.budget_currency == to {
+        return Ok(());
+    }
+    crate::db::atomically(conn, |c| {
+        let convert = |cents: i64| shown.budget(cents);
+        for (table, column) in [
+            ("categories", "budget_cents"),
+            ("category_groups", "budget_cents"),
+            ("category_budget_months", "amount_cents"),
+        ] {
+            let rows: Vec<(i64, i64)> = {
+                let mut stmt = c.prepare(&format!(
+                    "SELECT rowid, {column} FROM {table} WHERE {column} IS NOT NULL"
+                ))?;
+                let found = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+                found.collect::<std::result::Result<_, _>>()?
+            };
+            for (rowid, cents) in rows {
+                c.execute(
+                    &format!("UPDATE {table} SET {column} = ?1 WHERE rowid = ?2"),
+                    params![convert(cents), rowid],
+                )?;
+            }
+        }
+        crate::settings::set(c, "budget_currency", &to)?;
+        Ok(())
+    })
+}
+
+/// Set a budget typed in the display currency.
+pub fn set_budget_shown(
+    conn: &Connection,
+    category_id: CategoryId,
+    month: Option<&str>,
+    amount_cents: Option<i64>,
+) -> Result<()> {
+    adopt_display_currency(conn)?;
+    set_budget(conn, category_id, month, amount_cents)
 }

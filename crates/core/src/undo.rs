@@ -15,7 +15,7 @@ pub const DEPTH: usize = 15;
 
 /// Tables that hold your edits. Left out: the search index (its triggers follow the transactions table on apply),
 /// settings, notifications and exchange rates.
-const TRACKED: [&str; 15] = [
+const TRACKED: [&str; 18] = [
     "profiles",
     "sources",
     "category_groups",
@@ -31,6 +31,9 @@ const TRACKED: [&str; 15] = [
     "recurring_dismissals",
     "duplicate_flags",
     "account_clues",
+    "price_checks",
+    "recurring_prices",
+    "recurring_apart",
 ];
 
 struct Step {

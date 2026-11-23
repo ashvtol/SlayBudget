@@ -163,11 +163,18 @@ export function sampleSeed(today: Date = new Date()): MemoryIpcSeed {
     }
   }
 
+  // Equinox moved to a pricier membership this month, so Recurrings asks "Is this Equinox at a new price?".
+  const lastEquinox = txs.filter((t) => t.merchant === 'Equinox').at(-1);
+  if (lastEquinox) lastEquinox.amountCents = -8900;
+
   // Two slips from overlapping statements, flagged as possible duplicates: the PDF's wording, and a tip added later.
   const tag = { id: 1, name: DUPLICATE_TAG_NAME, color: DUPLICATE_TAG_COLOR };
   const duplicateFlags: NonNullable<MemoryIpcSeed['duplicateFlags']> = [];
   const short = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  const recentCharges = txs.filter((t) => t.sourceId === 1 && t.amountCents < -1500 && t.postedOn < iso(reviewCutoff)).slice(-2);
+  const bill = new Set(MONTHLY.map((m) => m[0]));
+  const recentCharges = txs
+    .filter((t) => t.sourceId === 1 && t.amountCents < -1500 && t.postedOn < iso(reviewCutoff) && !bill.has(t.merchant))
+    .slice(-2);
   recentCharges.forEach((orig, i) => {
     const copy: Transaction = {
       ...orig,

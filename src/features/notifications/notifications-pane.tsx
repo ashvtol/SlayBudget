@@ -6,6 +6,7 @@ import { DEFAULT_CONFIG, loadConfig, saveConfig, validateConfig, type Notificati
 import { useNotificationsStore } from './notifications-store';
 import { isAutostartEnabled, setAutostart } from './notify';
 import { Switch } from '@/components/switch';
+import { Select } from '@/components/select';
 
 /** Settings are saved at once; the re-baseline that follows waits this long after the last change. */
 const RECHECK_AFTER_MS = 600;
@@ -176,7 +177,7 @@ export function NotificationsPane() {
       <KindRow kind="billMissed" title="Bill looks missed" hint="A bill's due date passed with no charge." config={config} error={errorFor('missedGraceDays')} onSwitch={onSwitch}>
         <span className="inline-flex items-center gap-1.5">After <NumberField label="Grace days" value={config.missedGraceDays} onCommit={(v) => void update({ missedGraceDays: v })} suffix="days" /></span>
       </KindRow>
-      <KindRow kind="priceUp" title="Price went up" hint="A bill with a steady price charged more." config={config} error={errorFor('priceUpPercent', 'priceUpMinCents')} onSwitch={onSwitch}>
+      <KindRow kind="priceUp" title="Price changes" hint="A bill may have a new price, went up from a steady price, or went down." config={config} error={errorFor('priceUpPercent', 'priceUpMinCents')} onSwitch={onSwitch}>
         <span className="inline-flex items-center gap-1.5">At least <NumberField label="Percent" value={config.priceUpPercent} onCommit={(v) => void update({ priceUpPercent: v })} suffix="%" /></span>
         <span className="inline-flex items-center gap-1.5">and <MoneyField label="Minimum increase" cents={config.priceUpMinCents} onCommit={(v) => void update({ priceUpMinCents: v })} /></span>
       </KindRow>
@@ -194,11 +195,11 @@ export function NotificationsPane() {
       <KindRow kind="reviewDigest" title="Weekly review" hint="Transactions waiting for your review." config={config} error={errorFor('digestWeekday', 'digestMin')} onSwitch={onSwitch}>
         <label className="inline-flex items-center gap-1.5">
           On
-          <select aria-label="Day" value={config.digestWeekday} onChange={(e) => void update({ digestWeekday: Number(e.target.value) })} className={field} style={fieldStyle}>
+          <Select aria-label="Day" value={config.digestWeekday} onChange={(e) => void update({ digestWeekday: Number(e.target.value) })}>
             {WEEKDAYS.map((d, i) => (
               <option key={d} value={i}>{d}</option>
             ))}
-          </select>
+          </Select>
         </label>
         <span className="inline-flex items-center gap-1.5">when at least <NumberField label="Minimum to review" value={config.digestMin} onCommit={(v) => void update({ digestMin: v })} suffix="wait" /></span>
       </KindRow>

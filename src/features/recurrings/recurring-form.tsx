@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { cleanMerchant } from '@/lib/merchant';
 import type { Cadence, Category, NewRecurring, Transaction } from '@/lib/types';
+import { Select } from '@/components/select';
 
 const FREQUENCIES: [Cadence, string][] = [
   ['weekly', 'Weekly'],
@@ -116,23 +117,23 @@ export function RecurringForm({
           <input aria-label="Maximum amount" value={max} onChange={(e) => setMax(e.target.value)} className={fieldClass} style={fieldStyle} />
         </Field>
         <Field label="Frequency">
-          <select aria-label="Frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as Cadence)} className={fieldClass} style={fieldStyle}>
+          <Select className="w-full" selectClassName="h-[34px]" aria-label="Frequency" value={frequency} onChange={(e) => setFrequency(e.target.value as Cadence)}>
             {FREQUENCIES.map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
-          </select>
+          </Select>
         </Field>
         <Field label="Day of month (blank = any)">
           <input aria-label="Day of month" value={day} onChange={(e) => setDay(e.target.value)} className={fieldClass} style={fieldStyle} />
         </Field>
       </div>
       <Field label="Category">
-        <select aria-label="Category" value={categoryId ?? ''} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)} className={fieldClass} style={fieldStyle}>
+        <Select className="w-full" selectClassName="h-[34px]" aria-label="Category" value={categoryId ?? ''} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}>
           <option value="">From its transactions</option>
           {sortedCategories.map((c) => (
             <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
           ))}
-        </select>
+        </Select>
       </Field>
       {preview && matches != null && (
         <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>

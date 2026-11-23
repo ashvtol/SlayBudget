@@ -7,8 +7,10 @@ import { DUPLICATE_TAG_COLOR } from '@/lib/duplicates-memory';
 import { openTarget } from '@/features/notifications/route';
 import type { AccountChoice, ImportReport, Source, Tag } from '@/lib/types';
 import { WhichAccount } from './which-account';
+import { FolderGuide } from './folder-guide';
 import { useBackgroundImports } from './background-imports';
 import { importOne, runImports, summarize, type FileResult, type ImportDeps } from './run-imports';
+import { Button } from '@/components/button';
 
 /** "Amex Gold · 17 added · 298 already imported · 3 to check" */
 function fileLine(r: FileResult): string {
@@ -39,14 +41,9 @@ function PossibleDuplicates({ results }: { results: FileResult[] }) {
           <span className="h-2 w-2 rounded-full" style={{ background: DUPLICATE_TAG_COLOR }} />
           {title}
         </h3>
-        <button
-          type="button"
-          onClick={() => void openTarget({ kind: 'transactions', filter: 'duplicates' })}
-          className="h-[26px] rounded-md border px-2.5 text-[12px] font-semibold"
-          style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}
-        >
+        <Button variant="plain" onClick={() => void openTarget({ kind: 'transactions', filter: 'duplicates' })}>
           Review in Transactions
-        </button>
+        </Button>
       </div>
       <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
         They are tagged Possible duplicate and marked to review. Nothing was removed; check them whenever you like.
@@ -172,6 +169,7 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
         </div>
       )}
 
+      <FolderGuide />
       {found.length > 0 && (
         <section aria-label="Found in your folders" className="flex flex-col gap-3 rounded-2xl border p-5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           <h2 className="m-0 text-base font-semibold">

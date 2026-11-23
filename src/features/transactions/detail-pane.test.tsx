@@ -263,3 +263,16 @@ describe('DetailPane possible duplicate', () => {
     expect(screen.queryByRole('region', { name: 'Possible duplicate' })).not.toBeInTheDocument();
   });
 });
+
+describe('DetailPane in another display currency', () => {
+  it('shows the amount converted, and what it originally was', async () => {
+    const ipc = createMemoryIpc({ sources, transactions: [tx({ id: 1, postedOn: '2026-10-14', description: 'WHOLE FOODS', merchant: 'whole foods', amountCents: -6418 })] });
+    await ipc.setSetting('display_currency', 'INR');
+    setIpc(ipc);
+    useTransactionsStore.setState({ transactions: [], categoriesById: {}, sourcesById: {}, selected: new Set(), cursor: 0, offer: null, notice: null });
+    await useTransactionsStore.getState().load(null);
+    render(<DetailPane id={1} onPickCategory={() => {}} />);
+    expect(screen.getByTestId('detail-amount')).toHaveTextContent('₹');
+    expect(screen.getByTestId('detail-original')).toHaveTextContent('Originally $64.18');
+  });
+});

@@ -31,6 +31,7 @@ const MIGRATIONS: &[(i64, &str)] = &[
         include_str!("../../migrations/0012_duplicate_flags.sql"),
     ),
     (13, include_str!("../../migrations/0013_account_clues.sql")),
+    (14, include_str!("../../migrations/0014_price_changes.sql")),
 ];
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
@@ -41,6 +42,7 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open(path)?;
     configure(&conn)?;
     migrate(&conn)?;
+    crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
     crate::profiles::backfill_institutions(&conn)?;
@@ -54,6 +56,7 @@ pub fn open_in_memory() -> Result<Connection> {
     let conn = Connection::open_in_memory()?;
     configure(&conn)?;
     migrate(&conn)?;
+    crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
     Ok(conn)
@@ -80,6 +83,7 @@ fn configure(conn: &Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;
+    crate::fx::register(conn)?;
     Ok(())
 }
 

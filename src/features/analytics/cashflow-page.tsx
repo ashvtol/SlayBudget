@@ -15,6 +15,7 @@ import { useProfileStore } from '@/lib/stores/profile-store';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
 import { useAnalyticsStore } from './analytics-store';
 import { buildCashflow, type Cashflow, type CashflowPeriod, type Comparison } from './cashflow-model';
+import { Select as PopUp } from '@/components/select';
 
 const PERIODS: { id: CashflowPeriod; label: string }[] = [
   { id: 'ytd', label: 'Year to date' },
@@ -56,19 +57,13 @@ function useCashflowSource() {
 
 function Select<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: { id: T; label: string }[]; onChange: (v: T) => void }) {
   return (
-    <select
-      aria-label={label}
-      value={value}
-      onChange={(e) => onChange(e.target.value as T)}
-      className="h-[28px] rounded-md border px-2 text-[12px] font-semibold outline-none"
-      style={{ borderColor: 'var(--line-strong)', background: 'var(--panel)', color: 'var(--text)' }}
-    >
+    <PopUp aria-label={label} value={value} onChange={(e) => onChange(e.target.value as T)}>
       {options.map((o) => (
         <option key={o.id} value={o.id}>
           {o.label}
         </option>
       ))}
-    </select>
+    </PopUp>
   );
 }
 

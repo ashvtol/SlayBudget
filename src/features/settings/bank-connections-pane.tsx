@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ipc } from '@/lib/ipc';
+import { Select } from '@/components/select';
+import { Button } from '@/components/button';
 
 const KEY_PLAID_CLIENT = 'plaid_client_id';
 const KEY_PLAID_ENV = 'plaid_env';
@@ -52,27 +54,15 @@ export function BankConnectionsPane() {
 
           <label className="flex flex-col gap-1">
             <span className="text-xs font-medium">Environment</span>
-            <select
-              value={env}
-              onChange={(e) => { setEnv(e.target.value); void ipc().setSetting(KEY_PLAID_ENV, e.target.value); }}
-              aria-label="Plaid environment"
-              className="w-40 rounded-lg border bg-transparent px-2.5 py-2 text-sm"
-              style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
-            >
+            <Select className="w-40" value={env} onChange={(e) => { setEnv(e.target.value); void ipc().setSetting(KEY_PLAID_ENV, e.target.value); }} aria-label="Plaid environment">
               <option value="sandbox">Sandbox</option>
               <option value="production">Production</option>
-            </select>
+            </Select>
           </label>
 
-          <button
-            type="button"
-            disabled
-            title="Needs the one-time Plaid setup below"
-            className="min-h-9 w-fit rounded-lg px-3 text-sm font-medium"
-            style={{ background: 'var(--line)', color: 'var(--muted)' }}
-          >
+          <Button disabled title="Needs the one-time Plaid setup below" className="w-fit">
             Connect a bank
-          </button>
+          </Button>
 
           <p className="m-0 text-xs" style={{ color: 'var(--muted)' }}>
             {configured

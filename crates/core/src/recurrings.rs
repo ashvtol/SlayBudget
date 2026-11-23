@@ -151,17 +151,20 @@ pub fn get(conn: &Connection, id: i64) -> Result<SavedRecurring> {
 }
 
 /// A charge the rules can look at.
-struct Candidate {
-    id: TransactionId,
-    merchant: String,
-    description: String,
-    amount_cents: i64,
-    posted_on: NaiveDate,
-    recurring_id: Option<i64>,
+pub(crate) struct Candidate {
+    pub(crate) id: TransactionId,
+    pub(crate) merchant: String,
+    pub(crate) description: String,
+    pub(crate) amount_cents: i64,
+    pub(crate) posted_on: NaiveDate,
+    pub(crate) recurring_id: Option<i64>,
 }
 
 /// Regular top-level charges not opted out, optionally limited to some ids.
-fn candidates(conn: &Connection, only: Option<&[TransactionId]>) -> Result<Vec<Candidate>> {
+pub(crate) fn candidates(
+    conn: &Connection,
+    only: Option<&[TransactionId]>,
+) -> Result<Vec<Candidate>> {
     let mut sql = "SELECT id, merchant, description, amount_cents, posted_on, recurring_id FROM transactions
          WHERE parent_id IS NULL AND type = 'regular' AND amount_cents < 0 AND recurring_optout = 0"
         .to_string();
@@ -190,6 +193,16 @@ fn candidates(conn: &Connection, only: Option<&[TransactionId]>) -> Result<Vec<C
         })
     })?;
     Ok(rows.collect::<std::result::Result<_, _>>()?)
+}
+
+/// A charge whose name fits a bill's rule (merchant, or "contains"), whatever its amount and day.
+pub(crate) fn name_fits(s: &SavedRecurring, c: &Candidate) -> bool {
+    match s.match_kind {
+        MatchKind::Merchant => c.merchant.trim().to_lowercase() == s.pattern.trim().to_lowercase(),
+        MatchKind::Contains => {
+            normalize_description(&c.description).contains(&normalize_description(&s.pattern))
+        }
+    }
 }
 
 fn fits(r: &NewRecurring, c: &Candidate) -> bool {
@@ -276,9 +289,12 @@ pub fn preview_count(conn: &Connection, r: &NewRecurring) -> Result<i64> {
         .count() as i64)
 }
 
-/// Re-apply a recurring's rules to past charges: unlink what no longer fits, link unclaimed fits.
+/// Re-apply a recurring's rules to past charges: unlink what no longer fits, link unclaimed fits. Charges from before
+/// the bill's last price change keep their link while the name still fits (they were the old price).
 pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
-    let rule = rule_of(&get(conn, id)?);
+    let saved = get(conn, id)?;
+    let rule = rule_of(&saved);
+    let changed = last_price_change(conn, id)?;
     let all = candidates(conn, None)?;
     let before: BTreeSet<TransactionId> = all
         .iter()
@@ -287,7 +303,15 @@ pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
         .collect();
     let after: BTreeSet<TransactionId> = all
         .iter()
-        .filter(|c| (c.recurring_id.is_none() || c.recurring_id == Some(id)) && fits(&rule, c))
+        .filter(|c| {
+            let old_price = c.recurring_id == Some(id)
+                && changed
+                    .as_ref()
+                    .is_some_and(|d| c.posted_on.to_string() < *d)
+                && name_fits(&saved, c);
+            old_price
+                || ((c.recurring_id.is_none() || c.recurring_id == Some(id)) && fits(&rule, c))
+        })
         .map(|c| c.id)
         .collect();
     crate::db::atomically(conn, |tx| {
@@ -422,7 +446,22 @@ fn title_case(key: &str) -> String {
         .join(" ")
 }
 
-fn day_for(cadence: Cadence, date: NaiveDate) -> Option<u32> {
+/// The amount range a bill at this price claims: about ±35%, at least $5 either way.
+pub(crate) fn band_around(cents: i64) -> (i64, i64) {
+    let band = (cents / 100 * 35).max(500);
+    ((cents - band).max(0), cents + band)
+}
+
+/// When the bill's price last changed ("YYYY-MM-DD"), if it ever did.
+pub(crate) fn last_price_change(conn: &Connection, id: i64) -> Result<Option<String>> {
+    Ok(conn.query_row(
+        "SELECT MAX(changed_on) FROM recurring_prices WHERE recurring_id = ?1",
+        [id],
+        |r| r.get(0),
+    )?)
+}
+
+pub(crate) fn day_for(cadence: Cadence, date: NaiveDate) -> Option<u32> {
     match cadence {
         Cadence::Weekly | Cadence::Biweekly => None,
         _ => Some(date.day()),
@@ -430,14 +469,14 @@ fn day_for(cadence: Cadence, date: NaiveDate) -> Option<u32> {
 }
 
 fn from_detected(r: &Recurring) -> NewRecurring {
-    let band = (r.typical_amount_cents / 100 * 35).max(500);
+    let (min_cents, max_cents) = band_around(r.typical_amount_cents);
     NewRecurring {
         name: title_case(&r.merchant),
         category_id: r.category_id,
         match_kind: MatchKind::Merchant,
         pattern: r.merchant.clone(),
-        min_cents: (r.typical_amount_cents - band).max(0),
-        max_cents: r.typical_amount_cents + band,
+        min_cents,
+        max_cents,
         frequency: r.cadence,
         day_of_month: day_for(r.cadence, r.last_date),
     }
@@ -502,6 +541,7 @@ pub fn after_import(conn: &Connection) -> Result<()> {
         .map(|c| c.id)
         .collect();
     match_new(conn, &ids)?;
+    crate::price_changes::detect(conn)?;
     Ok(())
 }
 
@@ -568,10 +608,17 @@ pub fn views(conn: &Connection, profile_id: Option<ProfileId>) -> Result<Vec<Rec
             .and_then(|(d, _, _)| NaiveDate::parse_from_str(d, "%Y-%m-%d").ok())
             .or_else(|| NaiveDate::parse_from_str(&s.created_on, "%Y-%m-%d").ok())
             .unwrap_or_default();
-        let typical = if charges.is_empty() {
+        // After a price change, the bill costs what it has charged since.
+        let since = last_price_change(conn, s.id)?.unwrap_or_default();
+        let current: Vec<i64> = charges
+            .iter()
+            .filter(|(d, _, _)| *d >= since)
+            .map(|(_, a, _)| -a)
+            .collect();
+        let typical = if current.is_empty() {
             (s.min_cents + s.max_cents) / 2
         } else {
-            median(charges.iter().map(|(_, a, _)| -a).collect())
+            median(current)
         };
         let category_id = s
             .category_id

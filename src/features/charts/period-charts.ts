@@ -2,6 +2,8 @@
 
 import type { EChartsOption } from 'echarts';
 import type { ChartTokens } from './tokens';
+import { localeFor } from '@/lib/format';
+import { displayCurrency } from '@/features/currency/currency-store';
 
 export interface PeriodPoint {
   label: string;
@@ -9,7 +11,7 @@ export interface PeriodPoint {
 }
 
 const money = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100);
+  new Intl.NumberFormat(localeFor(displayCurrency()), { style: 'currency', currency: displayCurrency(), notation: 'compact', maximumFractionDigits: 1 }).format(cents / 100);
 
 /** The small "Now" tag drawn above the current period's bar. */
 export function nowTag(tokens: ChartTokens) {

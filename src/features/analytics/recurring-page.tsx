@@ -7,6 +7,7 @@ import { CategoryPill } from '@/components/category-pill';
 import { Money } from '@/components/money';
 import { IconCheck, IconMore, IconPlus, IconTriangleDown, IconTriangleRight } from '@/components/icons';
 import { ToolbarButton } from '@/components/toolbar-button';
+import { Button } from '@/components/button';
 import { Modal, NewRecurringDialog, RecurringForm } from '@/features/recurrings/recurring-form';
 import { Ring } from '@/features/charts/mini-charts';
 import { TransactionRow } from '@/features/transactions/transaction-row';
@@ -14,7 +15,10 @@ import { cleanMerchant } from '@/lib/merchant';
 import { ipc } from '@/lib/ipc';
 import { withGroupColors } from '@/lib/category-colors';
 import { useProfileStore } from '@/lib/stores/profile-store';
-import type { Category, NewRecurring, Recurring, Source, Transaction } from '@/lib/types';
+import type { BillPriceChange, Category, NewRecurring, PriceChange, PriceCheck, Recurring, Source, Transaction } from '@/lib/types';
+import { PriceCheckBox } from '@/features/recurrings/price-check-box';
+import { formatMoney } from '@/lib/format';
+import { useCurrencyStore } from '@/features/currency/currency-store';
 import { useAnalyticsStore } from './analytics-store';
 import { buildRecurrings, ordinalDay, type RecurringItem } from './recurrings-model';
 
@@ -34,7 +38,19 @@ interface Source_ {
   transactions: Transaction[];
   categoriesById: Record<number, Category>;
   sourcesById: Record<number, Source>;
+  /** Charges that may be a bill at a new price, each bill's latest price change, and bills that look alike. */
+  checks: PriceCheck[];
+  changes: BillPriceChange[];
+  lookAlikes: [number, number][];
 }
+
+/** A price change is highlighted on its bill for this long. */
+const HIGHLIGHT_DAYS = 30;
+const dayNumber = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) / 86_400_000;
+const recentChange = (src: Source_, id: number | undefined, today: string) => {
+  const c = id == null ? undefined : src.changes.find((x) => x.recurringId === id);
+  return c && dayNumber(today) - dayNumber(c.changedOn) <= HIGHLIGHT_DAYS && c.toCents !== c.fromCents ? c : undefined;
+};
 
 function useRecurringSource() {
   const profileId = useProfileStore((s) => s.activeProfileId);
@@ -52,7 +68,10 @@ function useRecurringSource() {
       ipc().listCategories(),
       ipc().listSources(),
       ipc().listCategoryGroups(),
-    ]).then(([recurring, suggestions, transactions, categories, sources, groups]) => {
+      ipc().priceChecks(),
+      ipc().latestPriceChanges(),
+      ipc().lookAlikeRecurrings(),
+    ]).then(([recurring, suggestions, transactions, categories, sources, groups, checks, changes, lookAlikes]) => {
       if (!live) return;
       setSrc({
         recurring,
@@ -61,6 +80,9 @@ function useRecurringSource() {
         transactions,
         categoriesById: Object.fromEntries(withGroupColors(categories, groups).map((c) => [c.id, c])),
         sourcesById: Object.fromEntries(sources.map((s) => [s.id, s])),
+        checks,
+        changes,
+        lookAlikes,
       });
     });
     return () => {
@@ -195,10 +217,18 @@ export function RecurringPage() {
                     <div className="text-[12px]" style={{ color: 'var(--muted)' }}>paid so far</div>
                   </div>
                 </section>
-                <BillList title="This month" items={model.thisMonth} src={src} selected={current} onSelect={setSelected} emptyText="Nothing due this month." />
-                {model.future.length > 0 && <BillList title="In the future" items={model.future} src={src} selected={current} onSelect={setSelected} />}
-                {model.stale.length > 0 && <BillList title="Not seen lately" items={model.stale} src={src} selected={current} onSelect={setSelected} stale thisYear={today.slice(0, 4)} />}
-                {model.paused.length > 0 && <BillList title="Paused" items={model.paused} src={src} selected={current} onSelect={setSelected} />}
+                {src.lookAlikes.length > 0 && (
+                  <LookAlikes
+                    pairs={src.lookAlikes}
+                    names={Object.fromEntries(src.recurring.flatMap((r) => (r.saved ? [[r.saved.id, r.saved.name]] : [])))}
+                    onMerge={(a, b, name) => void act(() => ipc().mergeRecurrings(a, b), `Merged into ${name}.`)}
+                    onKeepApart={(a, b) => void act(() => ipc().keepRecurringsApart(a, b))}
+                  />
+                )}
+                <BillList title="This month" items={model.thisMonth} src={src} today={today} selected={current} onSelect={setSelected} emptyText="Nothing due this month." />
+                {model.future.length > 0 && <BillList title="In the future" items={model.future} src={src} today={today} selected={current} onSelect={setSelected} />}
+                {model.stale.length > 0 && <BillList title="Not seen lately" items={model.stale} src={src} today={today} selected={current} onSelect={setSelected} stale thisYear={today.slice(0, 4)} />}
+                {model.paused.length > 0 && <BillList title="Paused" items={model.paused} src={src} today={today} selected={current} onSelect={setSelected} />}
                 {src.suggestions.length > 0 && (
                   <Suggestions
                     items={src.suggestions}
@@ -212,7 +242,7 @@ export function RecurringPage() {
                       {showArchived ? <IconTriangleDown size={11} style={{ color: 'var(--muted)' }} /> : <IconTriangleRight size={11} style={{ color: 'var(--muted)' }} />}
                       Archived ({model.archived.length})
                     </button>
-                    {showArchived && <BillList title="Archived" items={model.archived} src={src} selected={current} onSelect={setSelected} hideTitle />}
+                    {showArchived && <BillList title="Archived" items={model.archived} src={src} today={today} selected={current} onSelect={setSelected} hideTitle />}
                   </section>
                 )}
               </>
@@ -273,7 +303,7 @@ export function RecurringPage() {
       }
       detailTitle={current ? `${CADENCE_LABEL[current.recurring.cadence]} recurring` : undefined}
       detailActions={actions || undefined}
-      detail={src && current && <BillDetail item={current} src={src} today={today} />}
+      detail={src && current && <BillDetail item={current} src={src} today={today} onChanged={reload} />}
     />
   );
 }
@@ -309,6 +339,44 @@ function Suggestions({ items, onAdd, onDismiss }: { items: Recurring[]; onAdd: (
   );
 }
 
+/** "These look like the same subscription. Merge them?", for bills that share a name (Recurrings page only). */
+function LookAlikes({
+  pairs,
+  names,
+  onMerge,
+  onKeepApart,
+}: {
+  pairs: [number, number][];
+  names: Record<number, string>;
+  onMerge: (a: number, b: number, kept: string) => void;
+  onKeepApart: (a: number, b: number) => void;
+}) {
+  return (
+    <section aria-label="Same subscription?" className="flex flex-col gap-2 rounded-[10px] border px-5 py-4" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+      {pairs.map(([a, b]) => (
+        <div key={`${a}:${b}`} className="flex flex-wrap items-center gap-3 text-[13px]">
+          <span className="min-w-0 flex-1">
+            <b>{names[a]}</b> and <b>{names[b]}</b> look like the same subscription. Merge them?
+          </span>
+          <Button variant="primary" onClick={() => onMerge(a, b, names[a])}>Merge</Button>
+          <Button onClick={() => onKeepApart(a, b)}>Not the same</Button>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+/** "Nov 21, 2026". */
+function longDay(day: string): string {
+  const [y, m, d] = day.split('-').map(Number);
+  return `${MONTHS[m - 1]} ${d}, ${y}`;
+}
+
+/** "Price went up: $22.11 → $100.18". */
+function changeText(c: PriceChange, currency: string): string {
+  return `Price went ${c.toCents > c.fromCents ? 'up' : 'down'}: ${formatMoney(c.fromCents, currency)} → ${formatMoney(c.toCents, currency)}`;
+}
+
 /** "May 22nd" this year, "May 22, 2025" otherwise. */
 function lastSeen(day: string, thisYear: string): string {
   if (day.startsWith(thisYear)) return ordinalDay(day);
@@ -326,10 +394,12 @@ function BillList({
   thisYear = '',
   emptyText,
   hideTitle = false,
+  today,
 }: {
   title: string;
   items: RecurringItem[];
   src: Source_;
+  today: string;
   selected?: RecurringItem;
   onSelect: (key: string) => void;
   stale?: boolean;
@@ -353,6 +423,7 @@ function BillList({
           return (
             <li
               key={i.key}
+              aria-label={i.rules.name}
               onClick={() => onSelect(i.key)}
               className="flex h-[24px] cursor-default items-center gap-3 rounded-md px-1 text-[13px]"
               style={{ background: active ? 'var(--hover)' : 'transparent' }}
@@ -367,6 +438,16 @@ function BillList({
               <CategoryIcon emoji={cat?.emoji} color={cat?.color} className="w-4" />
               <span className="truncate">{i.rules.name}</span>
               <span className="truncate text-[12px]" style={{ color: 'var(--muted)' }}>{CADENCE_LABEL[i.recurring.cadence]}</span>
+              {(() => {
+                const c = recentChange(src, i.recurring.saved?.id, today);
+                if (!c) return null;
+                const up = c.toCents > c.fromCents;
+                return (
+                  <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold" style={{ color: up ? 'var(--warn)' : 'var(--pos)' }}>
+                    {up ? 'Price went up' : 'Price went down'}
+                  </span>
+                );
+              })()}
               <span className="ml-auto shrink-0">{cat && <CategoryPill category={cat} />}</span>
               <Money cents={i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
               <span className="flex w-3 shrink-0 justify-center" style={{ color: 'var(--text)' }}>
@@ -387,8 +468,22 @@ const DOT_STYLE = {
   none: { background: 'transparent', border: '2px solid var(--track)' },
 } as const;
 
-function BillDetail({ item, src, today }: { item: RecurringItem; src: Source_; today: string }) {
+function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src: Source_; today: string; onChanged: () => void }) {
   const r = item.recurring;
+  const billId = r.saved?.id;
+  const currency = useCurrencyStore((s) => s.displayCurrency);
+  const [loaded, setLoaded] = useState<{ id: number; list: PriceChange[] } | null>(null);
+  useEffect(() => {
+    if (billId == null) return;
+    let live = true;
+    void ipc().priceHistory(billId).then((list) => live && setLoaded({ id: billId, list }));
+    return () => {
+      live = false;
+    };
+  }, [billId, src]);
+  const history = loaded && loaded.id === billId ? loaded.list : [];
+  const checks = src.checks.filter((c) => c.recurringId === billId);
+  const recent = recentChange(src, billId, today);
   const cat = r.categoryId != null ? src.categoriesById[r.categoryId] : undefined;
   const lastSource = item.lastSourceId != null ? src.sourcesById[item.lastSourceId] : undefined;
   const lastCharge = item.charges[0];
@@ -405,6 +500,22 @@ function BillDetail({ item, src, today }: { item: RecurringItem; src: Source_; t
           <div className="text-[12px]" style={{ color: 'var(--muted)' }}>around <span className="font-semibold" style={{ color: 'var(--text)' }}>{ordinalDay(r.nextDate)}</span></div>
         </div>
       </header>
+
+      {recent && (
+        <p className="m-0 text-[13px] font-semibold" style={{ color: recent.toCents > recent.fromCents ? 'var(--warn)' : 'var(--pos)' }}>
+          {changeText(recent, currency)}
+        </p>
+      )}
+      {checks.map((c) => (
+        <PriceCheckBox
+          key={c.id}
+          check={c}
+          billName={item.rules.name}
+          categories={src.categories}
+          date={src.transactions.find((t) => t.id === c.txId)?.postedOn}
+          onDone={onChanged}
+        />
+      ))}
 
       <div>
         <div className="label-caps mb-2" style={{ color: 'var(--muted)' }}>Rules</div>
@@ -443,6 +554,20 @@ function BillDetail({ item, src, today }: { item: RecurringItem; src: Source_; t
           ))}
         </tbody>
       </table>
+
+      {history.length > 0 && (
+        <div className="border-t pt-5" style={{ borderColor: 'var(--line)' }}>
+          <div className="mb-2 text-[14px] font-semibold">Price history</div>
+          <ul aria-label="Price history" className="m-0 flex list-none flex-col gap-1 p-0 text-[13px]">
+            {history.map((h) => (
+              <li key={`${h.changedOn}:${h.fromCents}:${h.toCents}`} className="flex items-center justify-between">
+                <span style={{ color: 'var(--muted)' }}>{longDay(h.changedOn)}</span>
+                <span className="font-semibold tabular-nums">{formatMoney(h.fromCents, currency)} → {formatMoney(h.toCents, currency)}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {lastSource && (
         <div className="border-t pt-5" style={{ borderColor: 'var(--line)' }}>

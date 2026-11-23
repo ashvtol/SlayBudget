@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useProfileStore } from '@/lib/stores/profile-store';
+import { Button } from '@/components/button';
 
 /** Manage household members: add, rename, remove. The combined view is implicit. */
 export function ProfilesPane() {
@@ -87,15 +88,9 @@ export function ProfilesPane() {
           className="flex-1 rounded-lg border bg-transparent px-2.5 py-2 text-sm"
           style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
         />
-        <button
-          type="button"
-          onClick={() => void add()}
-          disabled={!newName.trim()}
-          className="min-h-9 rounded-lg px-3 text-sm font-medium"
-          style={{ background: newName.trim() ? 'var(--accent)' : 'var(--line)', color: newName.trim() ? 'var(--on-accent)' : 'var(--muted)' }}
-        >
+        <Button onClick={() => void add()} disabled={!newName.trim()}>
           Add
-        </button>
+        </Button>
       </div>
     </section>
   );

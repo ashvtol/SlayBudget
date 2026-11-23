@@ -4,8 +4,10 @@
  * swap in the in-memory implementation.
  */
 
+import type { BillPriceChange, PriceAnswer, PriceChange, PriceCheck } from './types';
 import type { AccountChoice, AccountClue, AccountPatch, AppNotification, StatementCandidate, MoveReport, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
 import { UNDO_LABELS, createUndoStack, fileName } from './undo-memory';
+import { builtinRates, shownFor, type Shown } from './fx';
 import { DUPLICATE_TAG_NAME, duplicatesBeforeDelete, openFlagFor, settle, stillFlagged } from './duplicates-memory';
 import type {
   BudgetStatus,
@@ -130,6 +132,8 @@ export interface Ipc {
   /** Set or clear an account's default tag; returns how many existing transactions were tagged. */
   setAccountDefaultTag(sourceId: number, tagId: number | null, alsoExisting: boolean): Promise<number>;
   accountClues(sourceId: number): Promise<AccountClue[]>;
+  /** The built-in exchange rates: currencies and the last month they cover. */
+  fxInfo(): Promise<{ currencies: string[]; latestMonth: string }>;
   /** Statement-looking files in the watched folder and (if on) Downloads. */
   statementCandidates(): Promise<StatementCandidate[]>;
   /** A found file's bytes (only files in those places can be read). */
@@ -186,6 +190,21 @@ export interface Ipc {
   /** A prefilled bill for "Make recurring" on a transaction. */
   draftRecurring(transactionId: number): Promise<NewRecurring>;
   dismissSuggestion(merchant: string): Promise<void>;
+  /** Charges that may be a bill at a new price, waiting for an answer (newest first). */
+  priceChecks(): Promise<PriceCheck[]>;
+  priceCheckFor(transactionId: number): Promise<PriceCheck | null>;
+  /** Answer once; "separate" returns the prefilled form for the charge's own bill. */
+  answerPriceCheck(id: number, answer: PriceAnswer): Promise<NewRecurring | null>;
+  /** A bill's price changes, newest first. */
+  priceHistory(recurringId: number): Promise<PriceChange[]>;
+  /** Each bill's latest price change. */
+  latestPriceChanges(): Promise<BillPriceChange[]>;
+  /** Pairs of bills (older first) that look like the same subscription. */
+  lookAlikeRecurrings(): Promise<[number, number][]>;
+  /** Merge two bills into the older one; returns the bill kept. */
+  mergeRecurrings(a: number, b: number): Promise<number>;
+  /** "Not the same subscription": never suggest merging these two. */
+  keepRecurringsApart(a: number, b: number): Promise<void>;
 
   /** Every tag in creation order, with use counts. */
   listTags(): Promise<Tag[]>;
@@ -374,9 +393,33 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   };
 
   /** Rows that count toward totals: the profile's, minus excluded categories (as the core does). */
+  // Display currency (mirrors crates/core/src/fx.rs): what the screens show, converted; data keeps its currency.
+  const baseCurrency = () => settings.get('base_currency') || 'USD';
+  const shown = () =>
+    shownFor(
+      { currency: settings.get('display_currency') || baseCurrency(), basis: settings.get('fx_basis') === 'latest' ? 'latest' : 'month' },
+      settings.get('budget_currency') || baseCurrency(),
+      baseCurrency(),
+    );
+  const show = (t: Transaction, s = shown()): Transaction =>
+    t.currency === s.display.currency
+      ? { ...t }
+      : { ...t, amountCents: s.transaction(t.amountCents, t.currency, t.postedOn), currency: s.display.currency, originalAmountCents: t.amountCents, originalCurrency: t.currency };
+  /** Before a budget is typed in another currency than budgets are kept in: move them all to it (as the app does). */
+  const adoptDisplayCurrency = () => {
+    const s = shown();
+    if (s.budgetCurrency === s.display.currency) return;
+    for (const c of categories) if (c.budgetCents != null) c.budgetCents = s.budget(c.budgetCents);
+    for (const m of plan.months) m.amountCents = s.budget(m.amountCents);
+    for (const g of plan.groups) g.amountCents = s.budget(g.amountCents);
+    settings.set('budget_currency', s.display.currency);
+  };
   const countedRows = (profileId: number | null) => {
     const excluded = new Set(categories.filter((c) => c.excluded).map((c) => c.id));
-    return transactions.filter((t) => (profileId == null || t.profileId === profileId) && t.txType !== 'transfer' && (t.categoryId == null || !excluded.has(t.categoryId)));
+    const s = shown();
+    return transactions
+      .filter((t) => (profileId == null || t.profileId === profileId) && t.txType !== 'transfer' && (t.categoryId == null || !excluded.has(t.categoryId)))
+      .map((t) => show(t, s));
   };
 
   /** Most recent rate on or before `on`; falls back to the inverse pair. */
@@ -445,6 +488,13 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   let seeded = false;
   const optedOut = new Set<number>();
   const dismissed = new Set<string>();
+  // Price changes (mirror `price_changes.rs`).
+  type CheckRow = Omit<PriceCheck, 'direction' | 'answered'> & { answer: PriceAnswer | null };
+  const checks: CheckRow[] = [];
+  const prices: (PriceChange & { id: number; recurringId: number })[] = [];
+  const apart: string[] = [];
+  let nextCheckId = 1;
+  let nextPriceId = 1;
   const addMonths = (day: string, n: number) => {
     const [y, m, d] = day.split('-').map(Number);
     const total = y * 12 + (m - 1) + n;
@@ -500,14 +550,28 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     }
     return best;
   };
+  const nameFits = (s: NewRecurring, t: Transaction) =>
+    s.matchKind === 'merchant'
+      ? t.merchant.trim().toLowerCase() === s.pattern.trim().toLowerCase()
+      : normalizeDescription(t.description).includes(normalizeDescription(s.pattern));
+  const lastPriceChange = (id: number) =>
+    prices.filter((p) => p.recurringId === id).reduce<string | null>((m, p) => (m == null || p.changedOn > m ? p.changedOn : m), null);
+  /** The amount range a bill at this price claims: about ±35%, at least $5 either way. */
+  const bandAround = (cents: number): [number, number] => {
+    const band = Math.max(Math.trunc(cents / 100) * 35, 500);
+    return [Math.max(0, cents - band), cents + band];
+  };
   const rematchRecurring = (id: number): MatchReport => {
     const r = saved.find((x) => x.id === id);
     if (!r) throw new Error('not_found');
+    const changed = lastPriceChange(id);
     let added = 0;
     let removed = 0;
     for (const t of transactions) {
       const was = t.recurringId === id;
-      const fits = isCandidate(t) && (t.recurringId == null || was) && fitsRule(r, t);
+      // Charges from before the last price change keep their link while the name fits (the old price).
+      const oldPrice = was && changed != null && t.postedOn < changed && nameFits(r, t);
+      const fits = oldPrice || (isCandidate(t) && (t.recurringId == null || was) && fitsRule(r, t));
       if (was && !fits) {
         t.recurringId = null;
         removed++;
@@ -530,14 +594,14 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     if (seeded) return;
     seeded = true;
     for (const r of detectRecurring(transactions)) {
-      const band = Math.max(Math.trunc(r.typicalAmountCents / 100) * 35, 500);
+      const [minCents, maxCents] = bandAround(r.typicalAmountCents);
       const id = createSaved({
         name: titleCase(r.merchant),
         categoryId: r.categoryId,
         matchKind: 'merchant',
         pattern: r.merchant,
-        minCents: Math.max(0, r.typicalAmountCents - band),
-        maxCents: r.typicalAmountCents + band,
+        minCents,
+        maxCents,
         frequency: r.cadence,
         dayOfMonth: dayFor(r.cadence, r.lastDate),
       });
@@ -549,6 +613,57 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       }
     }
   };
+  const lastChargeOf = (bill: number) =>
+    transactions
+      .filter((t) => t.recurringId === bill)
+      .sort((a, b) => b.postedOn.localeCompare(a.postedOn) || b.id - a.id)[0];
+  /** Mirrors `price_changes::detect`: an unlinked charge whose name fits a bill, outside its range, not older than its last charge. */
+  const detectPrices = () => {
+    ensureSeeded();
+    const bills = saved.filter((b) => b.status !== 'archived');
+    for (const t of transactions) {
+      if (!isCandidate(t) || t.recurringId != null || checks.some((c) => c.txId === t.id)) continue;
+      const size = -t.amountCents;
+      const bill = bills.find((b) => nameFits(b, t) && (size < b.minCents || size > b.maxCents));
+      if (!bill) continue;
+      const last = lastChargeOf(bill.id);
+      if (t.postedOn < (last?.postedOn ?? bill.createdOn)) continue;
+      const oldCents = last ? -last.amountCents : Math.trunc((bill.minCents + bill.maxCents) / 2);
+      checks.push({ id: nextCheckId++, txId: t.id, recurringId: bill.id, oldCents, newCents: size, answer: null });
+      t.reviewed = false;
+    }
+  };
+  const checkOut = (c: CheckRow): PriceCheck => ({
+    id: c.id, txId: c.txId, recurringId: c.recurringId, oldCents: c.oldCents, newCents: c.newCents,
+    direction: c.newCents >= c.oldCents ? 'up' : 'down', answered: c.answer != null,
+  });
+  const openChecks = () => {
+    detectPrices();
+    return checks
+      .filter((c) => c.answer == null && transactions.find((t) => t.id === c.txId)?.recurringId == null)
+      .sort((a, b) => b.id - a.id);
+  };
+  const historyOf = (bill: number): PriceChange[] =>
+    prices
+      .filter((p) => p.recurringId === bill)
+      .sort((a, b) => b.changedOn.localeCompare(a.changedOn) || b.id - a.id)
+      .map(({ changedOn, fromCents, toCents }) => ({ changedOn, fromCents, toCents }));
+  const draftFor = (transactionId: number): NewRecurring => {
+    const t = transactions.find((x) => x.id === transactionId);
+    if (!t) throw new Error('not_found');
+    const size = Math.abs(t.amountCents);
+    const frequency = detectRecurring(transactions.filter((x) => x.merchant === t.merchant))[0]?.cadence ?? 'monthly';
+    return {
+      name: titleCase(t.merchant),
+      categoryId: t.categoryId,
+      matchKind: 'merchant',
+      pattern: t.merchant,
+      minCents: Math.round(size * 0.8),
+      maxCents: Math.round(size * 1.2),
+      frequency,
+      dayOfMonth: dayFor(frequency, t.postedOn),
+    };
+  };
   const recurringViews = (profileId: number | null): Recurring[] => {
     ensureSeeded();
     return saved
@@ -557,7 +672,9 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         const charges = transactions
           .filter((t) => t.recurringId === s.id && (profileId == null || t.profileId === profileId))
           .sort((a, b) => a.postedOn.localeCompare(b.postedOn));
-        const sizes = charges.map((t) => -t.amountCents).sort((a, b) => a - b);
+        // After a price change, the bill costs what it has charged since.
+        const since = lastPriceChange(s.id) ?? '';
+        const sizes = charges.filter((t) => t.postedOn >= since).map((t) => -t.amountCents).sort((a, b) => a - b);
         const mid = Math.floor(sizes.length / 2);
         const median = sizes.length % 2 ? sizes[mid] : Math.trunc((sizes[mid - 1] + sizes[mid]) / 2);
         const typical = sizes.length ? median : Math.round((s.minCents + s.maxCents) / 2);
@@ -772,6 +889,11 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         isSplitParent: (id) => (children.get(id)?.length ?? 0) > 0,
         duplicateFlags,
         importFileName: (id) => importsLog.find((i) => i.id === id)?.fileName,
+        priceChecks: openChecks().map(checkOut),
+        priceChanges: saved.flatMap((b) => {
+          const latest = historyOf(b.id)[0];
+          return latest ? [{ recurringId: b.id, ...latest }] : [];
+        }),
       });
       for (const n of candidates) {
         if (!config.kinds[n.kind]?.bell) continue;
@@ -887,9 +1009,10 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       return categoryTotals(rows, resolveRange(range, today), children);
     },
     async analyticsBudgets(profileId, today) {
-      const rows = transactions.filter((t) => profileId == null || t.profileId === profileId);
+      const s = shown();
+      const rows = transactions.filter((t) => profileId == null || t.profileId === profileId).map((t) => show(t, s));
       const month = budgetsForMonth(plan, categories, today.slice(0, 7));
-      const meta: CategoryMeta[] = month.categories.map((c) => ({ id: c.id, budgetCents: c.budgetCents ?? null, excluded: c.excluded }));
+      const meta: CategoryMeta[] = month.categories.map((c) => ({ id: c.id, budgetCents: c.budgetCents == null ? null : s.budget(c.budgetCents), excluded: c.excluded }));
       return budgetStatus(rows, meta, today, children);
     },
     async analyticsCashflow(profileId, range, today) {
@@ -939,20 +1062,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       optedOut.add(transactionId);
     },
     async draftRecurring(transactionId) {
-      const t = transactions.find((x) => x.id === transactionId);
-      if (!t) throw new Error('not_found');
-      const size = Math.abs(t.amountCents);
-      const frequency = detectRecurring(transactions.filter((x) => x.merchant === t.merchant))[0]?.cadence ?? 'monthly';
-      return {
-        name: titleCase(t.merchant),
-        categoryId: t.categoryId,
-        matchKind: 'merchant',
-        pattern: t.merchant,
-        minCents: Math.round(size * 0.8),
-        maxCents: Math.round(size * 1.2),
-        frequency,
-        dayOfMonth: dayFor(frequency, t.postedOn),
-      };
+      return draftFor(transactionId);
     },
     async listTags() {
       return tags.map((t) => ({ ...t, count: transactions.filter((x) => x.tagIds?.includes(t.id)).length }));
@@ -1050,6 +1160,98 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     },
     async dismissSuggestion(merchant) {
       dismissed.add(merchant.trim().toLowerCase());
+    },
+    async priceChecks() {
+      return openChecks().map(checkOut);
+    },
+    async priceCheckFor(transactionId) {
+      const c = openChecks().find((x) => x.txId === transactionId);
+      return c ? checkOut(c) : null;
+    },
+    async answerPriceCheck(id, answer) {
+      const c = checks.find((x) => x.id === id);
+      if (!c) throw new Error('not_found');
+      if (c.answer != null) throw new Error('this charge was already answered');
+      c.answer = answer;
+      if (answer === 'separate') return draftFor(c.txId);
+      if (answer === 'one_off') return null;
+      const bill = saved.find((b) => b.id === c.recurringId)!;
+      const t = transactions.find((x) => x.id === c.txId)!;
+      [bill.minCents, bill.maxCents] = bandAround(c.newCents);
+      bill.dayOfMonth = dayFor(bill.frequency, t.postedOn) ?? bill.dayOfMonth;
+      bill.status = 'active';
+      t.recurringId = bill.id;
+      prices.push({ id: nextPriceId++, recurringId: bill.id, changedOn: t.postedOn, fromCents: c.oldCents, toCents: c.newCents });
+      // Other charges waiting on this bill that fit the new price are settled with it.
+      for (const o of checks.filter((x) => x.answer == null && x.recurringId === bill.id)) {
+        const ot = transactions.find((x) => x.id === o.txId);
+        if (ot && ot.recurringId == null && isCandidate(ot) && fitsRule(bill, ot)) {
+          ot.recurringId = bill.id;
+          o.answer = 'new_price';
+        }
+      }
+      return null;
+    },
+    async priceHistory(recurringId) {
+      return historyOf(recurringId);
+    },
+    async latestPriceChanges() {
+      return saved
+        .map((b) => ({ recurringId: b.id, latest: historyOf(b.id)[0] }))
+        .filter((x) => x.latest)
+        .sort((a, b) => a.recurringId - b.recurringId)
+        .map((x) => ({ recurringId: x.recurringId, ...x.latest }));
+    },
+    async lookAlikeRecurrings() {
+      ensureSeeded();
+      const bills = saved
+        .filter((b) => b.status !== 'archived')
+        .sort((a, b) => a.createdOn.localeCompare(b.createdOn) || a.id - b.id);
+      const fitsChargesOf = (rule: SavedRecurring, other: SavedRecurring) =>
+        transactions.some((t) => t.recurringId === other.id && isCandidate(t) && nameFits(rule, t));
+      const out: [number, number][] = [];
+      bills.forEach((a, i) => {
+        for (const b of bills.slice(i + 1)) {
+          if (apart.includes(`${Math.min(a.id, b.id)}:${Math.max(a.id, b.id)}`)) continue;
+          const sameMerchant = a.matchKind === 'merchant' && b.matchKind === 'merchant' && a.pattern === b.pattern;
+          if (sameMerchant || fitsChargesOf(a, b) || fitsChargesOf(b, a)) out.push([a.id, b.id]);
+        }
+      });
+      return out;
+    },
+    async mergeRecurrings(a, b) {
+      if (a === b) throw new Error('pick two different bills');
+      const x = saved.find((s) => s.id === a);
+      const y = saved.find((s) => s.id === b);
+      if (!x || !y) throw new Error('not_found');
+      const xOlder = x.createdOn < y.createdOn || (x.createdOn === y.createdOn && x.id <= y.id);
+      const [keep, other] = xOlder ? [x, y] : [y, x];
+      const keepLast = lastChargeOf(keep.id);
+      const otherLast = lastChargeOf(other.id);
+      const otherNewer = otherLast != null && (keepLast == null || otherLast.postedOn > keepLast.postedOn);
+      if (otherNewer) {
+        const { minCents, maxCents } = keep;
+        [keep.minCents, keep.maxCents, keep.dayOfMonth] = [other.minCents, other.maxCents, other.dayOfMonth];
+        const to = -otherLast.amountCents;
+        if (keepLast && (to < minCents || to > maxCents)) {
+          const changedOn = transactions
+            .filter((t) => t.recurringId === other.id && t.postedOn > keepLast.postedOn)
+            .map((t) => t.postedOn)
+            .sort()[0];
+          prices.push({ id: nextPriceId++, recurringId: keep.id, changedOn, fromCents: -keepLast.amountCents, toCents: to });
+        }
+      }
+      if (other.status === 'active') keep.status = 'active';
+      for (const t of transactions) if (t.recurringId === other.id) t.recurringId = keep.id;
+      for (const c of checks) if (c.recurringId === other.id) c.recurringId = keep.id;
+      for (const p of prices) if (p.recurringId === other.id) p.recurringId = keep.id;
+      for (let i = apart.length - 1; i >= 0; i--) if (apart[i].split(':').map(Number).includes(other.id)) apart.splice(i, 1);
+      saved.splice(saved.indexOf(other), 1);
+      return keep.id;
+    },
+    async keepRecurringsApart(a, b) {
+      const key = `${Math.min(a, b)}:${Math.max(a, b)}`;
+      if (!apart.includes(key)) apart.push(key);
     },
 
     async fxUpsertMany(incoming) {
@@ -1312,6 +1514,10 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       if (patch.accountType !== undefined) account.accountType = patch.accountType;
       if (patch.color !== undefined) account.color = patch.color;
     },
+    async fxInfo() {
+      const r = builtinRates();
+      return { currencies: r.currencies(), latestMonth: r.latestMonth() };
+    },
     async statementCandidates() {
       return (seed.files ?? []).map((f) => ({ path: f.path, name: fileName(f.path), modifiedMs: f.modifiedMs, size: f.text.length, from: f.from }));
     },
@@ -1341,13 +1547,94 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     },
   };
 
+  // Reads in the display currency, typed amounts back to what's stored (mirrors src-tauri/src/commands.rs).
+  const wrap = <K extends keyof Ipc>(name: K, fn: (orig: Ipc[K]) => Ipc[K]) => {
+    ipc[name] = fn(ipc[name].bind(ipc) as Ipc[K]);
+  };
+  const recurringShown = (r: Recurring, s: Shown): Recurring => ({
+    ...r,
+    typicalAmountCents: s.charge(r.typicalAmountCents),
+    saved: r.saved && { ...r.saved, minCents: s.charge(r.saved.minCents), maxCents: s.charge(r.saved.maxCents) },
+  });
+  const ruleBack = (r: NewRecurring): NewRecurring => {
+    const s = shown();
+    return { ...r, minCents: s.chargeBack(r.minCents), maxCents: s.chargeBack(r.maxCents) };
+  };
+  wrap('listTransactions', (f) => async (filter) => (await f(filter)).map((t) => show(t)));
+  wrap('searchTransactions', (f) => async (...a) => (await f(...a)).map((t) => show(t)));
+  wrap('transactionChildren', (f) => async (id) => (await f(id)).map((t) => show(t)));
+  wrap('listCategories', (f) => async () => {
+    const s = shown();
+    return (await f()).map((c) => ({ ...c, budgetCents: c.budgetCents == null ? null : s.budget(c.budgetCents) }));
+  });
+  wrap('getBudgetPlan', (f) => async () => {
+    const s = shown();
+    const p = await f();
+    return { ...p, months: p.months.map((m) => ({ ...m, amountCents: s.budget(m.amountCents) })), groups: p.groups.map((g) => ({ ...g, amountCents: s.budget(g.amountCents) })) };
+  });
+  wrap('listRecurring', (f) => async (p) => (await f(p)).map((r) => recurringShown(r, shown())));
+  wrap('analyticsRecurring', (f) => async (p, t) => (await f(p, t)).map((r) => recurringShown(r, shown())));
+  wrap('recurringSuggestions', (f) => async (p) => (await f(p)).map((r) => recurringShown(r, shown())));
+  wrap('draftRecurring', (f) => async (id) => {
+    const r = await f(id);
+    const s = shown();
+    return { ...r, minCents: s.charge(r.minCents), maxCents: s.charge(r.maxCents) };
+  });
+  const checkShown = (c: PriceCheck): PriceCheck => {
+    const s = shown();
+    return { ...c, oldCents: s.charge(c.oldCents), newCents: s.charge(c.newCents) };
+  };
+  const changeShown = <T extends PriceChange>(c: T): T => {
+    const s = shown();
+    return { ...c, fromCents: s.charge(c.fromCents), toCents: s.charge(c.toCents) };
+  };
+  wrap('priceChecks', (f) => async () => (await f()).map(checkShown));
+  wrap('priceCheckFor', (f) => async (id) => {
+    const c = await f(id);
+    return c && checkShown(c);
+  });
+  wrap('priceHistory', (f) => async (id) => (await f(id)).map(changeShown));
+  wrap('latestPriceChanges', (f) => async () => (await f()).map(changeShown));
+  wrap('answerPriceCheck', (f) => async (id, answer) => {
+    const r = await f(id, answer);
+    const s = shown();
+    return r && { ...r, minCents: s.charge(r.minCents), maxCents: s.charge(r.maxCents) };
+  });
+  wrap('previewRecurring', (f) => async (rule) => f(ruleBack(rule)));
+  wrap('createRecurring', (f) => async (rule) => f(ruleBack(rule)));
+  wrap('updateRecurring', (f) => async (id, rule) => f(id, ruleBack(rule)));
+  wrap('setBudget', (f) => async (...a) => {
+    adoptDisplayCurrency();
+    return f(...a);
+  });
+  wrap('setGroupBudget', (f) => async (...a) => {
+    adoptDisplayCurrency();
+    return f(...a);
+  });
+  wrap('applyRebalance', (f) => async (...a) => {
+    adoptDisplayCurrency();
+    return f(...a);
+  });
+  wrap('updateCategory', (f) => async (id, patch) => {
+    if (patch.budgetCents !== undefined) adoptDisplayCurrency();
+    return f(id, patch);
+  });
+  wrap('splitTransaction', (f) => async (id, parts) => {
+    const parent = transactions.find((x) => x.id === id);
+    const s = shown();
+    if (!parent || parent.currency === s.display.currency) return f(id, parts);
+    const back = parts.map((p) => ({ ...p, amountCents: s.back(p.amountCents, parent.currency, parent.postedOn) }));
+    back[back.length - 1].amountCents = parent.amountCents - back.slice(0, -1).reduce((acc, p) => acc + p.amountCents, 0);
+    return f(id, back);
+  });
+
   // Undo and redo: a snapshot of everything you can edit, per action (mirrors crates/core/src/undo.rs).
   const fill = <T,>(target: T[], from: T[]) => target.splice(0, target.length, ...structuredClone(from));
   const capture = () =>
     structuredClone({
       profiles, sources, transactions, groups, categories, children, importsLog, plan, tags, duplicateFlags, saved, accountClues,
-      optedOut, dismissed, learned, rules,
-      counters: { nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId },
+      optedOut, dismissed, learned, rules, checks, prices, apart,
+      counters: { nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId, nextCheckId, nextPriceId },
     });
   type Snapshot = ReturnType<typeof capture>;
   const restore = (s: Snapshot) => {
@@ -1362,6 +1649,9 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     fill(accountClues, s.accountClues);
     fill(saved, s.saved);
     fill(rules, s.rules);
+    fill(checks, s.checks);
+    fill(prices, s.prices);
+    fill(apart, s.apart);
     children.clear();
     for (const [k, v] of s.children) children.set(k, structuredClone(v));
     Object.assign(plan, structuredClone(s.plan));
@@ -1371,7 +1661,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     for (const v of s.dismissed) dismissed.add(v);
     learned.clear();
     for (const [k, v] of s.learned) learned.set(k, v);
-    ({ nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId } = s.counters);
+    ({ nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId, nextCheckId, nextPriceId } = s.counters);
   };
   const history = createUndoStack(capture, restore, (a, b) => JSON.stringify(serializable(a)) === JSON.stringify(serializable(b)));
   for (const [name, label] of Object.entries(UNDO_LABELS)) {

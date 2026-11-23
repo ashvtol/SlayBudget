@@ -2,6 +2,8 @@
 // a dumb renderer and the logic is unit-tested.
 
 import type { BudgetStatus, CashFlow, Category, CategoryTotal, MonthlyTotal, Recurring } from '@/lib/types';
+import { localeFor } from '@/lib/format';
+import { displayCurrency } from '@/features/currency/currency-store';
 
 export interface Insight {
   id: string;
@@ -20,7 +22,7 @@ interface Input {
 }
 
 function money(cents: number): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Math.abs(cents) / 100);
+  return new Intl.NumberFormat(localeFor(displayCurrency()), { style: 'currency', currency: displayCurrency(), maximumFractionDigits: 0 }).format(Math.abs(cents) / 100);
 }
 
 export function deriveInsights(input: Input): Insight[] {

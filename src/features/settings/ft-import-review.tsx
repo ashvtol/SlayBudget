@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import type { Category, FtChoice, FtProposal, FtReport, FtTarget } from '@/lib/types';
+import { Select } from '@/components/select';
 
 const keyOf = (t: FtTarget) => (t.kind === 'existing' ? `e:${t.value}` : `n:${t.value}`);
 const fromKey = (k: string): FtTarget => (k.startsWith('e:') ? { kind: 'existing', value: Number(k.slice(2)) } : { kind: 'new', value: k.slice(2) });
@@ -87,18 +88,12 @@ export function FtImportReview({
                     />
                     <span className="min-w-0 flex-1 truncate">{p.merchant}</span>
                     <span className="w-24 text-right tabular-nums" style={{ color: 'var(--muted)' }}>{plural(p.moves, 'transaction', 'transactions')}</span>
-                    <select
-                      aria-label={`Category for ${p.merchant}`}
-                      value={targets[p.merchant] ?? own}
-                      onChange={(e) => setTargets((t) => ({ ...t, [p.merchant]: e.target.value }))}
-                      className="w-44 rounded-md border bg-transparent px-1.5 py-1 text-[12px]"
-                      style={{ borderColor: 'var(--line)', color: 'var(--text)', background: 'var(--panel)' }}
-                    >
+                    <Select className="w-44" aria-label={`Category for ${p.merchant}`} value={targets[p.merchant] ?? own} onChange={(e) => setTargets((t) => ({ ...t, [p.merchant]: e.target.value }))}>
                       {p.target.kind === 'new' && <option value={own}>New: {p.target.value}</option>}
                       {sortedCategories.map((c) => (
                         <option key={c.id} value={`e:${c.id}`}>{c.name}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 );
               })}

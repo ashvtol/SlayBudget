@@ -7,6 +7,7 @@ import { DUPLICATE_TAG_COLOR } from '@/lib/duplicates-memory';
 import type { DuplicateFlag, Transaction } from '@/lib/types';
 import { displayMerchant } from './transaction-row';
 import { useTransactionsStore } from './transactions-store';
+import { Button } from '@/components/button';
 
 type Ask = 'this' | 'other' | null;
 
@@ -42,7 +43,6 @@ export function DuplicateBox({ tx, onOpen }: { tx: Transaction; onOpen?: (id: nu
     const resolution = which === 'keep' ? 'kept' : (which === 'this') === isNew ? 'deleted' : 'other_deleted';
     void resolve(flag.id, resolution);
   };
-  const button = 'flex h-[26px] items-center gap-1.5 rounded-md border px-2.5 text-[12px] font-semibold';
 
   return (
     <section
@@ -71,18 +71,18 @@ export function DuplicateBox({ tx, onOpen }: { tx: Transaction; onOpen?: (id: nu
         </button>
       )}
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={() => setAsk('this')} className={button} style={{ borderColor: 'var(--line-strong)', color: 'var(--neg)' }}>
+        <Button variant="destructive" onClick={() => setAsk('this')}>
           <IconTrash size={13} />
           Delete this one
-        </button>
+        </Button>
         {flag.txId != null && flag.otherId != null && (
-          <button type="button" onClick={() => setAsk('other')} className={button} style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+          <Button onClick={() => setAsk('other')}>
             Delete the other one
-          </button>
+          </Button>
         )}
-        <button type="button" onClick={() => settle('keep')} className={button} style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+        <Button onClick={() => settle('keep')}>
           Not a duplicate
-        </button>
+        </Button>
       </div>
       {ask && (
         <ConfirmDialog

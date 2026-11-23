@@ -112,6 +112,9 @@ export interface Category {
 }
 
 export interface Transaction {
+  /** The amount and currency it was imported in, when shown converted to the display currency. */
+  originalAmountCents?: number | null;
+  originalCurrency?: string | null;
   id: number;
   profileId: number;
   sourceId: number;
@@ -242,6 +245,28 @@ export interface CashFlow {
 }
 
 export type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+
+/** A charge that may be a bill at a new price, asked about once (amounts are positive cents). */
+export interface PriceCheck {
+  id: number;
+  txId: number;
+  recurringId: number;
+  oldCents: number;
+  newCents: number;
+  direction: 'up' | 'down';
+  answered: boolean;
+}
+/** "Is this the same subscription at a new price?" */
+export type PriceAnswer = 'new_price' | 'one_off' | 'separate';
+/** One change in a bill's price, on the day of its first charge at the new price. */
+export interface PriceChange {
+  changedOn: string;
+  fromCents: number;
+  toCents: number;
+}
+export interface BillPriceChange extends PriceChange {
+  recurringId: number;
+}
 
 export interface Recurring {
   merchant: string;

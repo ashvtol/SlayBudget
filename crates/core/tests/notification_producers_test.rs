@@ -570,3 +570,47 @@ mod budgets_and_recaps {
         );
     }
 }
+
+mod in_another_currency {
+    use super::*;
+
+    fn show_inr(db: &Db) {
+        slaybudget_core::settings::set(&db.conn, "display_currency", "INR").unwrap();
+        slaybudget_core::fx::refresh_display(&db.conn).unwrap();
+    }
+
+    #[test]
+    fn a_steady_bill_is_not_a_price_increase_just_because_the_exchange_rate_moved() {
+        let db = Db::setup();
+        show_inr(&db);
+        db.netflix(&[1799, 1799, 1799]);
+        db.run("2026-10-20", true);
+        db.netflix_more("2026-11-05", 1799);
+        assert!(db
+            .run("2026-11-08", false)
+            .iter()
+            .all(|n| n.kind != Kind::PriceUp));
+    }
+
+    #[test]
+    fn amounts_and_thresholds_are_in_the_display_currency() {
+        let db = Db::setup();
+        show_inr(&db);
+        db.set(|c| c.large_cents = 5_000_000); // ₹50,000
+        db.run("2026-11-01", true);
+        db.add("2026-11-19", "APPLE STORE #R123", -60000); // $600: over ₹50,000
+        db.add("2026-11-19", "TRADER JOES", -4999); // $49.99: under
+        let got: Vec<_> = db
+            .run("2026-11-20", false)
+            .into_iter()
+            .filter(|n| n.kind == Kind::LargeTransaction)
+            .collect();
+        assert_eq!(got.len(), 1);
+        assert!(got[0].body.starts_with('₹'), "{}", got[0].body);
+        assert!(
+            got[0].body.ends_with("at Apple Store on Thu, Nov 19"),
+            "{}",
+            got[0].body
+        );
+    }
+}

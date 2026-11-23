@@ -3,6 +3,8 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { ipc } from '@/lib/ipc';
 import { shortDate } from '@/lib/format';
 import type { ImportRecord, Source } from '@/lib/types';
+import { Select } from '@/components/select';
+import { Button } from '@/components/button';
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 
@@ -35,27 +37,12 @@ export function RecentImports({ refreshKey = 0, onChanged }: { refreshKey?: numb
               <span style={{ color: 'var(--muted)' }}>{r.sourceName}</span>
               <span className="w-[56px] text-right" style={{ color: 'var(--muted)' }}>{shortDate(r.importedAt.slice(0, 10))}</span>
               <span className="w-[72px] text-right tabular-nums">{r.remaining} added</span>
-              <button
-                type="button"
-                aria-label={`Move ${r.fileName} to another account`}
-                title="Move to another account"
-                disabled={r.remaining === 0}
-                onClick={() => setMoving(r)}
-                className="h-[24px] rounded-md border px-2 text-[11px] font-semibold disabled:opacity-40"
-                style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}
-              >
+              <Button aria-label={`Move ${r.fileName} to another account`} title="Move to another account" disabled={r.remaining === 0} onClick={() => setMoving(r)}>
                 Move…
-              </button>
-              <button
-                type="button"
-                aria-label={`Undo import ${r.fileName}`}
-                disabled={r.remaining === 0}
-                onClick={() => setConfirm(r)}
-                className="h-[24px] rounded-md border px-2 text-[11px] font-semibold disabled:opacity-40"
-                style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}
-              >
+              </Button>
+              <Button aria-label={`Undo import ${r.fileName}`} disabled={r.remaining === 0} onClick={() => setConfirm(r)}>
                 Undo
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -130,25 +117,19 @@ function MoveDialog({ record, onCancel, onMoved }: { record: ImportRecord; onCan
             Its {count(record.remaining)} move to the account you choose. Any that account already has are removed as
             duplicates. You can undo this.
           </p>
-          <select
-            aria-label="Account"
-            value={target ?? ''}
-            onChange={(e) => setTarget(Number(e.target.value))}
-            className="h-[28px] rounded-md border bg-transparent px-2 text-[12px]"
-            style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}
-          >
+          <Select aria-label="Account" value={target ?? ''} onChange={(e) => setTarget(Number(e.target.value))}>
             {accounts.map((a) => (
               <option key={a.id} value={a.id}>{a.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
         <div className="flex justify-end gap-2 border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
-          <button type="button" onClick={onCancel} className="h-[28px] rounded-md border px-3 text-[12px] font-semibold" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)', background: 'var(--bg)' }}>
+          <Button onClick={onCancel}>
             Cancel
-          </button>
-          <button type="button" disabled={target == null} onClick={() => void move()} className="h-[28px] rounded-md px-3 text-[12px] font-semibold disabled:opacity-50" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+          </Button>
+          <Button variant="primary" disabled={target == null} onClick={() => void move()}>
             Move
-          </button>
+          </Button>
         </div>
       </div>
     </div>

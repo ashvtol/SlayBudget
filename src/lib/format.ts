@@ -1,8 +1,11 @@
 import type { Transaction } from './types';
 
+/** Rupees group the Indian way (12,34,567); everything else as in the US. */
+export const localeFor = (currency: string) => (currency === 'INR' ? 'en-IN' : 'en-US');
+
 /** Format integer cents as currency, always positive (callers add any sign). */
 export function formatMoney(cents: number, currency: string): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(Math.abs(cents) / 100);
+  return new Intl.NumberFormat(localeFor(currency), { style: 'currency', currency }).format(Math.abs(cents) / 100);
 }
 
 /** Money in gets a leading plus; money out is shown bare. */

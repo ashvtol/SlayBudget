@@ -5,6 +5,41 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-22
+### Added
+- **Subscriptions that change price.** When a bill's merchant charges well above or below its usual amount (an
+  upgrade, a downgrade), SlayBudget asks once: "Is this Equinox at a new price?" **Yes, new price** moves the bill to
+  the new amount and due day and keeps a price history; **No, a one-off** leaves it alone; **A separate
+  subscription** makes it its own bill. The question shows on the charge, on the bill and in the bell, and Recurrings
+  shows "Price went up" or "Price went down" for 30 days.
+- **Merge look-alike bills.** Two bills for the same subscription can be merged on the Recurrings page (or marked
+  "Not the same"). Undoable.
+- **Amounts in your currency, offline.** Pick a display currency in Settings > Currency and every amount converts:
+  transactions, totals, budgets, charts, recurring bills and notifications, each at the rate of its own month (or the
+  latest month, if you prefer). The rates (the European Central Bank's monthly averages for 30 currencies and the
+  euro) are built into the app and refreshed with each update: nothing goes online to convert. Your data keeps its
+  own currency, so switching back is exact, and a converted transaction shows what it originally was. Rupees group
+  the Indian way (₹12,34,567).
+- **Budgets in your currency.** Set a budget while showing rupees and your budgets move to rupees, so what you type
+  is what you see.
+- **Rolling numbers.** When amounts change, their digits roll like a ticker. Turn it off in Settings > Accessibility;
+  it's always off with Reduce motion.
+- The Import page explains how to keep statements organized: a folder for each account in your watched folder,
+  with an example, and a **Set up folders** button. The README has the same guide.
+
+### Changed
+- Buttons, checkboxes, radio buttons, menus and text fields now look and feel like macOS: filled push buttons that
+  press in, blue checkboxes and radio buttons, pop-up menus with the ↕ badge, a sliding segmented control and a
+  soft focus ring.
+- Notification settings: "Price went up" is now "Price changes", and also covers a possible new price and drops.
+
+### Fixed
+- Opening a notification about a transaction (a paycheck, a large charge) now shows that transaction.
+- Editing a bill after its price changed keeps its older charges.
+
+### Removed
+- "Update rates", and the online exchange-rate service it used (it had stopped working).
+
 ## [0.5.0] - 2026-11-22
 ### Added
 - **Statements land in the right account.** SlayBudget recognizes which account a statement belongs to from the file

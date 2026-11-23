@@ -6,7 +6,8 @@ import { TagPicker } from './tag-picker';
 import { statementClues } from '@/lib/statement-clues';
 import { CategoryPill } from '@/components/category-pill';
 import { ipc } from '@/lib/ipc';
-import type { Category, NewRecurring, SplitPart, StatementInfo, Transaction } from '@/lib/types';
+import type { Category, NewRecurring, PriceCheck, SplitPart, StatementInfo, Transaction } from '@/lib/types';
+import { PriceCheckBox } from '@/features/recurrings/price-check-box';
 import { dayHeaderLabel, formatSignedMoney, groupByDay } from '@/lib/format';
 import { Money } from '@/components/money';
 import { ToolbarButton } from '@/components/toolbar-button';
@@ -27,6 +28,8 @@ const TYPES: [TxType, string][] = [
   ['transfer', 'Internal transfer'],
 ];
 import { useTransactionsStore } from './transactions-store';
+import { Select } from '@/components/select';
+import { Button } from '@/components/button';
 
 /** Parse a signed dollar string into integer cents. NaN when unparseable. */
 export function dollarsToCents(input: string): number {
@@ -90,9 +93,9 @@ function SplitEditor({ tx, categories, onChanged }: { tx: Transaction; categorie
       <div className="flex items-center justify-between">
         <h3 className="m-0 text-base font-semibold">Split</h3>
         {!editing && (
-          <button type="button" onClick={startEditing} className="min-h-8 rounded-lg border px-2.5 text-sm" style={{ borderColor: 'var(--line)', color: 'var(--accent)' }}>
+          <Button onClick={startEditing}>
             {children.length ? 'Edit split' : 'Split transaction'}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -119,18 +122,12 @@ function SplitEditor({ tx, categories, onChanged }: { tx: Transaction; categorie
                 className="w-24 rounded-lg border bg-transparent px-2 py-1.5 text-sm tabular-nums"
                 style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
               />
-              <select
-                aria-label={`Part ${i + 1} category`}
-                value={p.categoryId ?? ''}
-                onChange={(e) => setParts((prev) => prev.map((x, j) => (j === i ? { ...x, categoryId: e.target.value === '' ? null : Number(e.target.value) } : x)))}
-                className="min-w-0 flex-1 rounded-lg border bg-transparent px-2 py-1.5 text-sm"
-                style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
-              >
+              <Select className="min-w-0 flex-1" aria-label={`Part ${i + 1} category`} value={p.categoryId ?? ''} onChange={(e) => setParts((prev) => prev.map((x, j) => (j === i ? { ...x, categoryId: e.target.value === '' ? null : Number(e.target.value) } : x)))}>
                 <option value="">Uncategorized</option>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.name}</option>
                 ))}
-              </select>
+              </Select>
               {parts.length > 2 && (
                 <button type="button" aria-label={`Remove part ${i + 1}`} onClick={() => setParts((prev) => prev.filter((_, j) => j !== i))} className="rounded-md px-1.5 text-base leading-none" style={{ color: 'var(--muted)' }}>×</button>
               )}
@@ -142,9 +139,9 @@ function SplitEditor({ tx, categories, onChanged }: { tx: Transaction; categorie
           </div>
           {error && <p className="m-0 text-xs" style={{ color: 'var(--neg)' }}>{error}</p>}
           <div className="flex items-center gap-2">
-            <button type="button" onClick={() => void save()} disabled={!valid} className="min-h-9 rounded-lg px-3 text-sm font-medium" style={{ background: valid ? 'var(--accent)' : 'var(--line)', color: valid ? '#fff' : 'var(--muted)' }}>Save split</button>
-            <button type="button" onClick={() => setEditing(false)} className="min-h-9 rounded-lg border px-3 text-sm" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>Cancel</button>
-            {children.length > 0 && <button type="button" onClick={() => void removeSplit()} className="ml-auto min-h-9 rounded-lg px-3 text-sm" style={{ color: 'var(--neg)' }}>Remove split</button>}
+            <Button onClick={() => void save()} disabled={!valid}>Save split</Button>
+            <Button onClick={() => setEditing(false)}>Cancel</Button>
+            {children.length > 0 && <Button variant="destructive" onClick={() => void removeSplit()} className="ml-auto">Remove split</Button>}
           </div>
         </div>
       )}
@@ -325,11 +322,19 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
           </div>
           <h2 className="m-0 truncate text-[24px] font-semibold">{displayMerchant(tx)}</h2>
         </div>
-        <span data-testid="detail-amount" className="shrink-0 text-[24px] font-semibold">
-          <Money cents={tx.amountCents} currency={tx.currency} tone={tx.amountCents > 0 ? 'pos' : 'default'} sign={signs ? 'always' : 'none'} />
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          <span data-testid="detail-amount" className="text-[24px] font-semibold">
+            <Money cents={tx.amountCents} currency={tx.currency} tone={tx.amountCents > 0 ? 'pos' : 'default'} sign={signs ? 'always' : 'none'} />
+          </span>
+          {tx.originalCurrency && tx.originalAmountCents != null && (
+            <span data-testid="detail-original" className="text-[12px]" style={{ color: 'var(--muted)' }}>
+              Originally {formatSignedMoney(tx.originalAmountCents, tx.originalCurrency)}
+            </span>
+          )}
         </span>
       </header>
       <DuplicateBox tx={tx} onOpen={onOpen} />
+      <PriceCheckFor tx={tx} />
 
       <div className="flex flex-wrap gap-10">
         <div>
@@ -429,33 +434,53 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
   );
 }
 
+/** "Is this <bill> at a new price?" for a charge that may be a bill at a new price. */
+function PriceCheckFor({ tx }: { tx: Transaction }) {
+  const [check, setCheck] = useState<PriceCheck | null>(null);
+  const recurringsById = useTransactionsStore((s) => s.recurringsById);
+  const categoriesById = useTransactionsStore((s) => s.categoriesById);
+  const applyFilter = useTransactionsStore((s) => s.applyFilter);
+  useEffect(() => {
+    let live = true;
+    void ipc().priceCheckFor(tx.id).then((c) => live && setCheck(c));
+    return () => {
+      live = false;
+    };
+  }, [tx.id, tx.recurringId]);
+  if (!check) return null;
+  const bill = recurringsById[check.recurringId];
+  return (
+    <PriceCheckBox
+      check={check}
+      billName={bill ? displayName(bill) : 'this bill'}
+      categories={Object.values(categoriesById)}
+      onDone={() => {
+        setCheck(null);
+        void applyFilter({});
+      }}
+    />
+  );
+}
+
 /** Which recurring bill this charge belongs to, with "Not recurring"; or "Make recurring". */
 function RecurringField({ tx }: { tx: Transaction }) {
   const recurring = useTransactionsStore((s) => (tx.recurringId != null ? s.recurringsById[tx.recurringId] : undefined));
   const categoriesById = useTransactionsStore((s) => s.categoriesById);
   const applyFilter = useTransactionsStore((s) => s.applyFilter);
   const [draft, setDraft] = useState<NewRecurring | null>(null);
-  const button = 'h-[26px] rounded-md border px-2.5 text-[12px] font-semibold';
   return (
     <div>
       <FieldLabel>Recurring</FieldLabel>
       {tx.recurringId != null ? (
         <div className="flex items-center gap-3 text-[13px]">
           <span data-testid="recurring-name" className="font-semibold">{recurring ? displayName(recurring) : 'Recurring'}</span>
-          <button
-            type="button"
-            onClick={() => void ipc().unlinkRecurring(tx.id).then(() => applyFilter({}))}
-            className={button}
-            style={{ borderColor: 'var(--line-strong)', color: 'var(--muted)' }}
-          >
-            Not recurring
-          </button>
+          <Button onClick={() => void ipc().unlinkRecurring(tx.id).then(() => applyFilter({}))}>Not recurring</Button>
         </div>
       ) : (
         tx.amountCents < 0 && (
-          <button type="button" onClick={() => void ipc().draftRecurring(tx.id).then(setDraft)} className={button} style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+          <Button onClick={() => void ipc().draftRecurring(tx.id).then(setDraft)}>
             Make recurring
-          </button>
+          </Button>
         )
       )}
       {draft && (

@@ -3,6 +3,7 @@ import { IconPlus } from '@/components/icons';
 import { TAG_PALETTE } from '@/lib/ipc';
 import { useTagsStore } from '@/lib/stores/tags-store';
 import type { Tag } from '@/lib/types';
+import { Button } from '@/components/button';
 
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -40,15 +41,10 @@ export function TagsPane() {
         <p className="m-0 text-[13px]" style={{ color: 'var(--muted)' }}>
           Use tags to categorize your transactions more granularly. These can be used across regular, income, and internal transactions.
         </p>
-        <button
-          type="button"
-          onClick={() => void addTag()}
-          className="inline-flex h-[28px] shrink-0 items-center gap-1.5 rounded-md border px-3 text-[12px] font-semibold"
-          style={{ borderColor: 'var(--line-strong)', color: 'var(--text)', background: 'var(--hover)' }}
-        >
+        <Button onClick={() => void addTag()} className="shrink-0">
           <IconPlus size={12} />
           New tag
-        </button>
+        </Button>
       </div>
       {error && (
         <p role="alert" className="m-0 text-[12px]" style={{ color: 'var(--neg)' }}>{error}</p>
@@ -208,12 +204,12 @@ function ConfirmDelete({ tag, onConfirm, onCancel }: { tag: Tag; onConfirm: () =
           </p>
         </div>
         <div className="flex justify-end gap-2 border-t px-4 py-3" style={{ borderColor: 'var(--line)' }}>
-          <button type="button" autoFocus onClick={onCancel} className="h-[28px] rounded-md border px-3 text-[12px] font-semibold" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)', background: 'var(--bg)' }}>
+          <Button autoFocus onClick={onCancel}>
             Cancel
-          </button>
-          <button type="button" onClick={onConfirm} className="h-[28px] rounded-md px-3 text-[12px] font-semibold" style={{ background: 'var(--neg)', color: '#fff' }}>
+          </Button>
+          <Button variant="destructive" onClick={onConfirm}>
             Delete
-          </button>
+          </Button>
         </div>
       </div>
     </div>

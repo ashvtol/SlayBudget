@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { AccountClue, AccountType, Source, Tag } from '@/lib/types';
+import { Select } from '@/components/select';
+import { SegmentedControl } from '@/components/segmented-control';
+import { Button } from '@/components/button';
 
 const TYPES: [AccountType, string][] = [
   ['card', 'Card'],
@@ -65,9 +68,9 @@ export function AccountsPane() {
           Make a folder for each account inside your watched folder (Import sources). A statement you drop into one is
           imported into that account.
         </p>
-        <button type="button" onClick={() => void folders()} className="mt-1 h-[28px] w-fit rounded-md border px-3 text-[12px] font-semibold" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+        <Button onClick={() => void folders()} className="mt-1 w-fit">
           Create a folder for each account
-        </button>
+        </Button>
         {status && (
           <p role="status" className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
             {status}
@@ -102,8 +105,7 @@ function AccountCard({ account, tags, onChanged }: { account: Source; tags: Tag[
       setError(e instanceof Error ? e.message : String(e));
     }
   };
-  const field = 'h-[28px] rounded-md border bg-transparent px-2 text-[12px]';
-  const fieldStyle = { borderColor: 'var(--line-strong)', color: 'var(--text)' };
+  const field = 'field';
   const tagChanged = tagId !== (account.defaultTagId ?? null);
 
   return (
@@ -116,7 +118,6 @@ function AccountCard({ account, tags, onChanged }: { account: Source; tags: Tag[
           onBlur={() => name.trim() !== account.name && void save({ name })}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           className={`${field} w-[200px] font-semibold`}
-          style={fieldStyle}
         />
         <input
           aria-label="Bank"
@@ -126,30 +127,18 @@ function AccountCard({ account, tags, onChanged }: { account: Source; tags: Tag[
           onBlur={() => bank.trim() !== (account.institution ?? '') && void save({ institution: bank.trim() || null })}
           onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
           className={`${field} w-[150px]`}
-          style={fieldStyle}
         />
-        <div role="radiogroup" aria-label="Type" className="flex rounded-md border p-0.5" style={{ borderColor: 'var(--line-strong)' }}>
-          {TYPES.map(([value, label]) => (
-            <label
-              key={value}
-              className="flex cursor-pointer items-center rounded px-2 py-0.5 text-[12px]"
-              style={account.accountType === value ? { background: 'color-mix(in srgb, var(--accent) 22%, transparent)', color: 'var(--accent)', fontWeight: 600 } : { color: 'var(--muted)' }}
-            >
-              <input type="radio" className="sr-only" name={`type-${account.id}`} checked={account.accountType === value} onChange={() => void save({ accountType: value })} aria-label={label} />
-              {label}
-            </label>
-          ))}
-        </div>
+        <SegmentedControl aria-label="Type" options={TYPES.map(([id, label]) => ({ id, label }))} value={account.accountType} onChange={(v) => void save({ accountType: v })} />
       </div>
       {error && <p role="alert" className="m-0 text-[12px]" style={{ color: 'var(--neg)' }}>{error}</p>}
       <div className="flex flex-wrap items-center gap-2 text-[12px]">
         <span style={{ color: 'var(--muted)' }}>Default tag</span>
-        <select aria-label="Default tag" value={tagId ?? ''} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : null)} className={field} style={fieldStyle}>
+        <Select aria-label="Default tag" value={tagId ?? ''} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : null)}>
           <option value="">None</option>
           {tags.map((t) => (
             <option key={t.id} value={t.id}>{t.name}</option>
           ))}
-        </select>
+        </Select>
         {tagChanged && (
           <>
             {tagId != null && existing > 0 && (
@@ -158,15 +147,9 @@ function AccountCard({ account, tags, onChanged }: { account: Source; tags: Tag[
                 Also tag the {existing} {existing === 1 ? 'transaction' : 'transactions'} already in {account.name}
               </label>
             )}
-            <button
-              type="button"
-              onClick={() => void ipc().setAccountDefaultTag(account.id, tagId, alsoExisting).then(onChanged)}
-              className="h-[26px] rounded-md px-2.5 text-[12px] font-semibold"
-              style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-              aria-label="Save default tag"
-            >
+            <Button variant="primary" onClick={() => void ipc().setAccountDefaultTag(account.id, tagId, alsoExisting).then(onChanged)} aria-label="Save default tag">
               Save
-            </button>
+            </Button>
           </>
         )}
       </div>

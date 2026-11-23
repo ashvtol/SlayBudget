@@ -68,9 +68,12 @@ pub fn candidates(
     config: &Config,
     today: NaiveDate,
 ) -> Result<Vec<NewNotification>> {
+    let display = crate::fx::display(conn).currency;
+    CURRENCY.with(|c| *c.borrow_mut() = display);
     let mut out = Vec::new();
     bills(conn, config, today, &mut out)?;
     price_ups(conn, config, today, &mut out)?;
+    price_changes(conn, today, &mut out)?;
     double_charges(conn, config, today, &mut out)?;
     large_transactions(conn, config, today, &mut out)?;
     money_in(conn, config, today, &mut out)?;
@@ -78,22 +81,19 @@ pub fn candidates(
     budgets(conn, config, today, &mut out)?;
     recap(conn, today, &mut out)?;
     review_digest(conn, config, today, &mut out)?;
+    CURRENCY.with(|c| *c.borrow_mut() = "USD".into());
     Ok(out)
 }
 
-/// "$1,234.56" from cents.
+thread_local! {
+    /// The currency notifications are written in during a run (the display currency).
+    static CURRENCY: std::cell::RefCell<String> = std::cell::RefCell::new("USD".into());
+}
+
+/// "$1,234.56" from cents, in the display currency while notifications are produced (else dollars).
 pub fn money(cents: i64) -> String {
-    let sign = if cents < 0 { "-" } else { "" };
-    let c = cents.abs();
-    let dollars = (c / 100).to_string();
-    let mut grouped = String::new();
-    for (i, ch) in dollars.chars().enumerate() {
-        if i > 0 && (dollars.len() - i).is_multiple_of(3) {
-            grouped.push(',');
-        }
-        grouped.push(ch);
-    }
-    format!("{sign}${grouped}.{:02}", c % 100)
+    let currency = CURRENCY.with(|c| c.borrow().clone());
+    crate::fx::format_money(cents, &currency)
 }
 
 /// "Sat, Dec 5".
@@ -140,7 +140,11 @@ fn bills(
         let until = (due - today).num_days();
         let profile = last_charge_profile(conn, saved.id)?;
         let target = json!({ "kind": "recurring", "id": saved.id });
-        let about = format!("About {} on {}", money(view.typical_amount_cents), day(due));
+        let about = format!(
+            "About {} on {}",
+            money(crate::fx::Shown::of(conn).charge(view.typical_amount_cents)),
+            day(due)
+        );
         let mut push = |key: String, kind: Kind, title: String, body: String| {
             out.push(NewNotification {
                 key,
@@ -181,7 +185,7 @@ fn bills(
                 format!("{} looks missed", saved.name),
                 format!(
                     "Expected about {} on {}, and no charge has come in yet.",
-                    money(view.typical_amount_cents),
+                    money(crate::fx::Shown::of(conn).charge(view.typical_amount_cents)),
                     day(due)
                 ),
             );
@@ -254,9 +258,74 @@ fn price_ups(
             key: format!("price:{}:{date}", s.id),
             kind: Kind::PriceUp,
             title: format!("{} went up", s.name),
-            body: format!("From {} to {} (+{pct}%)", money(*before), money(*now_cents)),
+            body: format!(
+                "From {} to {} (+{pct}%)",
+                money(crate::fx::Shown::of(conn).charge(*before)),
+                money(crate::fx::Shown::of(conn).charge(*now_cents))
+            ),
             target: json!({ "kind": "recurring", "id": s.id }),
             profile_id: Some(*profile),
+        });
+    }
+    Ok(())
+}
+
+/// A charge that may be a bill at a new price (waiting for your answer), and a confirmed price drop.
+fn price_changes(
+    conn: &Connection,
+    today: NaiveDate,
+    out: &mut Vec<NewNotification>,
+) -> Result<()> {
+    let shown = crate::fx::Shown::of(conn);
+    let recent = since(today, PRICE_WINDOW_DAYS);
+    for check in crate::price_changes::open_checks(conn)? {
+        let bill = recurrings::get(conn, check.recurring_id)?;
+        let tx = crate::transactions::get(conn, check.tx_id)?;
+        if tx.posted_on.to_string() < recent {
+            continue;
+        }
+        out.push(NewNotification {
+            key: format!("pricecheck:{}", check.id),
+            kind: Kind::PriceUp,
+            title: format!("{} may have a new price", bill.name),
+            body: format!(
+                "{} (was {})",
+                money(shown.charge(check.new_cents)),
+                money(shown.charge(check.old_cents))
+            ),
+            target: json!({ "kind": "transaction", "id": check.tx_id }),
+            profile_id: Some(tx.profile_id),
+        });
+    }
+    for s in recurrings::list(conn)? {
+        if s.status != Status::Active {
+            continue;
+        }
+        let Some(change) = crate::price_changes::history(conn, s.id)?
+            .into_iter()
+            .next()
+        else {
+            continue;
+        };
+        if change.to_cents >= change.from_cents
+            || change.changed_on < recent
+            || change.from_cents <= 0
+        {
+            continue;
+        }
+        let pct = ((change.to_cents - change.from_cents) as f64 * 100.0 / change.from_cents as f64)
+            .round();
+        out.push(NewNotification {
+            key: format!("pricedown:{}:{}", s.id, change.changed_on),
+            kind: Kind::PriceUp,
+            title: format!("{} went down", s.name),
+            body: format!(
+                "From {} to {} ({pct}%)",
+                money(shown.charge(change.from_cents)),
+                money(shown.charge(change.to_cents))
+            ),
+            target: json!({ "kind": "recurring", "id": s.id }),
+            profile_id: last_charge_profile(conn, s.id)?,
         });
     }
     Ok(())
@@ -270,7 +339,7 @@ fn double_charges(
     out: &mut Vec<NewNotification>,
 ) -> Result<()> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT a.id, t.id, t.merchant, -t.amount_cents, t.posted_on, t.profile_id
+        "SELECT a.id, t.id, t.merchant, -display_cents(t.amount_cents, t.currency, t.posted_on), t.posted_on, t.profile_id
          FROM transactions t
          JOIN transactions a ON a.merchant = t.merchant AND a.amount_cents = t.amount_cents AND a.id < t.id
               AND a.profile_id = t.profile_id AND a.type = 'regular' AND a.recurring_id IS NULL AND a.parent_id IS NULL
@@ -324,7 +393,7 @@ fn recent_rows(
     bind: i64,
 ) -> Result<Vec<RecentRow>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT t.id, t.merchant, t.amount_cents, t.posted_on, t.profile_id, t.refund_of IS NOT NULL
+        "SELECT t.id, t.merchant, display_cents(t.amount_cents, t.currency, t.posted_on), t.posted_on, t.profile_id, t.refund_of IS NOT NULL
          FROM transactions t WHERE t.posted_on >= ?1 AND t.posted_on <= ?2 AND t.parent_id IS NULL AND ({condition})
          ORDER BY t.posted_on, t.id"
     ))?;
@@ -352,7 +421,8 @@ fn large_transactions(
     today: NaiveDate,
     out: &mut Vec<NewNotification>,
 ) -> Result<()> {
-    let condition = format!("{REGULAR} AND -t.amount_cents >= ?3");
+    let condition =
+        format!("{REGULAR} AND -display_cents(t.amount_cents, t.currency, t.posted_on) >= ?3");
     for (id, merchant, cents, posted, profile, _) in
         recent_rows(conn, today, &condition, config.large_cents)?
     {
@@ -377,7 +447,7 @@ fn money_in(
     today: NaiveDate,
     out: &mut Vec<NewNotification>,
 ) -> Result<()> {
-    let condition = "t.amount_cents > 0 AND t.amount_cents >= ?3 AND (t.type = 'income' OR t.refund_of IS NOT NULL)";
+    let condition = "t.amount_cents > 0 AND display_cents(t.amount_cents, t.currency, t.posted_on) >= ?3 AND (t.type = 'income' OR t.refund_of IS NOT NULL)";
     for (id, merchant, cents, _, profile, is_refund) in
         recent_rows(conn, today, condition, config.money_in_min_cents)?
     {
@@ -454,7 +524,7 @@ fn spending_by_category(
     to: NaiveDate,
 ) -> Result<Vec<(i64, i64)>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT t.category_id, -sum(t.amount_cents) FROM transactions t
+        "SELECT t.category_id, -sum(display_cents(t.amount_cents, t.currency, t.posted_on)) FROM transactions t
          WHERE {REGULAR} AND t.category_id IS NOT NULL AND t.posted_on >= ?1 AND t.posted_on <= ?2
            AND t.category_id NOT IN (SELECT id FROM categories WHERE excluded = 1)
          GROUP BY t.category_id"
@@ -474,7 +544,7 @@ fn bill_spending_by_category(
     to: NaiveDate,
 ) -> Result<Vec<(i64, i64)>> {
     let mut stmt = conn.prepare(&format!(
-        "SELECT t.category_id, -sum(t.amount_cents) FROM transactions t
+        "SELECT t.category_id, -sum(display_cents(t.amount_cents, t.currency, t.posted_on)) FROM transactions t
          WHERE {REGULAR} AND t.recurring_id IS NOT NULL AND t.category_id IS NOT NULL
            AND t.posted_on >= ?1 AND t.posted_on <= ?2
          GROUP BY t.category_id"

@@ -12,6 +12,7 @@ pub mod fx;
 pub mod import;
 pub mod imports;
 pub mod notifications;
+pub mod price_changes;
 pub mod profiles;
 pub mod recurrings;
 pub mod search;

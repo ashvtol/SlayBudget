@@ -4,6 +4,7 @@ import { errorMessage, normalizedName } from '@/lib/category-names';
 import type { CategoryGroup, GroupTarget } from '@/lib/types';
 import { EmojiPicker } from './emoji-picker';
 import { PALETTE } from './palette';
+import { Select } from '@/components/select';
 
 /** Copilot-style "New category" form: type, emoji, name, budget, color, plus a group. */
 export function CategoryForm({
@@ -76,13 +77,13 @@ export function CategoryForm({
           </div>
           <div className="flex w-full items-center gap-2 text-[12px]">
             <label htmlFor="category-group" style={{ color: 'var(--muted)' }}>Group</label>
-            <select id="category-group" aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)} className="h-[26px] flex-1 rounded-md border px-2 outline-none" style={{ borderColor: 'var(--line-strong)', background: 'var(--bg)', color: 'var(--text)' }}>
+            <Select className="flex-1" id="category-group" aria-label="Group" value={group} onChange={(e) => setGroup(e.target.value)}>
               <option value="own">No group</option>
               {groups.map((g) => (
                 <option key={g.id} value={g.id}>{g.name}</option>
               ))}
               <option value="new">New group…</option>
-            </select>
+            </Select>
             {group === 'new' && (
               <input aria-label="New group name" value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Group name" className="h-[26px] flex-1 rounded-md border bg-transparent px-2 outline-none" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }} />
             )}

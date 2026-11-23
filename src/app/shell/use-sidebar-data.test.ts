@@ -20,3 +20,18 @@ describe('spendBySource', () => {
     expect(spendBySource([t(1, 5000, 'regular')], new Set()).get(1)).toBe(0);
   });
 });
+
+describe('useSidebarData after switching currency', () => {
+  it('re-reads this month’s spending in the new currency', async () => {
+    const { renderHook, waitFor, act } = await import('@testing-library/react');
+    const { createMemoryIpc, setIpc } = await import('@/lib/ipc');
+    const { useCurrencyStore } = await import('@/features/currency/currency-store');
+    const { useSidebarData } = await import('./use-sidebar-data');
+    const today = new Date(2026, 10, 20);
+    setIpc(createMemoryIpc({ transactions: [{ ...t(1, -10_000, 'regular'), id: 1 }] }));
+    const { result } = renderHook(() => useSidebarData(today));
+    await waitFor(() => expect(result.current.sources[0]?.monthSpendCents).toBe(10_000));
+    await act(() => useCurrencyStore.getState().setDisplayCurrency('INR'));
+    await waitFor(() => expect(result.current.sources[0]?.monthSpendCents).toBeGreaterThan(500_000));
+  });
+});

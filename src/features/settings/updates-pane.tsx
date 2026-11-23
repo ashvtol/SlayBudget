@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useUpdateStore } from '@/features/updates/update-store';
 import { ChangelogView } from '@/features/updates/update-ui';
+import { Button } from '@/components/button';
 
 const time = (d: Date) => d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 
@@ -22,15 +23,9 @@ export function UpdatesPane() {
             {lastChecked && ` · Last checked ${time(lastChecked)}`}
           </span>
         </div>
-        <button
-          type="button"
-          onClick={() => void checkNow({ auto: false })}
-          disabled={status === 'checking' || status === 'installing'}
-          className="min-h-9 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-          style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-        >
+        <Button variant="primary" onClick={() => void checkNow({ auto: false })} disabled={status === 'checking' || status === 'installing'}>
           {status === 'checking' ? 'Checking…' : 'Check now'}
-        </button>
+        </Button>
       </div>
 
       {status === 'uptodate' && <p className="m-0 text-sm" style={{ color: 'var(--pos)' }}>You’re on the latest version.</p>}
@@ -38,9 +33,9 @@ export function UpdatesPane() {
         <div className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium">Version {available.version} is available</span>
-            <button type="button" onClick={openDialog} className="min-h-8 rounded-lg border px-3 text-sm font-medium" style={{ borderColor: 'var(--line-strong)', color: 'var(--accent)' }}>
+            <Button onClick={openDialog}>
               Install…
-            </button>
+            </Button>
           </div>
           <ChangelogView sections={sections} fallback={available.notes} />
         </div>

@@ -3,6 +3,7 @@ import { ipc } from '@/lib/ipc';
 import type { Source, Transaction } from '@/lib/types';
 import { spendOf } from '@/lib/tx-type';
 import { useProfileStore } from '@/lib/stores/profile-store';
+import { useNavStore } from '@/lib/stores/nav-store';
 import { useTransactionsStore } from '@/features/transactions/transactions-store';
 
 export interface SourceRow {
@@ -23,6 +24,8 @@ export function useSidebarData(today: Date = new Date()): SidebarData {
   const profileId = useProfileStore((s) => s.activeProfileId);
   // Any change to the loaded transactions (edits, imports) refreshes the numbers.
   const version = useTransactionsStore((s) => s.transactions);
+  // So does a refresh (⌘R, or switching the display currency).
+  const refreshTick = useNavStore((s) => s.refreshTick);
   const [data, setData] = useState<SidebarData>({ toReview: 0, sources: [] });
   const monthStart = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-01`;
 
@@ -42,7 +45,7 @@ export function useSidebarData(today: Date = new Date()): SidebarData {
     return () => {
       cancelled = true;
     };
-  }, [profileId, monthStart, version]);
+  }, [profileId, monthStart, version, refreshTick]);
 
   return data;
 }

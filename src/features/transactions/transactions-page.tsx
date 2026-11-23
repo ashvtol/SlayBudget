@@ -54,11 +54,18 @@ export function TransactionsPage() {
     void load(activeProfile, kept);
   }, [activeProfile, load]);
 
+  // A row another screen asked for (a notification) shows until you open another one.
+  const focused = useTransactionsStore((s) => s.focused);
+  const open = useCallback((id: number | null) => {
+    useTransactionsStore.setState({ focused: null });
+    setOpenId(id);
+  }, []);
+
   // The detail panel is always visible: fall back to the newest transaction.
   const shownId = useMemo(() => {
-    if (openId != null && transactions.some((t) => t.id === openId)) return openId;
+    for (const id of [focused, openId]) if (id != null && transactions.some((t) => t.id === id)) return id;
     return transactions[0]?.id ?? null;
-  }, [openId, transactions]);
+  }, [focused, openId, transactions]);
 
   const selectedIds = [...selected];
   const allSelected = transactions.length > 0 && transactions.every((t) => selected.has(t.id));
@@ -152,13 +159,13 @@ export function TransactionsPage() {
         <div className="relative flex h-full flex-col">
           {(searchOpen || hasText) && <SearchField />}
           <FilterChips />
-          <TransactionsList paused={!active || popover !== null || pickerId != null} onOpen={setOpenId} onPickCategory={setPickerId} onFilters={() => setPopover('filter')} activeId={shownId} />
+          <TransactionsList paused={!active || popover !== null || pickerId != null} onOpen={open} onPickCategory={setPickerId} onFilters={() => setPopover('filter')} activeId={shownId} />
           {pickerId != null && <CategoryPicker transactionId={pickerId} onClose={() => setPickerId(null)} />}
         </div>
       }
       detailTitle="Transaction"
       detailActions={shownId != null ? <DetailActions id={shownId} /> : undefined}
-      detail={<DetailPane id={shownId} onPickCategory={setPickerId} onOpen={setOpenId} />}
+      detail={<DetailPane id={shownId} onPickCategory={setPickerId} onOpen={open} />}
     />
   );
 }

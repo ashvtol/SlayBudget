@@ -3,7 +3,7 @@
 
 import { budgetsForMonth } from './budget-plan';
 import type { NotificationConfig } from './notification-config';
-import type { BudgetPlan, Category, DuplicateFlag, NewNotification, Recurring, Transaction } from './types';
+import type { BillPriceChange, BudgetPlan, Category, DuplicateFlag, NewNotification, PriceCheck, Recurring, Transaction } from './types';
 import { isRegular, txTypeOf } from './tx-type';
 
 const RECENT_DAYS = 7;
@@ -26,6 +26,9 @@ export interface ProducerInput {
   /** Possible-duplicate flags and the file name of each import, for one item per import with open flags. */
   duplicateFlags?: DuplicateFlag[];
   importFileName?: (importId: number) => string | undefined;
+  /** Charges that may be a bill at a new price (open), and each bill's latest price change. */
+  priceChecks?: PriceCheck[];
+  priceChanges?: BillPriceChange[];
 }
 
 export function money(cents: number): string {
@@ -129,6 +132,34 @@ export function produceCandidates(input: ProducerInput): NewNotification[] {
       body: `From ${money(before)} to ${money(now)} (+${Math.round((rise * 100) / before)}%)`,
       target: { kind: 'recurring', id: s.id },
       profileId: last.profileId,
+    });
+  }
+
+  // A charge that may be a bill at a new price, and a confirmed drop.
+  const billsById = new Map(input.recurring.flatMap((v) => (v.saved ? [[v.saved.id, v.saved] as const] : [])));
+  for (const c of input.priceChecks ?? []) {
+    const bill = billsById.get(c.recurringId);
+    const t = transactions.find((x) => x.id === c.txId);
+    if (!bill || !t || t.postedOn < addDays(today, -PRICE_WINDOW_DAYS)) continue;
+    out.push({
+      key: `pricecheck:${c.id}`,
+      kind: 'priceUp',
+      title: `${bill.name} may have a new price`,
+      body: `${money(c.newCents)} (was ${money(c.oldCents)})`,
+      target: { kind: 'transaction', id: c.txId },
+      profileId: t.profileId,
+    });
+  }
+  for (const ch of input.priceChanges ?? []) {
+    const bill = billsById.get(ch.recurringId);
+    if (!bill || bill.status !== 'active' || ch.toCents >= ch.fromCents || ch.fromCents <= 0 || ch.changedOn < addDays(today, -PRICE_WINDOW_DAYS)) continue;
+    out.push({
+      key: `pricedown:${bill.id}:${ch.changedOn}`,
+      kind: 'priceUp',
+      title: `${bill.name} went down`,
+      body: `From ${money(ch.fromCents)} to ${money(ch.toCents)} (${Math.round(((ch.toCents - ch.fromCents) * 100) / ch.fromCents)}%)`,
+      target: { kind: 'recurring', id: bill.id },
+      profileId: chargesOf(bill.id)[0]?.profileId ?? null,
     });
   }
 

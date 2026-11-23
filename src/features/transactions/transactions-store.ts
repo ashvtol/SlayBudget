@@ -33,6 +33,8 @@ interface TransactionsState {
   orderedTransactions(): Transaction[];
   byId(id: number): Transaction | undefined;
   focusById(id: number): Promise<void>;
+  /** The row another screen asked to show (a notification, say); the page opens it in the detail panel and clears it. */
+  focused: number | null;
   /** A manual change: teaches the merchant and opens the "apply to others" offer. */
   setCategory(id: number, categoryId: number): Promise<void>;
   offer: { transactionId: number; categoryId: number } | null;
@@ -66,6 +68,7 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   transactions: [],
   categoriesById: {},
   recurringsById: {},
+  focused: null,
   sourcesById: {},
   selected: new Set(),
   cursor: 0,
@@ -170,7 +173,10 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
       await get().applyFilter(clearAllPatch());
     }
     const idx = locate();
-    if (idx >= 0) get().setCursor(idx);
+    if (idx >= 0) {
+      get().setCursor(idx);
+      set({ focused: id });
+    }
   },
 
   async setCategory(id, categoryId) {

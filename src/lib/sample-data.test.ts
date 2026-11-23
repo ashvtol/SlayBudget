@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { sampleSeed } from './sample-data';
+import { createMemoryIpc } from './ipc';
 
 const TODAY = new Date(2026, 10, 21); // Nov 21, 2026
 
@@ -51,5 +52,12 @@ describe('sampleSeed', () => {
       expect(t.txType).toBe(kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'regular');
     }
   });
-});
 
+  it('has a bill at a new price to ask about (Equinox went from $55 to $89 this month)', async () => {
+    const equinox = txs.filter((t) => t.merchant === 'Equinox').sort((a, b) => a.postedOn.localeCompare(b.postedOn));
+    expect(equinox.at(-1)!.amountCents).toBe(-8900);
+    expect(equinox.at(-2)!.amountCents).toBe(-5500);
+    const checks = await createMemoryIpc(sampleSeed(TODAY)).priceChecks();
+    expect(checks.map((c) => [c.oldCents, c.newCents, c.direction])).toEqual([[5500, 8900, 'up']]);
+  });
+});

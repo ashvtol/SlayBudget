@@ -1,5 +1,6 @@
 // npm run release -- 0.2.0
-// Dates the changelog (moving Unreleased notes under the new version), bumps the version everywhere, and commits.
+// Dates the changelog (moving Unreleased notes under the new version), bumps the version everywhere, refreshes the
+// built-in exchange rates, and commits.
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { bumpVersions, promoteChangelog } from './release-lib.ts';
@@ -51,6 +52,13 @@ try {
   console.warn('release: could not refresh Cargo.lock offline; the next build will.');
 }
 
-git('add', ...Object.values(paths), 'Cargo.lock');
+// The exchange rates built into the app: the ECB's latest monthly averages (the app itself never goes online for them).
+try {
+  execFileSync('node', ['scripts/fx-rates.ts'], { stdio: 'inherit' });
+} catch {
+  console.warn('release: could not refresh the built-in exchange rates (offline?); the previous ones ship.');
+}
+
+git('add', ...Object.values(paths), 'Cargo.lock', 'crates/core/data/fx-monthly.csv');
 git('commit', '-m', `release: v${version}`);
 console.log(`Released v${version} on main. Next: npm run check, then npm run publish:github -- --tag`);

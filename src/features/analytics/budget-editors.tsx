@@ -6,6 +6,8 @@ import { Modal } from '@/features/recurrings/recurring-form';
 import { ipc } from '@/lib/ipc';
 import { proposeRebalance, type RebalanceLine } from '@/lib/budget-plan';
 import type { BudgetPlan, Category, RebalanceScope } from '@/lib/types';
+import { Select } from '@/components/select';
+import { Button } from '@/components/button';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -73,37 +75,25 @@ export function BudgetEditor({ category, plan, thisMonth, rolloversOn, onSaved }
   return (
     <section aria-label="Edit budget" className="flex flex-col gap-2.5 rounded-[10px] border p-4" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
       <div className="flex flex-wrap items-center gap-2">
-        <select
-          aria-label="Budget period"
-          value={mode === 'all' ? 'Same budget for all months' : 'Different budgets per month'}
-          onChange={(e) => {
+        <Select aria-label="Budget period" value={mode === 'all' ? 'Same budget for all months' : 'Different budgets per month'} onChange={(e) => {
             const next = e.target.value === 'Same budget for all months' ? 'all' : 'month';
             setMode(next);
             setAmount(dollars(next === 'all' ? category.budgetCents : budgetIn(month)));
-          }}
-          className={fieldClass}
-          style={fieldStyle}
-        >
+          }}>
           <option>Same budget for all months</option>
           <option>Different budgets per month</option>
-        </select>
+        </Select>
         {mode === 'month' && (
-          <select
-            aria-label="Month"
-            value={month}
-            onChange={(e) => {
+          <Select aria-label="Month" value={month} onChange={(e) => {
               setMonth(e.target.value);
               setAmount(dollars(budgetIn(e.target.value)));
-            }}
-            className={fieldClass}
-            style={fieldStyle}
-          >
+            }}>
             {months.map((m) => (
               <option key={m} value={m}>
                 {monthLabel(m)}
               </option>
             ))}
-          </select>
+          </Select>
         )}
       </div>
       <div className="flex items-center gap-2">
@@ -244,9 +234,9 @@ export function RebalanceDialog({ lines, categories, colorOf, thisMonth, onClose
         <p role="alert" className="m-0 mt-3 text-[12px]" style={{ color: 'var(--neg)' }}>{error}</p>
       )}
       <div className="mt-5 flex justify-end gap-2 border-t pt-4" style={{ borderColor: 'var(--line)' }}>
-        <button type="button" onClick={onClose} className="h-[28px] rounded-md border px-3 text-[12px] font-semibold" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+        <Button onClick={onClose}>
           Cancel
-        </button>
+        </Button>
         <button type="button" disabled={changes.length === 0} onClick={() => void save()} className={saveClass} style={saveStyle}>
           Save
         </button>

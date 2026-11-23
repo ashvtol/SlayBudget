@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { formatSignedMoney, shortDate } from '@/lib/format';
 import type { AccountChoice, AccountType, NeedsAccount, Source, Tag } from '@/lib/types';
+import { Select } from '@/components/select';
+import { SegmentedControl } from '@/components/segmented-control';
+import { Button } from '@/components/button';
 
 const TYPES: [AccountType, string][] = [
   ['card', 'Card'],
@@ -47,8 +50,7 @@ export function WhichAccount({
   const [tagId, setTagId] = useState<number | null>(null);
   const [remember, setRemember] = useState(true);
   const title = `Which account is ${fileName}?`;
-  const field = 'h-[28px] rounded-md border bg-transparent px-2 text-[12px]';
-  const fieldStyle = { borderColor: 'var(--line-strong)', color: 'var(--text)' };
+  const field = 'field';
 
   const submit = () =>
     onAnswer(
@@ -90,26 +92,15 @@ export function WhichAccount({
       </div>
       {picked === 'new' && (
         <div className="flex flex-wrap items-center gap-2">
-          <input aria-label="Account name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className={`${field} w-[180px]`} style={fieldStyle} />
-          <input aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Bank" className={`${field} w-[140px]`} style={fieldStyle} />
-          <div role="radiogroup" aria-label="Type" className="flex rounded-md border p-0.5" style={{ borderColor: 'var(--line-strong)' }}>
-            {TYPES.map(([value, label]) => (
-              <label
-                key={value}
-                className="flex cursor-pointer items-center rounded px-2 py-0.5 text-[12px]"
-                style={type === value ? { background: 'color-mix(in srgb, var(--accent) 22%, transparent)', color: 'var(--accent)', fontWeight: 600 } : { color: 'var(--muted)' }}
-              >
-                <input type="radio" className="sr-only" name={`type-${fileName}`} checked={type === value} onChange={() => setType(value)} aria-label={label} />
-                {label}
-              </label>
-            ))}
-          </div>
-          <select aria-label="Default tag" value={tagId ?? ''} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : null)} className={field} style={fieldStyle}>
+          <input aria-label="Account name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" className={`${field} w-[180px]`} />
+          <input aria-label="Bank" value={bank} onChange={(e) => setBank(e.target.value)} placeholder="Bank" className={`${field} w-[140px]`} />
+          <SegmentedControl aria-label="Type" options={TYPES.map(([id, label]) => ({ id, label }))} value={type} onChange={setType} />
+          <Select aria-label="Default tag" value={tagId ?? ''} onChange={(e) => setTagId(e.target.value ? Number(e.target.value) : null)}>
             <option value="">No default tag</option>
             {tags.map((t) => (
               <option key={t.id} value={t.id}>{t.name}</option>
             ))}
-          </select>
+          </Select>
         </div>
       )}
       <div className="flex items-center justify-between gap-3">
@@ -118,18 +109,12 @@ export function WhichAccount({
           Remember for files like this
         </label>
         <div className="flex gap-2">
-          <button type="button" onClick={onSkip} className="h-[28px] rounded-md border px-3 text-[12px] font-semibold" style={{ borderColor: 'var(--line-strong)', color: 'var(--text)' }}>
+          <Button onClick={onSkip}>
             Skip
-          </button>
-          <button
-            type="button"
-            disabled={picked === 'new' && !name.trim()}
-            onClick={submit}
-            className="h-[28px] rounded-md px-3 text-[12px] font-semibold disabled:opacity-50"
-            style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}
-          >
+          </Button>
+          <Button variant="primary" disabled={picked === 'new' && !name.trim()} onClick={submit}>
             Import
-          </button>
+          </Button>
         </div>
       </div>
     </section>

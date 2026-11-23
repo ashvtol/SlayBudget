@@ -6,6 +6,7 @@ import type { ImportReport } from '@/lib/types';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { ImportPage } from './import-page';
 import { useBackgroundImports } from './background-imports';
+import { useNavStore } from '@/lib/stores/nav-store';
 import type { ImportDeps } from './run-imports';
 
 afterEach(() => cleanup());
@@ -127,6 +128,21 @@ describe('ImportPage: statements found in the background', () => {
     await user.click(within(ask).getByRole('button', { name: 'Import' }));
     expect(answer).toHaveBeenCalledWith('/Users/me/Downloads/Chase7781_Activity.csv', { kind: 'existing', sourceId: 1, remember: true });
     useBackgroundImports.setState({ waiting: [] });
+  });
+});
+
+describe('ImportPage: keeping statements organized', () => {
+  it('explains account folders with an example and opens Settings > Accounts to set them up', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    useNavStore.setState({ settingsOpen: false, settingsPane: null });
+    render(<ImportPage deps={deps()} />);
+    const guide = screen.getByRole('region', { name: 'Keep statements organized' });
+    expect(guide).toHaveTextContent('Give each account its own folder');
+    expect(within(guide).getByRole('img', { name: /Example folders/ })).toHaveTextContent('Amex Gold/');
+    expect(guide).toHaveTextContent('default tag');
+    await user.click(within(guide).getByRole('button', { name: 'Set up folders' }));
+    expect(useNavStore.getState()).toMatchObject({ settingsOpen: true, settingsPane: 'accounts' });
   });
 });
 

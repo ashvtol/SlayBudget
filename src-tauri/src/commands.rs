@@ -160,7 +160,12 @@ pub fn get_setting(state: State<'_, AppState>, key: String) -> IpcResult<Option<
 
 #[tauri::command]
 pub fn set_setting(state: State<'_, AppState>, key: String, value: String) -> IpcResult<()> {
-    Ok(settings::set(&lock(&state), &key, &value)?)
+    let conn = lock(&state);
+    settings::set(&conn, &key, &value)?;
+    if matches!(key.as_str(), "display_currency" | "fx_basis") {
+        slaybudget_core::fx::refresh_display(&conn)?;
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -265,6 +270,64 @@ pub struct TransactionDto {
     pub tx_type: TxType,
     pub recurring_id: Option<i64>,
     pub tag_ids: Vec<i64>,
+    /// The amount and currency it was imported in, when it's shown converted.
+    pub original_amount_cents: Option<i64>,
+    pub original_currency: Option<String>,
+}
+
+impl TransactionDto {
+    /// As the screens show it: in the display currency (at its month's rate), keeping the original.
+    pub fn shown(s: &slaybudget_core::fx::Shown, t: Transaction) -> Self {
+        let converted = s.transaction(t.amount_cents, &t.currency, t.posted_on);
+        let differs = t.currency != s.display.currency;
+        let original = differs.then(|| (t.amount_cents, t.currency.clone()));
+        let mut dto = TransactionDto::from(t);
+        if let Some((cents, currency)) = original {
+            dto.amount_cents = converted;
+            dto.currency = s.display.currency.clone();
+            dto.original_amount_cents = Some(cents);
+            dto.original_currency = Some(currency);
+        }
+        dto
+    }
+}
+
+/// Split parts typed in the display currency, in the transaction's own currency (adding up to it exactly).
+fn parts_back(s: &slaybudget_core::fx::Shown, parent: &Transaction, typed: &[i64]) -> Vec<i64> {
+    if parent.currency == s.display.currency {
+        return typed.to_vec();
+    }
+    let mut out: Vec<i64> = typed
+        .iter()
+        .map(|c| {
+            slaybudget_core::fx::from_display(&s.display, *c, &parent.currency, parent.posted_on)
+        })
+        .collect();
+    if let Some(last) = out.len().checked_sub(1) {
+        let rest: i64 = out[..last].iter().sum();
+        out[last] = parent.amount_cents - rest;
+    }
+    out
+}
+
+/// A recurring bill's amounts, shown.
+fn recurring_shown(s: &slaybudget_core::fx::Shown, mut r: Recurring) -> Recurring {
+    r.typical_amount_cents = s.charge(r.typical_amount_cents);
+    if let Some(saved) = r.saved.as_mut() {
+        saved.min_cents = s.charge(saved.min_cents);
+        saved.max_cents = s.charge(saved.max_cents);
+    }
+    r
+}
+fn rule_shown(s: &slaybudget_core::fx::Shown, mut r: NewRecurring) -> NewRecurring {
+    r.min_cents = s.charge(r.min_cents);
+    r.max_cents = s.charge(r.max_cents);
+    r
+}
+fn rule_back(s: &slaybudget_core::fx::Shown, mut r: NewRecurring) -> NewRecurring {
+    r.min_cents = s.charge_back(r.min_cents);
+    r.max_cents = s.charge_back(r.max_cents);
+    r
 }
 
 impl From<Transaction> for TransactionDto {
@@ -286,6 +349,8 @@ impl From<Transaction> for TransactionDto {
             tx_type: t.tx_type,
             recurring_id: t.recurring_id,
             tag_ids: t.tag_ids,
+            original_amount_cents: None,
+            original_currency: None,
         }
     }
 }
@@ -332,7 +397,11 @@ pub fn list_transactions(
 ) -> IpcResult<Vec<TransactionDto>> {
     let filter = filter.into_core()?;
     let rows = transactions::list(&lock(&state), &filter)?;
-    Ok(rows.into_iter().map(TransactionDto::from).collect())
+    let shown = slaybudget_core::fx::Shown::of(&lock(&state));
+    Ok(rows
+        .into_iter()
+        .map(|t| TransactionDto::shown(&shown, t))
+        .collect())
 }
 
 #[tauri::command]
@@ -382,6 +451,17 @@ pub fn split_transaction(
         })
         .collect();
     recorded(&state, "Split Transaction".to_string(), |c| {
+        let parent = transactions::get(c, id)?;
+        let shown = slaybudget_core::fx::Shown::of(c);
+        let typed: Vec<i64> = parts.iter().map(|p| p.amount_cents).collect();
+        let parts: Vec<transactions::SplitPart> = parts
+            .iter()
+            .zip(parts_back(&shown, &parent, &typed))
+            .map(|(p, amount_cents)| transactions::SplitPart {
+                amount_cents,
+                ..p.clone()
+            })
+            .collect();
         transactions::split(c, id, &parts)
     })
 }
@@ -396,7 +476,11 @@ pub fn unsplit_transaction(state: State<'_, AppState>, id: i64) -> IpcResult<()>
 #[tauri::command]
 pub fn transaction_children(state: State<'_, AppState>, id: i64) -> IpcResult<Vec<TransactionDto>> {
     let rows = transactions::children(&lock(&state), id)?;
-    Ok(rows.into_iter().map(TransactionDto::from).collect())
+    let shown = slaybudget_core::fx::Shown::of(&lock(&state));
+    Ok(rows
+        .into_iter()
+        .map(|t| TransactionDto::shown(&shown, t))
+        .collect())
 }
 
 // ---------- categories ----------
@@ -504,9 +588,15 @@ pub fn list_category_groups(state: State<'_, AppState>) -> IpcResult<Vec<GroupDt
 
 #[tauri::command]
 pub fn list_categories(state: State<'_, AppState>) -> IpcResult<Vec<CategoryDto>> {
-    Ok(categories::list(&lock(&state))?
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(categories::list(&conn)?
         .into_iter()
-        .map(CategoryDto::from)
+        .map(|c| {
+            let mut dto = CategoryDto::from(c);
+            dto.budget_cents = dto.budget_cents.map(|b| shown.budget(b));
+            dto
+        })
         .collect())
 }
 
@@ -578,6 +668,9 @@ pub fn update_category(state: State<'_, AppState>, id: i64, patch: CatPatchDto) 
         group_id: None,
     };
     recorded(&state, "Edit Category".to_string(), |c| {
+        if core.budget_cents.is_some() {
+            budget_plan_core::adopt_display_currency(c)?;
+        }
         categories::update(c, id, &core)
     })
 }
@@ -821,7 +914,12 @@ pub fn list_recurring(
     state: State<'_, AppState>,
     profile_id: Option<i64>,
 ) -> IpcResult<Vec<Recurring>> {
-    Ok(recurring::list_recurring(&lock(&state), profile_id)?)
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(recurring::list_recurring(&conn, profile_id)?
+        .into_iter()
+        .map(|r| recurring_shown(&shown, r))
+        .collect())
 }
 
 #[tauri::command]
@@ -830,11 +928,12 @@ pub fn analytics_recurring(
     profile_id: Option<i64>,
     today: String,
 ) -> IpcResult<Vec<Recurring>> {
-    Ok(recurring::upcoming(
-        &lock(&state),
-        profile_id,
-        parse_date(&today)?,
-    )?)
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(recurring::upcoming(&conn, profile_id, parse_date(&today)?)?
+        .into_iter()
+        .map(|r| recurring_shown(&shown, r))
+        .collect())
 }
 
 // ---------- fx ----------
@@ -918,7 +1017,11 @@ pub fn search_transactions(
 ) -> IpcResult<Vec<TransactionDto>> {
     let parsed = parser::parse(&query, parse_date(&today)?);
     let rows = search::search(&lock(&state), profile_id, &parsed, limit.unwrap_or(100))?;
-    Ok(rows.into_iter().map(TransactionDto::from).collect())
+    let shown = slaybudget_core::fx::Shown::of(&lock(&state));
+    Ok(rows
+        .into_iter()
+        .map(|t| TransactionDto::shown(&shown, t))
+        .collect())
 }
 
 // ---------- watched folder ----------
@@ -1039,11 +1142,13 @@ pub fn preview_recategorize(
     target: Target,
     category_id: i64,
 ) -> IpcResult<Vec<RecatMatchDto>> {
-    let rows = recategorize::preview(&lock(&state), &target, category_id)?;
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    let rows = recategorize::preview(&conn, &target, category_id)?;
     Ok(rows
         .into_iter()
         .map(|m| RecatMatchDto {
-            transaction: TransactionDto::from(m.transaction),
+            transaction: TransactionDto::shown(&shown, m.transaction),
             similar: m.similar,
             locked: m.locked,
         })
@@ -1177,17 +1282,25 @@ pub fn recurring_suggestions(
     state: State<'_, AppState>,
     profile_id: Option<i64>,
 ) -> IpcResult<Vec<Recurring>> {
-    Ok(recurrings::suggestions(&lock(&state), profile_id)?)
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(recurrings::suggestions(&conn, profile_id)?
+        .into_iter()
+        .map(|r| recurring_shown(&shown, r))
+        .collect())
 }
 
 #[tauri::command]
 pub fn preview_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcResult<i64> {
-    Ok(recurrings::preview_count(&lock(&state), &rule)?)
+    let conn = lock(&state);
+    let rule = rule_back(&slaybudget_core::fx::Shown::of(&conn), rule);
+    Ok(recurrings::preview_count(&conn, &rule)?)
 }
 
 #[tauri::command]
 pub fn create_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcResult<i64> {
     recorded(&state, "New Recurring".to_string(), |c| {
+        let rule = rule_back(&slaybudget_core::fx::Shown::of(c), rule);
         recurrings::create(c, &rule)
     })
 }
@@ -1199,6 +1312,7 @@ pub fn update_recurring(
     rule: NewRecurring,
 ) -> IpcResult<MatchReport> {
     recorded(&state, "Edit Recurring".to_string(), |c| {
+        let rule = rule_back(&slaybudget_core::fx::Shown::of(c), rule);
         recurrings::update(c, id, &rule)
     })
 }
@@ -1230,16 +1344,127 @@ pub fn unlink_recurring(state: State<'_, AppState>, transaction_id: i64) -> IpcR
 
 #[tauri::command]
 pub fn draft_recurring(state: State<'_, AppState>, transaction_id: i64) -> IpcResult<NewRecurring> {
-    Ok(recurrings::draft_from_transaction(
-        &lock(&state),
-        transaction_id,
-    )?)
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(rule_shown(
+        &shown,
+        recurrings::draft_from_transaction(&conn, transaction_id)?,
+    ))
 }
 
 #[tauri::command]
 pub fn dismiss_suggestion(state: State<'_, AppState>, merchant: String) -> IpcResult<()> {
     recorded(&state, "Dismiss Suggestion".to_string(), |c| {
         recurrings::dismiss(c, &merchant)
+    })
+}
+
+// ----- price changes -----
+
+use slaybudget_core::price_changes::{self, Answer as PriceAnswer, PriceChange, PriceCheck};
+
+fn check_shown(s: &slaybudget_core::fx::Shown, mut c: PriceCheck) -> PriceCheck {
+    c.old_cents = s.charge(c.old_cents);
+    c.new_cents = s.charge(c.new_cents);
+    c
+}
+fn change_shown(s: &slaybudget_core::fx::Shown, mut c: PriceChange) -> PriceChange {
+    c.from_cents = s.charge(c.from_cents);
+    c.to_cents = s.charge(c.to_cents);
+    c
+}
+
+/// A bill's latest price change, for the Recurrings page.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BillPriceChange {
+    pub recurring_id: i64,
+    #[serde(flatten)]
+    pub change: PriceChange,
+}
+
+/// Charges that may be a bill at a new price, waiting for an answer.
+#[tauri::command]
+pub fn price_checks(state: State<'_, AppState>) -> IpcResult<Vec<PriceCheck>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(price_changes::open_checks(&conn)?
+        .into_iter()
+        .map(|c| check_shown(&shown, c))
+        .collect())
+}
+
+#[tauri::command]
+pub fn price_check_for(
+    state: State<'_, AppState>,
+    transaction_id: i64,
+) -> IpcResult<Option<PriceCheck>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(price_changes::for_transaction(&conn, transaction_id)?.map(|c| check_shown(&shown, c)))
+}
+
+/// Answer "Is this the same subscription at a new price?"; "separate" returns the form for its own bill.
+#[tauri::command]
+pub fn answer_price_check(
+    state: State<'_, AppState>,
+    id: i64,
+    answer: PriceAnswer,
+) -> IpcResult<Option<NewRecurring>> {
+    let label = match answer {
+        PriceAnswer::NewPrice => "New Price",
+        PriceAnswer::OneOff => "One-Off Charge",
+        PriceAnswer::Separate => "Separate Subscription",
+    };
+    recorded(&state, label.to_string(), |c| {
+        let draft = price_changes::answer(c, id, answer)?;
+        let shown = slaybudget_core::fx::Shown::of(c);
+        Ok(draft.map(|d| rule_shown(&shown, d)))
+    })
+}
+
+#[tauri::command]
+pub fn price_history(state: State<'_, AppState>, recurring_id: i64) -> IpcResult<Vec<PriceChange>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(price_changes::history(&conn, recurring_id)?
+        .into_iter()
+        .map(|c| change_shown(&shown, c))
+        .collect())
+}
+
+#[tauri::command]
+pub fn latest_price_changes(state: State<'_, AppState>) -> IpcResult<Vec<BillPriceChange>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(price_changes::latest_changes(&conn)?
+        .into_iter()
+        .map(|(recurring_id, c)| BillPriceChange {
+            recurring_id,
+            change: change_shown(&shown, c),
+        })
+        .collect())
+}
+
+/// Pairs of bills (older first) that look like the same subscription.
+#[tauri::command]
+pub fn look_alike_recurrings(state: State<'_, AppState>) -> IpcResult<Vec<(i64, i64)>> {
+    let conn = lock(&state);
+    Ok(price_changes::look_alikes(&conn)?)
+}
+
+/// Merge two bills into the older one; returns the bill kept.
+#[tauri::command]
+pub fn merge_recurrings(state: State<'_, AppState>, a: i64, b: i64) -> IpcResult<i64> {
+    recorded(&state, "Merge Recurrings".to_string(), |c| {
+        price_changes::merge(c, a, b)
+    })
+}
+
+#[tauri::command]
+pub fn keep_recurrings_apart(state: State<'_, AppState>, a: i64, b: i64) -> IpcResult<()> {
+    recorded(&state, "Not the Same Subscription".to_string(), |c| {
+        price_changes::keep_apart(c, a, b)
     })
 }
 
@@ -1325,7 +1550,16 @@ use slaybudget_core::budgets::{self as budget_plan_core, BudgetPlan, RebalanceSc
 
 #[tauri::command]
 pub fn budget_plan(state: State<'_, AppState>) -> IpcResult<BudgetPlan> {
-    Ok(budget_plan_core::plan(&lock(&state))?)
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    let mut plan = budget_plan_core::plan(&conn)?;
+    for m in &mut plan.months {
+        m.amount_cents = shown.budget(m.amount_cents);
+    }
+    for g in &mut plan.groups {
+        g.amount_cents = shown.budget(g.amount_cents);
+    }
+    Ok(plan)
 }
 
 #[tauri::command]
@@ -1336,7 +1570,7 @@ pub fn set_budget(
     amount_cents: Option<i64>,
 ) -> IpcResult<()> {
     recorded(&state, "Change Budget".to_string(), |c| {
-        budget_plan_core::set_budget(c, category_id, month.as_deref(), amount_cents)
+        budget_plan_core::set_budget_shown(c, category_id, month.as_deref(), amount_cents)
     })
 }
 
@@ -1347,6 +1581,7 @@ pub fn set_group_budget(
     amount_cents: Option<i64>,
 ) -> IpcResult<()> {
     recorded(&state, "Change Budget".to_string(), |c| {
+        budget_plan_core::adopt_display_currency(c)?;
         budget_plan_core::set_group_budget(c, group_id, amount_cents)
     })
 }
@@ -1381,6 +1616,7 @@ pub fn apply_rebalance(
         .map(|c| (c.category_id, c.amount_cents))
         .collect();
     recorded(&state, "Rebalance Budgets".to_string(), |c| {
+        budget_plan_core::adopt_display_currency(c)?;
         budget_plan_core::apply_rebalance(c, &pairs, scope, &month)
     })
 }
@@ -1718,6 +1954,25 @@ pub fn read_statement(
     Ok(tauri::ipc::Response::new(bytes))
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FxInfoDto {
+    /// Currencies the built-in rates cover (the euro included).
+    pub currencies: Vec<String>,
+    /// The last month they cover ("2026-10").
+    pub latest_month: String,
+}
+
+/// The built-in exchange rates: which currencies, and how recent.
+#[tauri::command]
+pub fn fx_info() -> FxInfoDto {
+    let rates = slaybudget_core::fx::builtin();
+    FxInfoDto {
+        currencies: rates.currencies(),
+        latest_month: rates.latest_month().to_string(),
+    }
+}
+
 /// Take back the latest change; returns what was undone (None when there's nothing to undo).
 #[tauri::command]
 pub fn undo(state: State<'_, AppState>) -> IpcResult<Option<String>> {
@@ -1846,6 +2101,9 @@ mod undo_tests {
                 "::ungroup",
                 "::save_or_replace",
                 "::bulk_update",
+                "::answer",
+                "::merge",
+                "::keep_apart",
             ]
             .iter()
             .any(|w| body.contains(w));
@@ -1856,6 +2114,85 @@ mod undo_tests {
         assert!(
             missing.is_empty(),
             "changes data but isn't recorded for undo: {missing:?}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod currency_tests {
+    use super::*;
+    use slaybudget_core::fx::{Basis, Display, Shown};
+
+    fn shown(currency: &str) -> Shown {
+        Shown {
+            display: Display {
+                currency: currency.into(),
+                basis: Basis::Month,
+            },
+            budget_currency: "USD".into(),
+            base_currency: "USD".into(),
+        }
+    }
+    fn tx(cents: i64) -> Transaction {
+        Transaction {
+            id: 1,
+            profile_id: 1,
+            source_id: 1,
+            posted_on: chrono::NaiveDate::from_ymd_opt(2026, 10, 3).unwrap(),
+            description: "UBER".into(),
+            merchant: "uber".into(),
+            amount_cents: cents,
+            currency: "USD".into(),
+            category_id: None,
+            category_locked: false,
+            reviewed: false,
+            notes: None,
+            refund_of: None,
+            parent_id: None,
+            tx_type: TxType::Regular,
+            recurring_id: None,
+            tag_ids: vec![],
+        }
+    }
+
+    #[test]
+    fn a_transaction_shows_in_the_display_currency_and_keeps_its_original() {
+        let plain = TransactionDto::shown(&shown("USD"), tx(-1240));
+        assert_eq!(
+            (
+                plain.amount_cents,
+                plain.currency.as_str(),
+                plain.original_amount_cents
+            ),
+            (-1240, "USD", None)
+        );
+        let rate = slaybudget_core::fx::builtin()
+            .rate("USD", "INR", "2026-10")
+            .unwrap();
+        let inr = TransactionDto::shown(&shown("INR"), tx(-1240));
+        assert_eq!(inr.amount_cents, (-1240.0 * rate).round() as i64);
+        assert_eq!(inr.currency, "INR");
+        assert_eq!(
+            (inr.original_amount_cents, inr.original_currency.as_deref()),
+            (Some(-1240), Some("USD"))
+        );
+    }
+
+    #[test]
+    fn split_parts_typed_in_the_display_currency_add_up_to_the_original() {
+        let parent = tx(-10_000);
+        let s = shown("INR");
+        let shown_total = TransactionDto::shown(&s, parent.clone()).amount_cents;
+        let typed = vec![
+            shown_total / 3,
+            shown_total / 3,
+            shown_total - 2 * (shown_total / 3),
+        ];
+        let back = parts_back(&s, &parent, &typed);
+        assert_eq!(back.iter().sum::<i64>(), -10_000);
+        assert_eq!(
+            parts_back(&shown("USD"), &parent, &[-4_000, -6_000]),
+            vec![-4_000, -6_000]
         );
     }
 }

@@ -23,3 +23,8 @@ if (typeof window !== 'undefined' && !window.matchMedia) {
     },
   })) as unknown as typeof window.matchMedia;
 }
+
+// Rolling numbers are a visual effect with timing; tests read amounts as they are (the rolling tests turn it on).
+import { useDisplayStore } from '@/lib/stores/display-store';
+import { beforeEach as beforeEachTest } from 'vitest';
+beforeEachTest(() => useDisplayStore.setState({ rolling: false }));

@@ -2,6 +2,8 @@
 
 import type { EChartsOption } from 'echarts';
 import type { ChartTokens } from './tokens';
+import { localeFor } from '@/lib/format';
+import { displayCurrency } from '@/features/currency/currency-store';
 
 export interface BudgetMonth {
   month: string; // YYYY-MM
@@ -17,10 +19,10 @@ export function monthInitial(month: string): string {
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const monthName = (month: string) => `${MONTHS[Number(month.slice(5, 7)) - 1] ?? ''} ${month.slice(0, 4)}`;
-const dollars = (cents: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(cents / 100);
+const dollars = (cents: number) => new Intl.NumberFormat(localeFor(displayCurrency()), { style: 'currency', currency: displayCurrency() }).format(cents / 100);
 
 const wholeDollars = (cents: number) =>
-  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(cents / 100);
+  new Intl.NumberFormat(localeFor(displayCurrency()), { style: 'currency', currency: displayCurrency(), maximumFractionDigits: 0 }).format(cents / 100);
 
 /**
  * Bars: blue with no budget, green under, orange over, yellow for the current

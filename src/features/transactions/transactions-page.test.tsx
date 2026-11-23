@@ -34,7 +34,7 @@ const seed = {
 
 async function renderPage(over: Partial<typeof seed> = {}) {
   setIpc(createMemoryIpc({ ...seed, ...over }));
-  useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0 });
+  useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0, focused: null });
   useProfileStore.setState({ profiles: [], activeProfileId: null });
   render(<TransactionsPage />);
   await screen.findByRole('row', { name: /Whole Foods/ });
@@ -58,6 +58,15 @@ describe('TransactionsPage', () => {
     await user.click(within(list()).getByText('Shell'));
     expect(within(details()).getByRole('heading', { name: 'Shell' })).toBeInTheDocument();
     expect(within(details()).getByRole('button', { name: 'Review' })).toBeInTheDocument();
+  });
+
+  it('opens the transaction a notification points at, even after you clicked another row', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(within(list()).getByText('Whole Foods'));
+    const { openTarget } = await import('@/features/notifications/route');
+    await openTarget({ kind: 'transaction', id: 2 });
+    expect(await within(details()).findByRole('heading', { name: 'Shell' })).toBeInTheDocument();
   });
 
   const openFilter = async (user: ReturnType<typeof userEvent.setup>, item: string) => {
@@ -173,7 +182,7 @@ describe('TransactionsPage', () => {
 
   it('keeps filters when coming back to the screen', async () => {
     setIpc(createMemoryIpc(seed));
-    useTransactionsStore.setState({ transactions: [], filter: { reviewed: false }, sort: 'newest', selected: new Set(), cursor: 0 });
+    useTransactionsStore.setState({ transactions: [], filter: { reviewed: false }, sort: 'newest', selected: new Set(), cursor: 0, focused: null });
     useProfileStore.setState({ profiles: [], activeProfileId: null });
     render(<TransactionsPage />);
     await waitFor(() => expect(listNames()).toEqual(['shell']));
@@ -296,7 +305,7 @@ describe('TransactionsPage tags', () => {
         ],
       }),
     );
-    useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0 });
+    useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0, focused: null });
     useProfileStore.setState({ profiles: [], activeProfileId: null });
     render(<TransactionsPage />);
     await screen.findByRole('row', { name: /Whole Foods/ });

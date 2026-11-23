@@ -1,7 +1,7 @@
 {
   "name": "slaybudget",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -17,7 +17,8 @@
     "publish:github": "node scripts/publish.ts",
     "release:rehearse": "node scripts/rehearse.ts",
     "release:approve": "node scripts/approve.ts",
-    "release:cleanup": "node scripts/cleanup.ts"
+    "release:cleanup": "node scripts/cleanup.ts",
+    "fx:rates": "node scripts/fx-rates.ts"
   },
   "dependencies": {
     "@fontsource-variable/figtree": "^5.3.0",

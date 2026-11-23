@@ -54,13 +54,14 @@ on your own computer, this is it.
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. |
 | 🗂️ **Categories** | 24 months of spending against budget. Click any month to see that month, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. |
-| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. |
+| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
 | 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
+| 💱 **Your currency, offline** | Show every amount in your currency (30+ to choose from): transactions, totals, budgets, charts and bills, each converted at its own month's rate. The European Central Bank's rates are built into the app, so nothing goes online to convert, and your data keeps its original currency. Changing numbers roll like a ticker. |
 | ↩️ **Undo and redo** | ⌘Z takes back your last change and ⇧⌘Z puts it back, 15 steps deep, like any Mac app: a category, a bulk "apply to others", a delete (with its splits and tags), a budget, an import. The Edit menu names the step ("Undo Change Category"). |
 | 🗑️ **Delete and undo imports** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
-| 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price increases, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
+| 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price changes, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
 | ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
 | 👨‍👩‍👧 **Profiles** | Keep household members' accounts separate, or view everything combined. |
 | 🛡️ **Your data, your rules** | One-click database backup, and a rules export that leaves out anything identifying you. |
@@ -141,6 +142,9 @@ on your own computer, this is it.
 </tr>
 </table>
 
+### A subscription changed price? Asked once
+![SlayBudget Recurrings page with Equinox selected, asking "Is this Equinox at a new price? It was $55.00, this is $89.00 (+62%)" with Yes, new price, No, a one-off and A separate subscription](docs/screenshots/price-change.png)
+
 ### Which account is this? Asked once, then remembered
 ![SlayBudget import page asking which account a Chase statement belongs to, showing its dates, first transactions and Chase ending 7781, with existing accounts or a new account with bank, type and default tag](docs/screenshots/which-account.png)
 
@@ -207,6 +211,29 @@ npx tauri build --bundles app        # or build SlayBudget.app
 
 Your data lives in `~/Library/Application Support/dev.ashvtol.slaybudget/slaybudget.db`.
 
+## Organizing statements with folders
+
+You can drop statements in from anywhere: SlayBudget works out the account from what's in the file, or asks you once
+and remembers. If you like folders, give each account its own folder and SlayBudget does the rest:
+
+```text
+Statements/              ← your watched folder (Settings > Import sources)
+├── Amex Gold/           → imported into Amex Gold
+│   └── 2026-11.csv
+└── Citi Checking/       → imported into Citi Checking, tagged "Bills" (its default tag)
+    └── november.pdf
+```
+
+1. Choose a watched folder in **Settings > Import sources**.
+2. In **Settings > Accounts**, click **Create a folder for each account**.
+3. Drop statements into the right folder. SlayBudget checks every couple of minutes and the bell tells you what it
+   imported.
+
+**Folder → account → tag.** The folder decides the account. If that account has a **default tag** (Settings >
+Accounts), everything it imports gets that tag too, so a "Business" card's folder fills up your Business tag on its
+own. A folder whose name doesn't match an account is asked about once, with the folder's name suggested for a new
+account. Files are only read, never moved or changed.
+
 ## FAQ
 
 <details>
@@ -268,6 +295,26 @@ Recent imports, and have SlayBudget make a folder for each account in your watch
 Yes, if you turn it on in Settings > Import sources. Statements you download from then on are imported on their own
 (ones it can't place wait on the Import page), anything that isn't a statement is ignored, and your files are never
 moved or changed.
+</details>
+
+<details>
+<summary><b>Can I see everything in another currency?</b></summary>
+
+Yes. Pick a display currency in Settings > Currency and every amount is shown in it, converted at the average rate of
+its own month (or at the latest rates, if you prefer). The rates are the European Central Bank's monthly averages,
+built into SlayBudget and refreshed with each update, so converting never goes online. Your data keeps the currency
+it was imported in, and a converted transaction shows what it originally was.
+</details>
+
+<details>
+<summary><b>A subscription changed price. Does SlayBudget notice?</b></summary>
+
+Yes. A saved bill claims charges near its usual amount. When a charge from the same merchant comes in well above or
+below that (an upgrade, a downgrade, a new plan), SlayBudget asks once: "Is this Netflix at a new price?" Say **Yes,
+new price** and the bill follows the new amount and due day, keeping a price history; **No, a one-off** leaves the
+bill alone; **A separate subscription** makes it its own bill. The question shows on the charge, on the bill in
+Recurrings and in the bell. If you end up with two bills for the same subscription, Recurrings offers to merge them
+(⌘Z undoes it).
 </details>
 
 <details>

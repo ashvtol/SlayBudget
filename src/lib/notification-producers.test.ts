@@ -93,3 +93,33 @@ describe('memory IPC notification producers', () => {
     expect(await dupes(make('kept'))).toEqual([]);
   });
 });
+
+describe('memory IPC price-change notifications', () => {
+  const claude = (postedOn: string, cents: number) => tx(postedOn, 'ANTHROPIC CLAUDE', -cents);
+  const setup = (last: [string, number]) => {
+    const steady = [6, 7, 8, 9, 10, 11].map((m) => claude(`2026-${String(m).padStart(2, '0')}-05`, 2211));
+    return createMemoryIpc({ transactions: [...steady, claude(...last)] });
+  };
+  const bodies = async (ipc: Ipc, today: string) => (await ipc.notificationsRefresh(today, false)).map((n) => [n.title, n.body, n.target]);
+
+  it('asks about a possible new price, pointing at the charge', async () => {
+    const ipc = setup(['2026-11-05', 2211]);
+    await ipc.listRecurring(null);
+    await ipc.notificationsRefresh('2026-11-20', true);
+    await ipc.importCsvText(1, 'Statements/Visa/nov.csv', 'Date,Description,Amount\n2026-11-21,ANTHROPIC CLAUDE,-100.18\n', { kind: 'existing', sourceId: 1, remember: false });
+    const [check] = await ipc.priceChecks();
+    expect(await bodies(ipc, '2026-11-22')).toEqual([
+      ['Anthropic Claude may have a new price', '$100.18 (was $22.11)', { kind: 'transaction', id: check.txId }],
+    ]);
+  });
+
+  it('says when a confirmed price went down', async () => {
+    const ipc = setup(['2026-11-20', 1000]);
+    await ipc.notificationsRefresh('2026-11-19', true);
+    await ipc.answerPriceCheck((await ipc.priceChecks())[0].id, 'new_price');
+    const rid = (await ipc.listRecurring(null))[0].saved!.id;
+    expect(await bodies(ipc, '2026-11-21')).toEqual([
+      ['Anthropic Claude went down', 'From $22.11 to $10.00 (-55%)', { kind: 'recurring', id: rid }],
+    ]);
+  });
+});

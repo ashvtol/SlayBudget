@@ -1,10 +1,9 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
-
-const rates = vi.hoisted(() => ({ syncRates: vi.fn(async () => 0) }));
-vi.mock('./rates', () => rates);
 import { createMemoryIpc, ipc, setIpc } from '@/lib/ipc';
+import { builtinRates } from '@/lib/fx';
+import { useNavStore } from '@/lib/stores/nav-store';
 import { useCurrencyStore } from './currency-store';
 import { CurrencyPane } from './currency-pane';
 
@@ -12,41 +11,41 @@ afterEach(() => cleanup());
 
 async function renderPane() {
   setIpc(createMemoryIpc());
-  useCurrencyStore.setState({ displayCurrency: 'USD', basis: 'transactionDate', loaded: false });
+  useCurrencyStore.setState({ displayCurrency: 'USD', basis: 'monthAverage', loaded: false });
   render(<CurrencyPane />);
   await waitFor(() => expect(useCurrencyStore.getState().loaded).toBe(true));
 }
 
 describe('CurrencyPane', () => {
-  it('persists the chosen display currency and enables the basis options', async () => {
+  it('offers every built-in currency, saves the choice and refreshes what you see', async () => {
     const user = userEvent.setup();
     await renderPane();
-    // basis disabled while display currency matches statement currency
-    expect(screen.getByRole('radio', { name: /Transaction date/ })).toBeDisabled();
-    await user.selectOptions(screen.getByLabelText('Display currency'), 'INR');
+    const select = screen.getByRole('combobox', { name: 'Display currency' });
+    await waitFor(() => expect(select.querySelectorAll('option').length).toBe(builtinRates().currencies().length));
+    expect(screen.getByRole('radio', { name: /Month of each transaction/ })).toBeDisabled();
+    const tick = useNavStore.getState().refreshTick;
+    await user.selectOptions(select, 'INR');
     await waitFor(() => expect(ipc().getSetting('display_currency')).resolves.toBe('INR'));
-    expect(screen.getByRole('radio', { name: /Transaction date/ })).toBeEnabled();
+    expect(useNavStore.getState().refreshTick).toBeGreaterThan(tick);
+    expect(screen.getByRole('radio', { name: /Month of each transaction/ })).toBeEnabled();
   });
 
-  it('saves the conversion basis', async () => {
+  it('has two bases, month of each transaction and latest rates', async () => {
     const user = userEvent.setup();
     await renderPane();
-    await user.selectOptions(screen.getByLabelText('Display currency'), 'EUR');
-    await user.click(screen.getByRole('radio', { name: /Monthly average/ }));
-    await waitFor(() => expect(ipc().getSetting('fx_basis')).resolves.toBe('monthAverage'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Display currency' }), 'EUR');
+    expect(screen.getAllByRole('radio')).toHaveLength(2);
+    await user.click(screen.getByRole('radio', { name: /Latest rates/ }));
+    await waitFor(() => expect(ipc().getSetting('fx_basis')).resolves.toBe('latest'));
   });
-});
 
-describe('CurrencyPane rate range', () => {
-  it("asks for rates up to today's local date, even late in the evening", async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date(2026, 10, 21, 23, 30)); // already the 22nd in UTC west of Greenwich
-    const user = userEvent.setup();
+  it('says how recent the built-in rates are, and never fetches any', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
     await renderPane();
-    await user.selectOptions(screen.getByLabelText('Display currency'), 'EUR');
-    await user.click(screen.getByRole('button', { name: /rates/i }));
-    await waitFor(() => expect(rates.syncRates).toHaveBeenCalled());
-    expect(rates.syncRates).toHaveBeenCalledWith('USD', 'EUR', '2025-11-21', '2026-11-21');
-    vi.useRealTimers();
+    const month = new Date(`${builtinRates().latestMonth()}-01T00:00:00`).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    expect(await screen.findByText(new RegExp(`Rates through ${month}`))).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Update rates/ })).not.toBeInTheDocument();
+    expect(fetchSpy).not.toHaveBeenCalled();
+    fetchSpy.mockRestore();
   });
 });

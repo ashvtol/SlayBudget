@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { isTauri } from '@/lib/tauri-ipc';
 import { Switch } from '@/components/switch';
+import { Button } from '@/components/button';
 
 const KEY_WATCHED = 'watched_folder';
 
@@ -62,13 +63,13 @@ export function ImportSourcesPane() {
           />
           {isTauri() ? (
             <>
-              <button type="button" onClick={() => void pick()} className="min-h-9 rounded-lg px-3 text-sm font-medium" style={{ background: 'var(--accent)', color: 'var(--on-accent)' }}>
+              <Button variant="primary" onClick={() => void pick()}>
                 Choose…
-              </button>
+              </Button>
               {folder && (
-                <button type="button" onClick={() => void clear()} className="min-h-9 rounded-lg px-3 text-sm" style={{ color: 'var(--neg)' }}>
+                <Button variant="destructive" onClick={() => void clear()}>
                   Clear
-                </button>
+                </Button>
               )}
             </>
           ) : (

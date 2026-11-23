@@ -101,11 +101,11 @@ pub struct CategoryTotal {
 /// (transfers, card payments). Uncategorized rows still count.
 /// Income is Income-type rows only.
 pub(crate) const INCOME_SUM: &str =
-    "COALESCE(SUM(CASE WHEN type = 'income' THEN amount_cents ELSE 0 END), 0)";
+    "COALESCE(SUM(CASE WHEN type = 'income' THEN display_cents(amount_cents, currency, posted_on) ELSE 0 END), 0)";
 /// Spending is Regular-type rows, net of refunds (positive Regular rows reduce it).
 /// Transfers count in neither.
 pub(crate) const SPEND_SUM: &str =
-    "COALESCE(SUM(CASE WHEN type = 'regular' THEN -amount_cents ELSE 0 END), 0)";
+    "COALESCE(SUM(CASE WHEN type = 'regular' THEN -display_cents(amount_cents, currency, posted_on) ELSE 0 END), 0)";
 
 pub(crate) const NOT_EXCLUDED: &str =
     "(category_id IS NULL OR category_id NOT IN (SELECT id FROM categories WHERE excluded = 1))";
@@ -173,7 +173,7 @@ pub fn category_totals(
     // children and all other rows. Only Regular rows count; a refund (positive) reduces spend.
     let sql = format!(
         "SELECT category_id,
-                COALESCE(SUM(-amount_cents), 0) AS total,
+                COALESCE(SUM(-display_cents(amount_cents, currency, posted_on)), 0) AS total,
                 COUNT(*) AS n
          FROM transactions t
          WHERE type = 'regular' AND {NOT_EXCLUDED}{where_extra}

@@ -64,7 +64,7 @@ describe('NotificationsPane', () => {
   it('switches bell and banner per kind, and sets quiet hours', async () => {
     const user = userEvent.setup();
     await renderPane();
-    await user.click(within(row('Price went up')).getByRole('switch', { name: 'Banner' }));
+    await user.click(within(row('Price changes')).getByRole('switch', { name: 'Banner' }));
     await waitFor(async () => expect((await saved()).kinds.priceUp).toEqual({ bell: true, banner: false }));
     await user.click(within(row('Monthly recap')).getByRole('switch', { name: 'Bell' }));
     await waitFor(async () => expect((await saved()).kinds.monthlyRecap.bell).toBe(false));

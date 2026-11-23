@@ -36,6 +36,65 @@ impl From<CoreError> for IpcError {
 
 type IpcResult<T> = Result<T, IpcError>;
 
+/// Run one action you took, recorded as one undo step (see `slaybudget_core::undo`).
+fn recorded<T>(
+    state: &State<'_, AppState>,
+    label: String,
+    f: impl FnOnce(&rusqlite::Connection) -> slaybudget_core::error::Result<T>,
+) -> IpcResult<T> {
+    let conn = lock(state);
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let value = stack.record(&conn, &label, f);
+    show_undo_menu(state, &stack);
+    Ok(value?)
+}
+
+/// Keep the Edit menu's "Undo …" and "Redo …" in step with the stack.
+fn show_undo_menu(state: &State<'_, AppState>, stack: &slaybudget_core::undo::UndoStack) {
+    if let Some(menu) = &state.edit_menu {
+        menu.show(&stack.state());
+    }
+}
+
+/// "Change Category" for one row, "Change Category of 3 Transactions" for several.
+fn count_label(what: &str, n: usize) -> String {
+    if n == 1 {
+        return what
+            .strip_suffix(" to")
+            .or(what.strip_suffix(" from"))
+            .unwrap_or(what)
+            .to_string();
+    }
+    let rows = format!("{n} Transactions");
+    match what {
+        "Mark Reviewed" => format!("Mark {rows} Reviewed"),
+        "Mark Unreviewed" => format!("Mark {rows} Unreviewed"),
+        w if w.ends_with(" to") || w.ends_with(" from") => format!("{w} {rows}"),
+        w => format!("{w} of {rows}"),
+    }
+}
+
+/// The Edit menu's name for a transaction edit.
+fn patch_label(patch: &TxPatchDto, n: usize) -> String {
+    let what = if patch.notes.is_some() {
+        "Edit Notes"
+    } else if patch.category_id.is_some() {
+        "Change Category"
+    } else if patch.reviewed == Some(true) {
+        "Mark Reviewed"
+    } else if patch.reviewed == Some(false) {
+        "Mark Unreviewed"
+    } else {
+        "Edit"
+    };
+    count_label(what, n)
+}
+
+/// "amex-nov.csv" from "Statements/Amex/amex-nov.csv".
+fn file_name(path: &str) -> &str {
+    path.rsplit(['/', '\\']).next().unwrap_or(path)
+}
+
 fn lock<'a>(state: &'a State<'a, AppState>) -> std::sync::MutexGuard<'a, rusqlite::Connection> {
     state
         .db
@@ -278,7 +337,9 @@ pub fn count_transactions(state: State<'_, AppState>, filter: FilterDto) -> IpcR
 
 #[tauri::command]
 pub fn update_transaction(state: State<'_, AppState>, id: i64, patch: TxPatchDto) -> IpcResult<()> {
-    Ok(transactions::update(&lock(&state), id, &patch.into_core())?)
+    recorded(&state, patch_label(&patch, 1), |c| {
+        transactions::update(c, id, &patch.into_core())
+    })
 }
 
 #[tauri::command]
@@ -287,11 +348,9 @@ pub fn bulk_update_transactions(
     ids: Vec<i64>,
     patch: TxPatchDto,
 ) -> IpcResult<usize> {
-    Ok(transactions::bulk_update(
-        &lock(&state),
-        &ids,
-        &patch.into_core(),
-    )?)
+    recorded(&state, patch_label(&patch, ids.len()), |c| {
+        transactions::bulk_update(c, &ids, &patch.into_core())
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -316,12 +375,16 @@ pub fn split_transaction(
             description: p.description,
         })
         .collect();
-    Ok(transactions::split(&lock(&state), id, &parts)?)
+    recorded(&state, "Split Transaction".to_string(), |c| {
+        transactions::split(c, id, &parts)
+    })
 }
 
 #[tauri::command]
 pub fn unsplit_transaction(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
-    Ok(transactions::unsplit(&lock(&state), id)?)
+    recorded(&state, "Unsplit Transaction".to_string(), |c| {
+        transactions::unsplit(c, id)
+    })
 }
 
 #[tauri::command]
@@ -452,10 +515,11 @@ pub fn create_category(state: State<'_, AppState>, cat: NewCategoryDto) -> IpcRe
         excluded: cat.excluded,
         kind: parse_kind(cat.kind.as_deref()),
     };
-    let conn = lock(&state);
-    Ok(match cat.group_target {
-        Some(target) => categories::create_in(&conn, &new, target)?,
-        None => categories::create(&conn, &new)?,
+    recorded(&state, "New Category".to_string(), |c| {
+        match cat.group_target {
+            Some(target) => categories::create_in(c, &new, target),
+            None => categories::create(c, &new),
+        }
     })
 }
 
@@ -466,7 +530,9 @@ pub fn category_usage(state: State<'_, AppState>, id: i64) -> IpcResult<i64> {
 
 #[tauri::command]
 pub fn delete_category(state: State<'_, AppState>, id: i64) -> IpcResult<DeleteReport> {
-    Ok(categories::delete(&lock(&state), id)?)
+    recorded(&state, "Delete Category".to_string(), |c| {
+        categories::delete(c, id)
+    })
 }
 
 #[tauri::command]
@@ -475,17 +541,23 @@ pub fn move_category_to_group(
     id: i64,
     target: GroupTarget,
 ) -> IpcResult<()> {
-    Ok(categories::move_to_group(&lock(&state), id, target)?)
+    recorded(&state, "Move Category".to_string(), |c| {
+        categories::move_to_group(c, id, target)
+    })
 }
 
 #[tauri::command]
 pub fn rename_group(state: State<'_, AppState>, id: i64, name: String) -> IpcResult<()> {
-    Ok(categories::rename_group(&lock(&state), id, &name)?)
+    recorded(&state, "Rename Group".to_string(), |c| {
+        categories::rename_group(c, id, &name)
+    })
 }
 
 #[tauri::command]
 pub fn ungroup_group(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
-    Ok(categories::ungroup(&lock(&state), id)?)
+    recorded(&state, "Ungroup".to_string(), |c| {
+        categories::ungroup(c, id)
+    })
 }
 
 #[tauri::command]
@@ -499,7 +571,9 @@ pub fn update_category(state: State<'_, AppState>, id: i64, patch: CatPatchDto) 
         archived: patch.archived,
         group_id: None,
     };
-    Ok(categories::update(&lock(&state), id, &core)?)
+    recorded(&state, "Edit Category".to_string(), |c| {
+        categories::update(c, id, &core)
+    })
 }
 
 // ---------- import ----------
@@ -541,7 +615,10 @@ pub fn import_csv_text(
     path: String,
     text: String,
 ) -> IpcResult<ImportReportDto> {
-    Ok(pipeline::import_csv(&lock(&state), profile_id, &path, &text)?.into())
+    recorded(&state, format!("Import {}", file_name(&path)), |c| {
+        pipeline::import_csv(c, profile_id, &path, &text)
+    })
+    .map(Into::into)
 }
 
 #[tauri::command]
@@ -551,7 +628,10 @@ pub fn import_ofx_text(
     path: String,
     text: String,
 ) -> IpcResult<ImportReportDto> {
-    Ok(pipeline::import_ofx(&lock(&state), profile_id, &path, &text)?.into())
+    recorded(&state, format!("Import {}", file_name(&path)), |c| {
+        pipeline::import_ofx(c, profile_id, &path, &text)
+    })
+    .map(Into::into)
 }
 
 #[derive(Debug, Deserialize)]
@@ -603,7 +683,10 @@ pub fn import_pdf_doc(
         filename: doc.filename,
         today,
     };
-    Ok(pipeline::import_pdf(&lock(&state), profile_id, &path, &pdf, &file_hash)?.into())
+    recorded(&state, format!("Import {}", file_name(&path)), |c| {
+        pipeline::import_pdf(c, profile_id, &path, &pdf, &file_hash)
+    })
+    .map(Into::into)
 }
 
 #[derive(Debug, Serialize)]
@@ -913,7 +996,9 @@ pub fn set_transaction_category(
     id: i64,
     category_id: i64,
 ) -> IpcResult<()> {
-    Ok(recategorize::set_one(&lock(&state), id, category_id)?)
+    recorded(&state, "Change Category".to_string(), |c| {
+        recategorize::set_one(c, id, category_id)
+    })
 }
 
 #[tauri::command]
@@ -939,7 +1024,9 @@ pub fn apply_recategorize(
     ids: Vec<i64>,
     category_id: i64,
 ) -> IpcResult<usize> {
-    Ok(recategorize::apply(&lock(&state), &ids, category_id)?)
+    recorded(&state, count_label("Change Category", ids.len()), |c| {
+        recategorize::apply(c, &ids, category_id)
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -957,19 +1044,21 @@ pub fn save_rule(state: State<'_, AppState>, rule: SaveRuleDto) -> IpcResult<i64
         "contains" => MatchKind::Contains,
         other => return Err(CoreError::Invalid(format!("unknown rule kind {other}")).into()),
     };
-    Ok(rules::save_or_replace(
-        &lock(&state),
-        &NewRule {
-            name: rule.pattern.trim().to_string(),
-            match_kind,
-            pattern: rule.pattern,
-            min_cents: None,
-            max_cents: None,
-            source_id: None,
-            category_id: rule.category_id,
-            priority: 0,
-        },
-    )?)
+    recorded(&state, "Save Rule".to_string(), |c| {
+        rules::save_or_replace(
+            c,
+            &NewRule {
+                name: rule.pattern.trim().to_string(),
+                match_kind,
+                pattern: rule.pattern,
+                min_cents: None,
+                max_cents: None,
+                source_id: None,
+                category_id: rule.category_id,
+                priority: 0,
+            },
+        )
+    })
 }
 
 #[tauri::command]
@@ -1042,7 +1131,9 @@ pub fn set_transaction_type(
     ids: Vec<i64>,
     tx_type: TxType,
 ) -> IpcResult<usize> {
-    Ok(transactions::set_type(&lock(&state), &ids, tx_type)?)
+    recorded(&state, count_label("Change Type", ids.len()), |c| {
+        transactions::set_type(c, &ids, tx_type)
+    })
 }
 
 // ----- saved recurrings -----
@@ -1064,7 +1155,9 @@ pub fn preview_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcR
 
 #[tauri::command]
 pub fn create_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcResult<i64> {
-    Ok(recurrings::create(&lock(&state), &rule)?)
+    recorded(&state, "New Recurring".to_string(), |c| {
+        recurrings::create(c, &rule)
+    })
 }
 
 #[tauri::command]
@@ -1073,7 +1166,9 @@ pub fn update_recurring(
     id: i64,
     rule: NewRecurring,
 ) -> IpcResult<MatchReport> {
-    Ok(recurrings::update(&lock(&state), id, &rule)?)
+    recorded(&state, "Edit Recurring".to_string(), |c| {
+        recurrings::update(c, id, &rule)
+    })
 }
 
 #[tauri::command]
@@ -1082,17 +1177,23 @@ pub fn set_recurring_status(
     id: i64,
     status: RecurringStatus,
 ) -> IpcResult<()> {
-    Ok(recurrings::set_status(&lock(&state), id, status)?)
+    recorded(&state, "Change Recurring Status".to_string(), |c| {
+        recurrings::set_status(c, id, status)
+    })
 }
 
 #[tauri::command]
 pub fn delete_recurring(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
-    Ok(recurrings::delete(&lock(&state), id)?)
+    recorded(&state, "Delete Recurring".to_string(), |c| {
+        recurrings::delete(c, id)
+    })
 }
 
 #[tauri::command]
 pub fn unlink_recurring(state: State<'_, AppState>, transaction_id: i64) -> IpcResult<()> {
-    Ok(recurrings::unlink(&lock(&state), transaction_id)?)
+    recorded(&state, "Not Recurring".to_string(), |c| {
+        recurrings::unlink(c, transaction_id)
+    })
 }
 
 #[tauri::command]
@@ -1105,7 +1206,9 @@ pub fn draft_recurring(state: State<'_, AppState>, transaction_id: i64) -> IpcRe
 
 #[tauri::command]
 pub fn dismiss_suggestion(state: State<'_, AppState>, merchant: String) -> IpcResult<()> {
-    Ok(recurrings::dismiss(&lock(&state), &merchant)?)
+    recorded(&state, "Dismiss Suggestion".to_string(), |c| {
+        recurrings::dismiss(c, &merchant)
+    })
 }
 
 // ---------- tags ----------
@@ -1121,11 +1224,9 @@ pub fn create_tag(
     name: String,
     color: Option<String>,
 ) -> IpcResult<i64> {
-    Ok(slaybudget_core::tags::create(
-        &lock(&state),
-        &name,
-        color.as_deref(),
-    )?)
+    recorded(&state, "New Tag".to_string(), |c| {
+        slaybudget_core::tags::create(c, &name, color.as_deref())
+    })
 }
 
 #[tauri::command]
@@ -1134,17 +1235,23 @@ pub fn update_tag(
     id: i64,
     patch: slaybudget_core::tags::TagPatch,
 ) -> IpcResult<()> {
-    Ok(slaybudget_core::tags::update(&lock(&state), id, &patch)?)
+    recorded(&state, "Edit Tag".to_string(), |c| {
+        slaybudget_core::tags::update(c, id, &patch)
+    })
 }
 
 #[tauri::command]
 pub fn delete_tag(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
-    Ok(slaybudget_core::tags::delete(&lock(&state), id)?)
+    recorded(&state, "Delete Tag".to_string(), |c| {
+        slaybudget_core::tags::delete(c, id)
+    })
 }
 
 #[tauri::command]
 pub fn add_tags(state: State<'_, AppState>, ids: Vec<i64>, tag_ids: Vec<i64>) -> IpcResult<usize> {
-    Ok(slaybudget_core::tags::add(&lock(&state), &ids, &tag_ids)?)
+    recorded(&state, count_label("Add Tag to", ids.len()), |c| {
+        slaybudget_core::tags::add(c, &ids, &tag_ids)
+    })
 }
 
 #[tauri::command]
@@ -1153,11 +1260,9 @@ pub fn remove_tags(
     ids: Vec<i64>,
     tag_ids: Vec<i64>,
 ) -> IpcResult<usize> {
-    Ok(slaybudget_core::tags::remove(
-        &lock(&state),
-        &ids,
-        &tag_ids,
-    )?)
+    recorded(&state, count_label("Remove Tag from", ids.len()), |c| {
+        slaybudget_core::tags::remove(c, &ids, &tag_ids)
+    })
 }
 
 // ---------- statement details ----------
@@ -1198,12 +1303,9 @@ pub fn set_budget(
     month: Option<String>,
     amount_cents: Option<i64>,
 ) -> IpcResult<()> {
-    Ok(budget_plan_core::set_budget(
-        &lock(&state),
-        category_id,
-        month.as_deref(),
-        amount_cents,
-    )?)
+    recorded(&state, "Change Budget".to_string(), |c| {
+        budget_plan_core::set_budget(c, category_id, month.as_deref(), amount_cents)
+    })
 }
 
 #[tauri::command]
@@ -1212,11 +1314,9 @@ pub fn set_group_budget(
     group_id: i64,
     amount_cents: Option<i64>,
 ) -> IpcResult<()> {
-    Ok(budget_plan_core::set_group_budget(
-        &lock(&state),
-        group_id,
-        amount_cents,
-    )?)
+    recorded(&state, "Change Budget".to_string(), |c| {
+        budget_plan_core::set_group_budget(c, group_id, amount_cents)
+    })
 }
 
 #[tauri::command]
@@ -1225,11 +1325,9 @@ pub fn set_rollover(
     category_id: i64,
     since: Option<String>,
 ) -> IpcResult<()> {
-    Ok(budget_plan_core::set_rollover(
-        &lock(&state),
-        category_id,
-        since.as_deref(),
-    )?)
+    recorded(&state, "Change Rollover".to_string(), |c| {
+        budget_plan_core::set_rollover(c, category_id, since.as_deref())
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -1250,12 +1348,9 @@ pub fn apply_rebalance(
         .iter()
         .map(|c| (c.category_id, c.amount_cents))
         .collect();
-    Ok(budget_plan_core::apply_rebalance(
-        &lock(&state),
-        &pairs,
-        scope,
-        &month,
-    )?)
+    recorded(&state, "Rebalance Budgets".to_string(), |c| {
+        budget_plan_core::apply_rebalance(c, &pairs, scope, &month)
+    })
 }
 
 // ----- notification center -----
@@ -1360,9 +1455,15 @@ fn local_stamp() -> String {
 /// Delete transactions after backing the database up (newest 3 "delete" backups kept).
 #[tauri::command]
 pub fn delete_transactions(state: State<'_, AppState>, ids: Vec<i64>) -> IpcResult<usize> {
-    let conn = lock(&state);
-    slaybudget_core::db::backup_before(&conn, "delete", &local_stamp())?;
-    Ok(slaybudget_core::transactions::delete_many(&conn, &ids)?)
+    let label = if ids.len() == 1 {
+        "Delete Transaction".to_string()
+    } else {
+        format!("Delete {} Transactions", ids.len())
+    };
+    recorded(&state, label, |c| {
+        slaybudget_core::db::backup_before(c, "delete", &local_stamp())?;
+        slaybudget_core::transactions::delete_many(c, &ids)
+    })
 }
 
 #[tauri::command]
@@ -1375,9 +1476,17 @@ pub fn list_imports(
 /// Undo an import after backing the database up (newest 3 "undo-import" backups kept).
 #[tauri::command]
 pub fn undo_import(state: State<'_, AppState>, id: i64) -> IpcResult<usize> {
-    let conn = lock(&state);
-    slaybudget_core::db::backup_before(&conn, "undo-import", &local_stamp())?;
-    Ok(slaybudget_core::imports::undo(&conn, id)?)
+    let file: String = {
+        let conn = lock(&state);
+        conn.query_row("SELECT file_name FROM imports WHERE id = ?1", [id], |r| {
+            r.get(0)
+        })
+        .unwrap_or_else(|_| "import".to_string())
+    };
+    recorded(&state, format!("Undo Import {file}"), |c| {
+        slaybudget_core::db::backup_before(c, "undo-import", &local_stamp())?;
+        slaybudget_core::imports::undo(c, id)
+    })
 }
 
 /// The open possible-duplicate flag a transaction is part of, if any.
@@ -1399,11 +1508,155 @@ pub fn resolve_duplicate(
     flag_id: i64,
     resolution: slaybudget_core::duplicates::Resolution,
 ) -> IpcResult<()> {
+    use slaybudget_core::duplicates::Resolution;
+    let label = match resolution {
+        Resolution::Kept => "Not a Duplicate",
+        _ => "Delete Transaction",
+    };
+    recorded(&state, label.to_string(), |c| {
+        if resolution != Resolution::Kept {
+            slaybudget_core::db::backup_before(c, "delete", &local_stamp())?;
+        }
+        slaybudget_core::duplicates::resolve(c, flag_id, resolution)
+    })
+}
+
+/// Take back the latest change; returns what was undone (None when there's nothing to undo).
+#[tauri::command]
+pub fn undo(state: State<'_, AppState>) -> IpcResult<Option<String>> {
     let conn = lock(&state);
-    if resolution != slaybudget_core::duplicates::Resolution::Kept {
-        slaybudget_core::db::backup_before(&conn, "delete", &local_stamp())?;
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let done = stack.undo(&conn);
+    show_undo_menu(&state, &stack);
+    Ok(done?)
+}
+
+/// Put back the latest undone change; returns what was redone (None when there's nothing to redo).
+#[tauri::command]
+pub fn redo(state: State<'_, AppState>) -> IpcResult<Option<String>> {
+    let conn = lock(&state);
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let done = stack.redo(&conn);
+    show_undo_menu(&state, &stack);
+    Ok(done?)
+}
+
+/// What the Edit menu shows next to Undo and Redo.
+#[tauri::command]
+pub fn undo_state(state: State<'_, AppState>) -> IpcResult<slaybudget_core::undo::UndoState> {
+    Ok(state.undo.lock().unwrap_or_else(|p| p.into_inner()).state())
+}
+
+#[cfg(test)]
+mod undo_tests {
+    use super::*;
+
+    fn patch(reviewed: Option<bool>, notes: bool, category: bool) -> TxPatchDto {
+        TxPatchDto {
+            category_id: category.then_some(Some(1)),
+            category_locked: None,
+            reviewed,
+            notes: notes.then_some(Some("x".into())),
+        }
     }
-    Ok(slaybudget_core::duplicates::resolve(
-        &conn, flag_id, resolution,
-    )?)
+
+    #[test]
+    fn labels_read_like_a_mac_edit_menu() {
+        assert_eq!(
+            patch_label(&patch(Some(true), false, false), 1),
+            "Mark Reviewed"
+        );
+        assert_eq!(
+            patch_label(&patch(Some(true), false, false), 3),
+            "Mark 3 Transactions Reviewed"
+        );
+        assert_eq!(
+            patch_label(&patch(Some(false), false, false), 2),
+            "Mark 2 Transactions Unreviewed"
+        );
+        assert_eq!(patch_label(&patch(None, true, false), 1), "Edit Notes");
+        assert_eq!(
+            patch_label(&patch(None, false, true), 4),
+            "Change Category of 4 Transactions"
+        );
+        assert_eq!(count_label("Change Category", 1), "Change Category");
+        assert_eq!(
+            count_label("Change Type", 2),
+            "Change Type of 2 Transactions"
+        );
+        assert_eq!(count_label("Add Tag to", 5), "Add Tag to 5 Transactions");
+        assert_eq!(count_label("Add Tag to", 1), "Add Tag");
+        assert_eq!(file_name("Statements/Amex/amex-nov.csv"), "amex-nov.csv");
+    }
+
+    /// Every command that changes your data is either recorded for undo or listed here on purpose.
+    #[test]
+    fn every_command_that_changes_data_is_undoable_or_deliberately_not() {
+        const NOT_UNDOABLE: &[&str] = &[
+            // Settings and preferences, as in other apps.
+            "set_setting",
+            "create_profile",
+            "rename_profile",
+            "delete_profile",
+            // Things SlayBudget does on its own, or one-time tools.
+            "scan_watched_folder",
+            "migrate_legacy_json",
+            "import_ft_model",
+            "fx_upsert_many",
+            "notifications_add",
+            "notifications_mark_read",
+            "notifications_mark_all_read",
+            "notifications_dismiss",
+            "notifications_mark_delivered",
+            "notifications_refresh",
+            "backup_database",
+            "export_rules",
+            // Reads that may save what they detect (recurring bills seen for the first time).
+            "list_recurring",
+            "analytics_recurring",
+            // Undo itself.
+            "undo",
+            "redo",
+        ];
+        let src = include_str!("commands.rs");
+        let mut missing = Vec::new();
+        for chunk in src.split("#[tauri::command]").skip(1) {
+            let name = chunk
+                .split("pub fn ")
+                .nth(1)
+                .and_then(|r| r.split('(').next())
+                .unwrap_or_default();
+            let body = chunk.split("\n}\n").next().unwrap_or_default();
+            let writes = [
+                "::create",
+                "::update",
+                "::delete",
+                "::set_",
+                "::add",
+                "::remove",
+                "::split",
+                "::unsplit",
+                "::apply",
+                "::import_",
+                "::undo(",
+                "::resolve",
+                "::dismiss",
+                "::unlink",
+                "::rename",
+                "::move_",
+                "::ungroup",
+                "::save_or_replace",
+                "::bulk_update",
+            ]
+            .iter()
+            .any(|w| body.contains(w));
+            if writes && !body.contains("recorded(") && !NOT_UNDOABLE.contains(&name) {
+                missing.push(name.to_string());
+            }
+        }
+        assert!(
+            missing.is_empty(),
+            "changes data but isn't recorded for undo: {missing:?}"
+        );
+    }
 }

@@ -242,6 +242,12 @@ export interface CategoryPatch {
   archived?: boolean;
 }
 
+/** What the Edit menu shows next to Undo and Redo. */
+export interface UndoState {
+  undo: string | null;
+  redo: string | null;
+}
+
 /** A row that looks like one you already had (crates/core/src/duplicates.rs). */
 export interface DuplicateFlag {
   id: number;

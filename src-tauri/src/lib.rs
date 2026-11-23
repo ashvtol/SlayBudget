@@ -1,6 +1,7 @@
 //! Tauri shell: owns the database connection and exposes core use cases as commands.
 
 mod commands;
+mod edit_menu;
 mod notify_native;
 
 use rusqlite::Connection;
@@ -10,6 +11,10 @@ use tauri::Manager;
 /// Shared application state: one SQLite connection behind a mutex.
 pub struct AppState {
     pub db: Mutex<Connection>,
+    /// Undo and redo for the changes you make (lock after `db`).
+    pub undo: Mutex<slaybudget_core::undo::UndoStack>,
+    /// The Edit menu's Undo and Redo (None if the menu couldn't be set up).
+    pub edit_menu: Option<edit_menu::EditMenu>,
 }
 
 pub fn run() {
@@ -22,6 +27,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
         ))
+        .on_menu_event(|app, event| edit_menu::on_menu_event(app, event.id().as_ref()))
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&dir)?;
@@ -30,6 +36,8 @@ pub fn run() {
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
             app.manage(AppState {
                 db: Mutex::new(conn),
+                undo: Mutex::new(slaybudget_core::undo::UndoStack::new()),
+                edit_menu: edit_menu::EditMenu::install(app.handle()).ok(),
             });
             Ok(())
         })
@@ -109,6 +117,9 @@ pub fn run() {
             commands::undo_import,
             commands::duplicate_flag_for,
             commands::resolve_duplicate,
+            commands::undo,
+            commands::redo,
+            commands::undo_state,
             notify_native::notify_banner,
             commands::move_category_to_group,
             commands::rename_group,

@@ -18,5 +18,6 @@ pub mod settings;
 pub mod sources_merge;
 pub mod tags;
 pub mod transactions;
+pub mod undo;
 
 pub use error::CoreError;

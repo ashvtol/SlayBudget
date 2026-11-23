@@ -4,7 +4,8 @@
  * swap in the in-memory implementation.
  */
 
-import type { AppNotification, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification } from './types';
+import type { AppNotification, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
+import { UNDO_LABELS, createUndoStack } from './undo-memory';
 import { DUPLICATE_TAG_NAME, duplicatesBeforeDelete, openFlagFor, settle, stillFlagged } from './duplicates-memory';
 import type {
   BudgetStatus,
@@ -124,6 +125,12 @@ export interface Ipc {
   duplicateFlagFor(txId: number): Promise<DuplicateFlag | null>;
   /** Delete this one, delete the other one, or keep both (the pair is never flagged again). */
   resolveDuplicate(flagId: number, resolution: DuplicateResolution): Promise<void>;
+  /** Take back the latest change; returns what was undone, or null when there's nothing to undo. */
+  undo(): Promise<string | null>;
+  /** Put back the latest undone change; returns what was redone, or null. */
+  redo(): Promise<string | null>;
+  /** What the Edit menu shows next to Undo and Redo. */
+  undoState(): Promise<UndoState>;
   /** Notification center: the inbox behind the bell (see notifications.rs). */
   notificationsList(profileId: number | null): Promise<AppNotification[]>;
   /** Store an event unless its key was seen; `read` marks a quiet baseline item. Null when it already existed. */
@@ -285,6 +292,14 @@ function newestFirst(a: Transaction, b: Transaction): number {
 }
 
 /** In-memory implementation for tests and for the browser outside Tauri. */
+/** Maps and Sets as arrays, so two snapshots can be compared as JSON. */
+const serializable = (v: unknown): unknown =>
+  v instanceof Map ? [...v].map(([k, x]) => [k, serializable(x)])
+  : v instanceof Set ? [...v]
+  : Array.isArray(v) ? v.map(serializable)
+  : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, serializable(x)]))
+  : v;
+
 export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   const settings = new Map(Object.entries(seed.settings ?? {}));
   const profiles = seed.profiles ?? [{ id: 1, name: 'Me', color: '#5b8cff', sortOrder: 0 }];
@@ -559,7 +574,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     if (patch.notes !== undefined) t.notes = patch.notes;
   };
 
-  return {
+  const ipc: Ipc = {
     async getSetting(key) {
       return settings.get(key) ?? null;
     },
@@ -1164,5 +1179,56 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async importPdfDoc() {
       throw new Error('import is only available in the desktop app');
     },
+    async undo() {
+      return history.undo();
+    },
+    async redo() {
+      return history.redo();
+    },
+    async undoState() {
+      return history.state();
+    },
   };
+
+  // Undo and redo: a snapshot of everything you can edit, per action (mirrors crates/core/src/undo.rs).
+  const fill = <T,>(target: T[], from: T[]) => target.splice(0, target.length, ...structuredClone(from));
+  const capture = () =>
+    structuredClone({
+      profiles, sources, transactions, groups, categories, children, importsLog, plan, tags, duplicateFlags, saved,
+      optedOut, dismissed, learned, rules,
+      counters: { nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId },
+    });
+  type Snapshot = ReturnType<typeof capture>;
+  const restore = (s: Snapshot) => {
+    fill(profiles, s.profiles);
+    fill(sources, s.sources);
+    fill(transactions, s.transactions);
+    fill(groups, s.groups);
+    fill(categories, s.categories);
+    fill(importsLog, s.importsLog);
+    fill(tags, s.tags);
+    fill(duplicateFlags, s.duplicateFlags);
+    fill(saved, s.saved);
+    fill(rules, s.rules);
+    children.clear();
+    for (const [k, v] of s.children) children.set(k, structuredClone(v));
+    Object.assign(plan, structuredClone(s.plan));
+    optedOut.clear();
+    for (const v of s.optedOut) optedOut.add(v);
+    dismissed.clear();
+    for (const v of s.dismissed) dismissed.add(v);
+    learned.clear();
+    for (const [k, v] of s.learned) learned.set(k, v);
+    ({ nextCatId, nextTxId, nextProfileId, nextTagId, otherId, nextRecurringId, seeded, nextRuleId } = s.counters);
+  };
+  const history = createUndoStack(capture, restore, (a, b) => JSON.stringify(serializable(a)) === JSON.stringify(serializable(b)));
+  for (const [name, label] of Object.entries(UNDO_LABELS)) {
+    const method = (ipc as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[name];
+    if (!method) continue;
+    (ipc as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => history.record(label(args), () => method.apply(ipc, args));
+  }
+  // Undo Import names the file, as the app does.
+  const undoImport = ipc.undoImport;
+  ipc.undoImport = (id) => history.record(`Undo Import ${importsLog.find((i) => i.id === id)?.fileName ?? 'import'}`, () => undoImport.call(ipc, id));
+  return ipc;
 }

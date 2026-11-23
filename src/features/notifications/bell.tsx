@@ -51,7 +51,12 @@ export function NotificationBell() {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
-    const onDown = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
+    // Every visited screen keeps its own bell (they share the open state), so "outside" means outside all of them:
+    // otherwise a hidden screen's bell closed the panel on mousedown and the click never reached the ×.
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Element | null;
+      if (!target?.closest?.('[data-notification-bell]')) setOpen(false);
+    };
     window.addEventListener('keydown', onKey);
     window.addEventListener('mousedown', onDown);
     return () => {
@@ -71,7 +76,7 @@ export function NotificationBell() {
     .filter(([, list]) => list.length > 0);
 
   return (
-    <div ref={ref} className="relative" data-tauri-drag-region={false}>
+    <div ref={ref} className="relative" data-notification-bell="" data-tauri-drag-region={false}>
       <button
         type="button"
         aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}

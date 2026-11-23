@@ -5,6 +5,19 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-22
+### Added
+- **Undo and redo.** ⌘Z takes back your last change and ⇧⌘Z puts it back, up to 15 steps: categories (including
+  "apply to others"), reviews, notes, tags, splits, deletes, budgets, recurring bills, rules and imports. The Edit menu
+  names the step ("Undo Change Category"), and a short note says what was undone. While you're typing, ⌘Z still
+  undoes your typing.
+
+### Fixed
+- Choosing a category (or a tag) after typing in the search takes one click again. macOS autocorrect no longer pops up
+  under search, name and amount fields, where its bubble swallowed the first click.
+- Dismissing a notification with × works again. After you'd visited more than one screen, the click closed the panel
+  instead and the notification stayed.
+
 ## [0.3.0] - 2026-11-22
 ### Added
 - **Possible duplicates.** When an import brings in a row that looks like one you already have but doesn't match

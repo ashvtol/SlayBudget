@@ -7,8 +7,12 @@ import { createTauriIpc, isTauri } from './lib/tauri-ipc';
 import { sampleSeed } from './lib/sample-data';
 import { applyPlatform, isMac } from './lib/platform';
 import { useThemeStore } from './lib/stores/theme-store';
+import { installNoAutocorrect } from './lib/no-autocorrect';
 import '@fontsource-variable/figtree';
 import './app/styles.css';
+
+// No macOS autocorrect bubbles on names, amounts and searches (they swallowed the first click).
+installNoAutocorrect(document);
 
 // Outside Tauri (plain browser) the app runs on sample data so every screen has content.
 setIpc(isTauri() ? createTauriIpc() : createMemoryIpc(sampleSeed()));

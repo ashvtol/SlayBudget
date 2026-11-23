@@ -66,6 +66,27 @@ describe('NotificationBell', () => {
   });
 });
 
+describe('NotificationBell on every screen', () => {
+  // Visited screens stay alive, each with its own bell; they share the open state. A click inside the panel you see
+  // must not count as "outside" for the bells on hidden screens (that closed the panel before the × got the click).
+  it('dismissing in one bell’s panel works while other screens’ bells are mounted', async () => {
+    const user = userEvent.setup();
+    await seed([n('a', { title: 'Paycheck arrived' }), n('b')]);
+    render(
+      <>
+        <div data-testid="screen-1"><NotificationBell /></div>
+        <div data-testid="screen-2"><NotificationBell /></div>
+      </>,
+    );
+    await user.click(within(screen.getByTestId('screen-1')).getByRole('button', { name: /^Notifications/ }));
+    const panel = within(screen.getByTestId('screen-1')).getByRole('dialog', { name: 'Notifications' });
+    await user.click(within(panel).getByRole('button', { name: 'Dismiss Paycheck arrived' }));
+    expect(useInboxStore.getState().open).toBe(true);
+    expect(within(panel).queryByText('Paycheck arrived')).not.toBeInTheDocument();
+    expect((await ipc().notificationsList(null)).map((x) => x.title)).toEqual(['Title b']);
+  });
+});
+
 describe('openTarget routing', () => {
   it('routes each target kind', async () => {
     const { openTarget } = await import('./route');

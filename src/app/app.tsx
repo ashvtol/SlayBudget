@@ -21,6 +21,7 @@ import { useThemeStore } from '@/lib/stores/theme-store';
 import { useDisplayStore } from '@/lib/stores/display-store';
 import { useUpdateStore } from '@/features/updates/update-store';
 import { UpdateDialog } from '@/features/updates/update-ui';
+import { UndoToast, useUndoKeys } from '@/features/undo/undo';
 
 const SCREENS: [SectionId, (activeProfile: number | null) => React.ReactNode][] = [
   ['dashboard', () => <DashboardPage />],
@@ -45,6 +46,7 @@ export function App() {
   const loadTheme = useThemeStore((s) => s.load);
   const loadProfiles = useProfileStore((s) => s.load);
   const activeProfile = useProfileStore((s) => s.activeProfileId);
+  useUndoKeys();
 
   useEffect(() => {
     void loadTheme();
@@ -111,6 +113,7 @@ export function App() {
   return (
     <div className="app-root flex h-full overflow-hidden" style={{ color: 'var(--text)' }}>
       <Sidebar />
+      <UndoToast />
       {/* Screens stay alive once visited, so switching back keeps scroll, selection and choices. */}
       <div className="relative flex min-w-0 flex-1">
         {SCREENS.filter(([id]) => visited.includes(id)).map(([id, render]) => (

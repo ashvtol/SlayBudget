@@ -57,7 +57,8 @@ on your own computer, this is it.
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
 | 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
-| ↩️ **Undo and delete** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
+| ↩️ **Undo and redo** | ⌘Z takes back your last change and ⇧⌘Z puts it back, 15 steps deep, like any Mac app: a category, a bulk "apply to others", a delete (with its splits and tags), a budget, an import. The Edit menu names the step ("Undo Change Category"). |
+| 🗑️ **Delete and undo imports** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
 | 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price increases, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
 | ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
 | 👨‍👩‍👧 **Profiles** | Keep household members' accounts separate, or view everything combined. |
@@ -229,6 +230,14 @@ you're used to.
 Yes. The bell in the top bar and Mac banners tell you about upcoming bills (as many days ahead as you like), bills
 that look missed, price increases, possible double charges, large purchases and budgets running over. Banners appear
 while SlayBudget is open, and quiet hours hold them overnight.
+</details>
+
+<details>
+<summary><b>Can I undo a mistake?</b></summary>
+
+Yes. ⌘Z undoes your last change and ⇧⌘Z redoes it, up to 15 steps back: categories (including "apply to others"),
+reviews, notes, tags, splits, deletes, budgets, recurring bills, rules and imports. While you're typing in a field, ⌘Z
+undoes your typing instead. Settings aren't part of undo, and the steps are cleared when you quit.
 </details>
 
 <details>

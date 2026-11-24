@@ -217,6 +217,16 @@ describe('CategoriesPage budgets (Copilot)', () => {
   }
   const selectRow = async (user: ReturnType<typeof userEvent.setup>, name: RegExp) => user.click(within(tree()).getByRole('row', { name }));
 
+  it('Save budget is a macOS primary button, readable in every theme (text in the accent\'s own ink, not white)', async () => {
+    const user = userEvent.setup();
+    await setupWith();
+    await selectRow(user, /Groceries/);
+    await user.click(screen.getByRole('button', { name: 'Edit budget' }));
+    const save = within(details()).getByRole('button', { name: 'Save budget' });
+    expect(save).toHaveClass('btn', 'btn-primary');
+    expect(save).toBeEnabled();
+  });
+
   it('sets a different budget for one month, which shows in the tree for that month only', async () => {
     const user = userEvent.setup();
     await setupWith();

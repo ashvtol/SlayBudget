@@ -29,8 +29,6 @@ const dollars = (cents: number | null) => (cents == null ? '' : String(cents % 1
 
 const fieldClass = 'h-[28px] rounded-md border bg-transparent px-2 text-[13px] outline-none';
 const fieldStyle = { borderColor: 'var(--line-strong)', color: 'var(--text)', background: 'var(--bg)' } as const;
-const saveClass = 'h-[28px] rounded-md px-3 text-[12px] font-semibold disabled:opacity-50';
-const saveStyle = { background: 'var(--accent)', color: '#fff' } as const;
 
 /**
  * Copilot's inline budget editor for one category: "Same budget for all months" or "Different
@@ -108,9 +106,9 @@ export function BudgetEditor({ category, plan, thisMonth, rolloversOn, onSaved }
           className={`${fieldClass} w-[120px] text-right`}
           style={fieldStyle}
         />
-        <button type="button" disabled={saving} onClick={() => void save()} className={saveClass} style={saveStyle}>
+        <Button variant="primary" disabled={saving} onClick={() => void save()}>
           Save budget
-        </button>
+        </Button>
       </div>
       {mode === 'month' && (
         <p className="m-0 text-[11px]" style={{ color: 'var(--subtle)' }}>Empty uses the budget for all months.</p>
@@ -161,9 +159,9 @@ export function GroupBudgetEditor({ groupId, name, currentCents, sumCents, onSav
           className={`${fieldClass} w-[120px] text-right`}
           style={fieldStyle}
         />
-        <button type="button" onClick={() => void save()} className={saveClass} style={saveStyle}>
+        <Button variant="primary" onClick={() => void save()}>
           Save budget
-        </button>
+        </Button>
       </div>
       <p className="m-0 text-[11px]" style={{ color: 'var(--subtle)' }}>One budget for all of its categories. Empty uses the sum of their budgets.</p>
       {error && (
@@ -237,9 +235,9 @@ export function RebalanceDialog({ lines, categories, colorOf, thisMonth, onClose
         <Button onClick={onClose}>
           Cancel
         </Button>
-        <button type="button" disabled={changes.length === 0} onClick={() => void save()} className={saveClass} style={saveStyle}>
+        <Button variant="primary" disabled={changes.length === 0} onClick={() => void save()}>
           Save
-        </button>
+        </Button>
       </div>
     </Modal>
   );

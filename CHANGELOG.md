@@ -5,6 +5,11 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-23
+### Fixed
+- **Save budget looked greyed out in the Graphite theme.** It had white text on Graphite's white accent; it (and the
+  group budget and Rebalance saves) is now a standard Mac button, readable in every theme.
+
 ## [0.8.1] - 2026-11-23
 ### Added
 - **Money tip notifications.** When Your money habits has a new tip, one comes back after you hid it, or one turns into

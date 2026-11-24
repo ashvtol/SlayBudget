@@ -5,6 +5,31 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-23
+### Added
+- **Your money habits** on Insights, below "Where your money went" and based on all your history (the time range at
+  the top doesn't change it):
+  - **Your money style**: FIRE (Financial Independence, Retire Early) or Soft saving, with a ? that explains both.
+    FIRE shows your savings rate, your FI number (25 times a year of spending, and the 3.5% version) and about how many
+    years to independence; Soft saving shows whether you're saving 20% and what's guilt-free to spend this month.
+  - **Suggested budget**: pick a target savings rate and SlayBudget suggests budgets for your flexible spending (needs
+    and bills stay as they are). FIRE trims in proportion, never more than half; Soft saving trims what crept up first.
+    Untick any category to leave it out (small ones and Other start out; the header checkbox ticks all or none), adjust
+    the amounts (or Cancel), then **Use these budgets**; ⌘Z takes them all back.
+  - **Tips**: the 50/30/20 split, an emergency fund target, spending growing faster than income, what subscriptions
+    cost a year, small purchases that add up, no-spend days and paying yourself first. Hide a tip and it comes back if
+    its numbers change a lot.
+- **Tips on the Dashboard**: your savings rate against your goal and the two most useful tips.
+- **Essential categories**: mark a category as a need (rent, groceries, bills you can't skip) from its ⋯ menu. Rent,
+  groceries, utilities, phone, internet, insurance, fuel and the like start out marked.
+
+### Changed
+- **Faster Insights and Dashboard.** Totals that leave out split transactions now look them up once instead of for
+  every row, so screens that add up all your history open without a pause.
+- **Dashboard:** Next two weeks moves to the left column, under Net this month.
+- Insights no longer shows the "recurring charges" card; the subscriptions tip replaces it (and leaves out rent and
+  other needs).
+
 ## [0.7.0] - 2026-11-23
 ### Changed
 - **New charts everywhere.** Every chart is redrawn in Copilot's style and follows your pointer with no lag:

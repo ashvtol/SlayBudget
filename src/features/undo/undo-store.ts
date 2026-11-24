@@ -9,6 +9,8 @@ let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
 interface UndoStore {
   toast: string | null;
+  /** Counts undo and redo steps taken, so a screen can tell its message is out of date. */
+  steps: number;
   undo(): Promise<void>;
   redo(): Promise<void>;
   dismiss(): void;
@@ -24,6 +26,7 @@ export const useUndoStore = create<UndoStore>((set) => {
     try {
       const label = await run();
       if (label == null) return; // nothing to undo or redo: nothing happens, as in other Mac apps
+      set((st) => ({ steps: st.steps + 1 }));
       show(`${verb} ${label}`);
       useNavStore.getState().refresh();
     } catch (e) {
@@ -32,6 +35,7 @@ export const useUndoStore = create<UndoStore>((set) => {
   };
   return {
     toast: null,
+    steps: 0,
     undo: () => step(() => ipc().undo(), 'Undid'),
     redo: () => step(() => ipc().redo(), 'Redid'),
     dismiss: () => {

@@ -26,7 +26,7 @@ function money(cents: number): string {
 }
 
 export function deriveInsights(input: Input): Insight[] {
-  const { categories, budgets, cashflow, recurring, categoryMeta } = input;
+  const { categories, budgets, cashflow, categoryMeta } = input;
   const out: Insight[] = [];
 
   if (cashflow) {
@@ -56,13 +56,6 @@ export function deriveInsights(input: Input): Insight[] {
   if (projectedOver.length) {
     const names = projectedOver.map((b) => categoryMeta[b.categoryId]?.name ?? 'a category').slice(0, 3).join(', ');
     out.push({ id: 'projected-over', tone: 'warn', title: `On track to overspend`, detail: `At the current pace, ${names} will exceed budget this month.` });
-  }
-
-  if (recurring.length) {
-    const monthly = recurring.filter((r) => r.cadence === 'monthly').reduce((s, r) => s + r.typicalAmountCents, 0);
-    if (monthly > 0) {
-      out.push({ id: 'subscriptions', tone: 'info', title: `${recurring.length} recurring charges`, detail: `About ${money(monthly)}/month in subscriptions.` });
-    }
   }
 
   return out;

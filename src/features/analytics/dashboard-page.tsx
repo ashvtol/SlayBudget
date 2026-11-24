@@ -14,6 +14,7 @@ import type { Recurring } from '@/lib/types';
 import type { DashboardModel, TopGroup } from './dashboard-model';
 import { useDashboardData, type DashboardData } from './use-dashboard-data';
 import { CategoryLine } from './category-line';
+import { DashboardTips } from '@/features/habits/dashboard-tips';
 
 export function DashboardPage() {
   const data = useDashboardData();
@@ -27,10 +28,11 @@ export function DashboardPage() {
             <MonthlySpending month={data.model.month} onLink={() => go('transactions')} />
             <ToReview data={data} onLink={() => go('transactions')} />
             <NetThisMonth net={data.model.net} onLink={() => go('cashflow')} />
+            <NextTwoWeeks upcoming={data.model.upcoming} categoriesById={data.categoriesById} onLink={() => go('recurring')} />
           </div>
           <div className="flex flex-col gap-8">
+            <DashboardTips />
             <TopCategories groups={data.model.topCategories} onLink={() => go('categories')} />
-            <NextTwoWeeks upcoming={data.model.upcoming} categoriesById={data.categoriesById} onLink={() => go('recurring')} />
           </div>
         </div>
       )}

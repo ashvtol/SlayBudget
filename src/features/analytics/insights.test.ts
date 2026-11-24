@@ -32,4 +32,10 @@ describe('deriveInsights', () => {
     const out = deriveInsights({ monthly: [], categories: [], budgets: [], cashflow: flow(0, 0), recurring: [], categoryMeta: {} });
     expect(out).toHaveLength(0);
   });
+
+  it('leaves recurring charges to the subscriptions tip in Your money habits', () => {
+    const recurring = [{ merchant: 'Netflix', categoryId: null, typicalAmountCents: 1500, cadence: 'monthly', lastDate: '', nextDate: '', occurrences: 3 }] as Parameters<typeof deriveInsights>[0]['recurring'];
+    const out = deriveInsights({ monthly: [], categories: [], budgets: [], cashflow: flow(0, 0), recurring, categoryMeta: {} });
+    expect(out.find((i) => i.id === 'subscriptions')).toBeUndefined();
+  });
 });

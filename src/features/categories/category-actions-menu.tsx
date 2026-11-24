@@ -38,6 +38,15 @@ export function CategoryActionsMenu({ category, groups, onChanged, onDelete }: {
               <MenuItem onClick={() => setSub('group')}><span className="flex-1">Group</span><IconChevronRight size={12} /></MenuItem>
               <MenuItem onClick={() => setSub('type')}><span className="flex-1">Type</span><IconChevronRight size={12} /></MenuItem>
               <MenuItem onClick={() => setSub('color')}><span className="flex-1">Color</span><IconChevronRight size={12} /></MenuItem>
+              {category.kind === 'expense' && (
+                <MenuItem role="menuitemcheckbox" checked={!!category.essential} onClick={() => void run(() => ipc().updateCategory(category.id, { essential: !category.essential }))}>
+                  <span className="w-3 text-center">{category.essential ? '✓' : ''}</span>
+                  <span className="flex flex-1 flex-col">
+                    <span>Essential</span>
+                    <span className="text-[11px]" style={{ color: 'var(--muted)' }}>Rent, groceries, bills you can't skip</span>
+                  </span>
+                </MenuItem>
+              )}
               {!category.isOther && <MenuItem danger onClick={() => { close(); onDelete(); }}>Delete…</MenuItem>}
             </>
           )}

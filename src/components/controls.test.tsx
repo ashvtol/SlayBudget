@@ -63,4 +63,21 @@ describe('SegmentedControl', () => {
     await userEvent.click(screen.getByRole('radio', { name: 'Savings' }));
     expect(onChange).toHaveBeenCalledWith('savings');
   });
+
+  it('fills its container with equal segments when asked, with dividers only between unselected ones', () => {
+    render(
+      <SegmentedControl
+        aria-label="Style"
+        fill
+        options={[{ id: 'a', label: 'One' }, { id: 'b', label: 'Two' }, { id: 'c', label: 'Three' }]}
+        value="a"
+        onChange={() => {}}
+      />,
+    );
+    const group = screen.getByRole('radiogroup', { name: 'Style' });
+    expect(group).toHaveClass('segmented-fill');
+    const radios = screen.getAllByRole('radio');
+    // One | Two: no divider next to the selected One; Two | Three: a divider.
+    expect(radios.map((r) => r.getAttribute('data-divider'))).toEqual([null, null, 'true']);
+  });
 });

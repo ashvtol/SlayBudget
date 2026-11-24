@@ -109,6 +109,15 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(card('Next two weeks')).toHaveTextContent('Netflix'));
   });
 
+  it('puts Next two weeks in the left column, under Net this month; Tips and Top categories on the right', async () => {
+    await setup();
+    const left = card('Monthly spending').parentElement!;
+    expect(left).toContainElement(card('Net this month'));
+    expect(left).toContainElement(card('Next two weeks'));
+    expect(card('Net this month').compareDocumentPosition(card('Next two weeks')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(left).not.toContainElement(card('Top categories'));
+  });
+
   it('links each card to its screen and has no range picker', async () => {
     const user = userEvent.setup();
     await setup();

@@ -253,6 +253,29 @@ pub fn apply_rebalance(
     Ok(())
 }
 
+/// Set several budgets at once from `month` on (the suggested budget): each becomes the category's budget, and its
+/// overrides from that month on are removed; earlier months keep theirs. All or nothing.
+pub fn apply_budgets(conn: &Connection, month: &str, items: &[(CategoryId, i64)]) -> Result<()> {
+    check_month(month)?;
+    for &(id, amount) in items {
+        check_amount(Some(amount))?;
+        check_category(conn, id)?;
+    }
+    let tx = conn.unchecked_transaction()?;
+    for &(id, amount) in items {
+        tx.execute(
+            "UPDATE categories SET budget_cents = ?1 WHERE id = ?2",
+            params![amount, id],
+        )?;
+        tx.execute(
+            "DELETE FROM category_budget_months WHERE category_id = ?1 AND month >= ?2",
+            params![id, month],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// Each category's effective budget in `month`, in the display currency, leaving out categories whose group has a
 /// shared budget (that budget is counted once for the group instead).
 pub fn effective_budgets(conn: &Connection, month: &str) -> Result<Vec<(CategoryId, i64)>> {

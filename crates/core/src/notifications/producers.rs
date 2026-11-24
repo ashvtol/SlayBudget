@@ -217,7 +217,7 @@ fn since(today: NaiveDate, days: i64) -> String {
 }
 
 /// Regular spending we count: not transfers, income or split parents.
-const REGULAR: &str = "t.type = 'regular' AND t.parent_id IS NULL AND NOT EXISTS (SELECT 1 FROM transactions c WHERE c.parent_id = t.id)";
+const REGULAR: &str = "t.type = 'regular' AND t.parent_id IS NULL AND t.id NOT IN (SELECT parent_id FROM transactions WHERE parent_id IS NOT NULL)";
 
 /// A bill whose latest charge is at least the set percent and amount above the one before.
 fn price_ups(

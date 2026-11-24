@@ -109,6 +109,8 @@ export interface Category {
   archived: boolean;
   /** The fallback category: can be renamed, never deleted. */
   isOther?: boolean;
+  /** A need (rent, groceries, bills you can't skip) rather than a want. */
+  essential?: boolean;
 }
 
 export interface Transaction {
@@ -337,6 +339,7 @@ export interface CategoryPatch {
   budgetCents?: number | null;
   excluded?: boolean;
   archived?: boolean;
+  essential?: boolean;
 }
 
 /** What the Edit menu shows next to Undo and Redo. */
@@ -492,4 +495,36 @@ export interface ImportRecord {
   skippedRows: number;
   /** Rows from this file still present. */
   remaining: number;
+}
+
+/** Everything "Your money habits" needs from all of history (crates/core/src/habits.rs). */
+export interface HabitMonth {
+  month: string;
+  incomeCents: number;
+  spendCents: number;
+  essentialCents: number;
+  toSavingsCents: number;
+}
+export interface FlexMonth {
+  categoryId: number;
+  month: string;
+  cents: number;
+}
+export interface DaySpend {
+  day: string;
+  cents: number;
+}
+export interface MerchantStat {
+  name: string;
+  visits: number;
+  totalCents: number;
+}
+export interface HabitsData {
+  firstMonth: string | null;
+  currentMonth: string;
+  months: HabitMonth[];
+  flexible: FlexMonth[];
+  daysThisMonth: DaySpend[];
+  merchants: MerchantStat[];
+  billsRaisedLast12: number;
 }

@@ -177,7 +177,7 @@ pub fn category_totals(
                 COUNT(*) AS n
          FROM transactions t
          WHERE type = 'regular' AND {NOT_EXCLUDED}{where_extra}
-           AND NOT EXISTS (SELECT 1 FROM transactions c WHERE c.parent_id = t.id)
+           AND t.id NOT IN (SELECT parent_id FROM transactions WHERE parent_id IS NOT NULL)
          GROUP BY category_id ORDER BY total DESC"
     );
     let mut stmt = conn.prepare(&sql)?;

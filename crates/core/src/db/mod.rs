@@ -32,6 +32,10 @@ const MIGRATIONS: &[(i64, &str)] = &[
     ),
     (13, include_str!("../../migrations/0013_account_clues.sql")),
     (14, include_str!("../../migrations/0014_price_changes.sql")),
+    (
+        15,
+        include_str!("../../migrations/0015_essential_categories.sql"),
+    ),
 ];
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
@@ -45,6 +49,7 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
+    crate::categories::apply_default_essentials(&conn)?;
     crate::profiles::backfill_institutions(&conn)?;
     crate::categories::fill_missing_emojis(&conn)?;
     crate::recurrings::seed_if_needed(&conn)?;
@@ -59,6 +64,7 @@ pub fn open_in_memory() -> Result<Connection> {
     crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
+    crate::categories::apply_default_essentials(&conn)?;
     Ok(conn)
 }
 

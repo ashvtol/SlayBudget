@@ -106,6 +106,26 @@ describe('editing a category', () => {
     await waitFor(async () => expect((await categoryNamed('Gas'))?.color).toBe(PALETTE[8]));
   });
 
+  it('marks a category as Essential (a need) from the menu, and ⌘Z takes it back', async () => {
+    const user = userEvent.setup();
+    await select(/Coffee/);
+    await openMenu();
+    const item = screen.getByRole('menuitemcheckbox', { name: /Essential/ });
+    expect(item).toHaveAttribute('aria-checked', 'false');
+    expect(item).toHaveTextContent("Rent, groceries, bills you can't skip");
+    await user.click(item);
+    await waitFor(async () => expect((await categoryNamed('Coffee'))?.essential).toBe(true));
+    expect((await ipc().undoState()).undo).toBe('Mark Essential');
+    await ipc().undo();
+    expect((await categoryNamed('Coffee'))?.essential).toBe(false);
+  });
+
+  it('starts Groceries and Gas as Essential by default, Coffee not', async () => {
+    expect((await categoryNamed('Groceries'))?.essential).toBe(true);
+    expect((await categoryNamed('Gas'))?.essential).toBe(true);
+    expect((await categoryNamed('Coffee'))?.essential).toBe(false);
+  });
+
   it('offers Delete for a normal category but never for Other, even renamed', async () => {
     const user = userEvent.setup();
     await select(/Coffee/);

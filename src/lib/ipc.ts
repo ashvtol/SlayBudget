@@ -51,8 +51,11 @@ import type {
   StatementInfo,
   Tag,
   TagPatch,
+  HabitsData,
 } from './types';
 import { createNotificationInbox } from './notifications-memory';
+import { defaultEssential } from './essential';
+import { moneyHabitsFrom } from './habits-memory';
 import { configFrom, KEY as NOTIFICATION_CONFIG_KEY, OLD_HORIZON_KEY } from './notification-config';
 import { produceCandidates } from './notification-producers';
 
@@ -173,6 +176,8 @@ export interface Ipc {
   analyticsBudgets(profileId: number | null, today: string): Promise<BudgetStatus[]>;
   analyticsCashflow(profileId: number | null, range: TimeRange, today: string): Promise<CashFlow>;
   analyticsRecurring(profileId: number | null, today: string): Promise<Recurring[]>;
+  /** All of history for "Your money habits", in the display currency. */
+  moneyHabits(profileId: number | null, today: string): Promise<HabitsData>;
   /** Every saved recurring bill (all statuses), built from its linked charges. */
   listRecurring(profileId: number | null): Promise<Recurring[]>;
   /** Detected bills no saved recurring covers (and not dismissed). */
@@ -228,6 +233,8 @@ export interface Ipc {
   setRollover(categoryId: number, since: string | null): Promise<void>;
   /** Save a rebalance; the total budget must not change. */
   applyRebalance(changes: { categoryId: number; amountCents: number }[], scope: RebalanceScope, month: string): Promise<void>;
+  /** Set several budgets from `month` on, as one undoable change (the suggested budget). */
+  applyBudgets(month: string, items: { categoryId: number; amountCents: number }[]): Promise<void>;
 
   /** The statement file a transaction came from and the extra columns it had. */
   statementInfo(id: number): Promise<StatementInfo>;
@@ -343,7 +350,8 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   const sources = seed.sources ?? [{ id: 1, profileId: 1, name: 'Imported', kind: 'csv' as const, institution: null, currency: 'USD' }];
   const transactions = (seed.transactions ?? []).map((t) => ({ ...t }));
   const groups = seed.groups ?? DEFAULT_GROUPS.map((g) => ({ ...g }));
-  const categories = (seed.categories ?? DEFAULT_CATEGORIES).map((c) => ({ ...c }));
+  // Like apply_default_essentials: a category that doesn't say starts as a need by its name.
+  const categories: Category[] = (seed.categories ?? DEFAULT_CATEGORIES).map((c) => ({ ...c, essential: c.essential ?? (c.kind === 'expense' && defaultEssential(c.name)) }));
   let nextCatId = Math.max(0, ...categories.map((c) => c.id), ...groups.map((g) => g.id)) + 1;
   let nextTxId = Math.max(0, ...transactions.map((t) => t.id)) + 1;
   let nextProfileId = Math.max(0, ...profiles.map((p) => p.id)) + 1;
@@ -1022,6 +1030,11 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async listRecurring(profileId) {
       return recurringViews(profileId);
     },
+    async moneyHabits(profileId, today) {
+      const s = shown();
+      const showKids = new Map([...children.entries()].map(([k, v]) => [k, v.map((t) => show(t, s))]));
+      return moneyHabitsFrom({ transactions: transactions.map((t) => show(t, s)), children: showKids, categories, sources, bills: saved, prices, today, profileId });
+    },
     async analyticsRecurring(profileId, today) {
       return recurringViews(profileId).filter((r) => r.saved?.status === 'active' && r.nextDate >= today);
     },
@@ -1132,6 +1145,17 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       plan.rollovers = plan.rollovers.filter((r) => r.categoryId !== categoryId);
       if (since != null) plan.rollovers.push({ categoryId, since });
       plan.rollovers.sort((a, b) => a.categoryId - b.categoryId);
+    },
+    async applyBudgets(month, items) {
+      checkMonth(month);
+      for (const c of items) {
+        checkAmount(c.amountCents);
+        categoryById(c.categoryId);
+      }
+      for (const c of items) {
+        categoryById(c.categoryId).budgetCents = c.amountCents;
+        plan.months = plan.months.filter((m) => !(m.categoryId === c.categoryId && m.month >= month));
+      }
     },
     async applyRebalance(changes, scope, month) {
       checkMonth(month);
@@ -1330,6 +1354,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         color: cat.color ?? null,
         budgetCents: cat.budgetCents ?? null,
         excluded: cat.excluded ?? false,
+        essential: false,
         kind: cat.kind ?? 'expense',
         sortOrder: categories.length,
         archived: false,
@@ -1356,6 +1381,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       if (patch.budgetCents !== undefined) c.budgetCents = patch.budgetCents;
       if (patch.excluded !== undefined) c.excluded = patch.excluded;
       if (patch.archived !== undefined) c.archived = patch.archived;
+      if (patch.essential !== undefined) c.essential = patch.essential;
     },
     async categoryUsage(id) {
       return [...transactions, ...[...children.values()].flat()].filter((t) => t.categoryId === id).length;
@@ -1608,6 +1634,10 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     return f(...a);
   });
   wrap('setGroupBudget', (f) => async (...a) => {
+    adoptDisplayCurrency();
+    return f(...a);
+  });
+  wrap('applyBudgets', (f) => async (...a) => {
     adoptDisplayCurrency();
     return f(...a);
   });

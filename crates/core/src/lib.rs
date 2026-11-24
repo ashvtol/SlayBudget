@@ -9,6 +9,7 @@ pub mod db;
 pub mod duplicates;
 pub mod error;
 pub mod fx;
+pub mod habits;
 pub mod import;
 pub mod imports;
 pub mod notifications;

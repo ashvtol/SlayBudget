@@ -39,7 +39,10 @@ export const UNDO_LABELS: Record<string, (args: Args) => string> = {
   moveCategoryToGroup: () => 'Move Category',
   renameGroup: () => 'Rename Group',
   ungroup: () => 'Ungroup',
-  updateCategory: () => 'Edit Category',
+  updateCategory: (a) => {
+    const e = (a[1] as { essential?: boolean }).essential;
+    return e === true ? 'Mark Essential' : e === false ? 'Unmark Essential' : 'Edit Category';
+  },
   importCsvText: (a) => `Import ${fileName(a[1] as string)}`,
   importOfxText: (a) => `Import ${fileName(a[1] as string)}`,
   importPdfDoc: (a) => `Import ${fileName(a[1] as string)}`,
@@ -65,6 +68,7 @@ export const UNDO_LABELS: Record<string, (args: Args) => string> = {
   setGroupBudget: () => 'Change Budget',
   setRollover: () => 'Change Rollover',
   applyRebalance: () => 'Rebalance Budgets',
+  applyBudgets: () => 'Use Suggested Budgets',
   deleteTransactions: (a) => ((a[0] as number[]).length === 1 ? 'Delete Transaction' : `Delete ${(a[0] as number[]).length} Transactions`),
   setAccountDefaultTag: () => 'Change Default Tag',
   updateAccount: () => 'Edit Account',

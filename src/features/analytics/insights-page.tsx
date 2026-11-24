@@ -4,6 +4,7 @@ import { useAnalyticsStore } from './analytics-store';
 import { useAnalyticsData } from './use-analytics-data';
 import { RangeSelector } from './range-selector';
 import { SpendingMap } from './spending-map';
+import { MoneyHabits } from '@/features/habits/money-habits';
 
 const TONE_COLOR: Record<string, string> = { good: 'var(--pos)', warn: 'var(--warn)', info: 'var(--accent)' };
 
@@ -30,6 +31,7 @@ export function InsightsPage() {
           ))}
         </div>
       )}
+      <MoneyHabits />
     </Page>
   );
 }

@@ -20,7 +20,7 @@ Import your bank statements, let SlayBudget categorize every transaction, and se
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/screenshots/dashboard-light.png">
-  <img alt="SlayBudget dashboard: money left to spend this month, transactions to review, top categories against budget, net income and upcoming bills" src="docs/screenshots/dashboard.png" width="100%">
+  <img alt="SlayBudget dashboard: money left to spend this month, transactions to review, net income, upcoming bills, money tips with the savings rate, and top categories against budget" src="docs/screenshots/dashboard.png" width="100%">
 </picture>
 
 </div>
@@ -51,11 +51,12 @@ on your own computer, this is it.
 | 🧭 **Statements land in the right account** | SlayBudget works out which account a statement belongs to from the file itself (the account's last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once ("Which account is this?") with its best guess first, and remembers your answer. Two cards from the same bank never get mixed up. Each account can have a default tag (say "Business"), and an import that went to the wrong account can be moved. |
 | 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
-| 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories and upcoming bills. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
+| 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories, upcoming bills, and tips with your savings rate against your goal. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
 | 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. |
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
 | 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
+| 🔥 **Your money habits** | Pick a money style, **FIRE** (Financial Independence, Retire Early) or **Soft saving**, and see your savings rate, your FI number (25 times a year of spending) and roughly how many years to independence, worked out from all your history. A suggested budget trims flexible spending toward a savings target you choose (needs and bills stay as they are, and you can leave any category out, or all of them, with the header checkbox); apply it in one click and ⌘Z takes it back. Tips cover the 50/30/20 split, an emergency fund target, spending that grew faster than income, what subscriptions cost a year, small purchases that add up, no-spend days and paying yourself first. Hide any tip; it comes back if its numbers change a lot. Mark categories as Essential to tell needs from wants. Rules of thumb, not financial advice. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
 | 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
@@ -145,6 +146,9 @@ on your own computer, this is it.
 
 ### A subscription changed price? Asked once
 ![SlayBudget Recurrings page with Equinox selected, asking "Is this Equinox at a new price? It was $55.00, this is $89.00 (+62%)" with Yes, new price, No, a one-off and A separate subscription](docs/screenshots/price-change.png)
+
+### Your money habits: FIRE or Soft saving, a suggested budget and tips
+![SlayBudget Insights showing Your money habits: the FIRE style with a 50% savings rate, an FI number and about 17 years to independence, a suggested budget trimming flexible categories toward a 60% target, and tips about an emergency fund, subscriptions, a coffee habit and no-spend days](docs/screenshots/money-habits.png)
 
 ### Which account is this? Asked once, then remembered
 ![SlayBudget import page asking which account a Chase statement belongs to, showing its dates, first transactions and Chase ending 7781, with existing accounts or a new account with bank, type and default tag](docs/screenshots/which-account.png)
@@ -346,6 +350,22 @@ added after the fact, a card hold, or a pending charge that posted days later) a
 duplicate" and marked to review, with an explanation. Filter by the tag, then delete one of the pair or mark it "Not a
 duplicate". SlayBudget never deletes anything on its own. If a whole import was a mistake, undo it from Recent
 imports on the Import page.
+</details>
+
+<details>
+<summary><b>Where do the FIRE numbers come from?</b></summary>
+
+From your own transactions, on your Mac. Your savings rate is income minus spending over the last 12 full months.
+The FI number is 25 times a year of spending (the "4% rule"; the 3.5% figure beside it is the more careful version
+for early retirement). Years to FI assume you start from zero, earn 5% a year after inflation and withdraw 4%: about
+17 years at a 50% savings rate. They're illustrations and rules of thumb, not financial advice.
+</details>
+
+<details>
+<summary><b>I hid a tip. Why did it come back?</b></summary>
+
+A hidden tip stays hidden until its numbers change a lot: more than 10% (or 3 points for a percentage, like your
+50/30/20 split). Then it's news again. You can also bring any hidden tip back from "hidden tips" under the list.
 </details>
 
 <details>

@@ -55,6 +55,9 @@ pub struct Category {
     pub sort_order: i64,
     pub archived: bool,
     pub legacy_name: Option<String>,
+    /// A need (rent, groceries, bills you can't skip) rather than a want.
+    #[serde(default)]
+    pub essential: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,6 +81,7 @@ pub struct CategoryPatch {
     pub excluded: Option<bool>,
     pub archived: Option<bool>,
     pub group_id: Option<GroupId>,
+    pub essential: Option<bool>,
 }
 
 /// (group, group emoji, group color, category, category emoji, legacy name, kind, excluded)
@@ -399,11 +403,79 @@ pub fn seed_defaults(conn: &Connection) -> Result<()> {
     {
         let group_id = find_or_create_group(conn, group, Some(gemoji), Some(gcolor))?;
         conn.execute(
-            "INSERT INTO categories (group_id, name, emoji, kind, excluded, sort_order, legacy_name)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![group_id, name, emoji, kind.as_str(), *excluded as i64, i as i64, legacy],
+            "INSERT INTO categories (group_id, name, emoji, kind, excluded, sort_order, legacy_name, essential)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![
+                group_id,
+                name,
+                emoji,
+                kind.as_str(),
+                *excluded as i64,
+                i as i64,
+                legacy,
+                (*kind == CategoryKind::Expense && default_essential(name)) as i64
+            ],
         )?;
     }
+    Ok(())
+}
+
+/// Word stems that make a category a need by default ("grocer" covers Groceries).
+const ESSENTIAL_STEMS: &[&str] = &[
+    "rent",
+    "mortgage",
+    "housing",
+    "grocer",
+    "utilit",
+    "electric",
+    "water",
+    "internet",
+    "phone",
+    "insurance",
+    "medical",
+    "health",
+    "pharmacy",
+    "childcare",
+    "fuel",
+    "transit",
+    "loan",
+    "debt",
+];
+const ESSENTIAL_PHRASES: &[&str] = &["whole foods", "car payment"];
+
+/// Whether a category with this name starts out as a need: a word beginning with one of the stems, one of the
+/// phrases, or exactly "Gas" (so "Gas station snacks" isn't caught).
+pub fn default_essential(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    let words: Vec<&str> = lower
+        .split(|c: char| !c.is_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .collect();
+    if words == ["gas"] {
+        return true;
+    }
+    let joined = words.join(" ");
+    words
+        .iter()
+        .any(|w| ESSENTIAL_STEMS.iter().any(|s| w.starts_with(s)))
+        || ESSENTIAL_PHRASES.iter().any(|p| joined.contains(p))
+}
+
+/// Mark the default needs once in a database made before essentials existed; later choices are left alone.
+pub fn apply_default_essentials(conn: &Connection) -> Result<()> {
+    let pending: i64 =
+        conn.query_row("SELECT count(*) FROM essential_defaults_pending", [], |r| {
+            r.get(0)
+        })?;
+    if pending == 0 {
+        return Ok(());
+    }
+    for c in list(conn)? {
+        if c.kind == CategoryKind::Expense && default_essential(&c.name) {
+            conn.execute("UPDATE categories SET essential = 1 WHERE id = ?1", [c.id])?;
+        }
+    }
+    conn.execute("DELETE FROM essential_defaults_pending", [])?;
     Ok(())
 }
 
@@ -455,7 +527,7 @@ pub fn list_groups(conn: &Connection) -> Result<Vec<CategoryGroup>> {
     Ok(rows.collect::<std::result::Result<_, _>>()?)
 }
 
-const SELECT: &str = "SELECT id, group_id, name, emoji, color, budget_cents, excluded, kind, sort_order, archived, legacy_name FROM categories";
+const SELECT: &str = "SELECT id, group_id, name, emoji, color, budget_cents, excluded, kind, sort_order, archived, legacy_name, essential FROM categories";
 
 fn row_to_category(r: &rusqlite::Row<'_>) -> rusqlite::Result<(Category, String)> {
     let kind: String = r.get(7)?;
@@ -472,6 +544,7 @@ fn row_to_category(r: &rusqlite::Row<'_>) -> rusqlite::Result<(Category, String)
             sort_order: r.get(8)?,
             archived: r.get::<_, i64>(9)? != 0,
             legacy_name: r.get(10)?,
+            essential: r.get::<_, i64>(11)? != 0,
         },
         kind,
     ))
@@ -843,6 +916,12 @@ pub fn update(conn: &Connection, id: CategoryId, patch: &CategoryPatch) -> Resul
         conn.execute(
             "UPDATE categories SET excluded = ?1 WHERE id = ?2",
             params![excluded as i64, id],
+        )?;
+    }
+    if let Some(essential) = patch.essential {
+        conn.execute(
+            "UPDATE categories SET essential = ?1 WHERE id = ?2",
+            params![essential as i64, id],
         )?;
     }
     if let Some(archived) = patch.archived {

@@ -20,14 +20,14 @@ export function ActionsPopover({ label, onClose, children }: { label: string; on
   );
 }
 
-export function MenuItem({ children, onClick, role = 'menuitem', checked, danger = false }: { children: ReactNode; onClick: () => void; role?: 'menuitem' | 'menuitemradio'; checked?: boolean; danger?: boolean }) {
+export function MenuItem({ children, onClick, role = 'menuitem', checked, danger = false }: { children: ReactNode; onClick: () => void; role?: 'menuitem' | 'menuitemradio' | 'menuitemcheckbox'; checked?: boolean; danger?: boolean }) {
   return (
     <button
       type="button"
       role={role}
-      aria-checked={role === 'menuitemradio' ? checked : undefined}
+      aria-checked={role === 'menuitem' ? undefined : !!checked}
       onClick={onClick}
-      className="flex h-[28px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-[var(--hover)]"
+      className="flex min-h-[28px] w-full items-center gap-2 rounded-md px-2 text-left text-[13px] hover:bg-[var(--hover)]"
       style={{ color: danger ? 'var(--neg)' : 'var(--text)' }}
     >
       {children}

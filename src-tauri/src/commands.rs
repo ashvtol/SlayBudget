@@ -521,6 +521,7 @@ pub struct CategoryDto {
     pub sort_order: i64,
     pub archived: bool,
     pub is_other: bool,
+    pub essential: bool,
 }
 
 impl From<Category> for CategoryDto {
@@ -537,6 +538,7 @@ impl From<Category> for CategoryDto {
             sort_order: c.sort_order,
             archived: c.archived,
             is_other: c.legacy_name.as_deref() == Some("Other"),
+            essential: c.essential,
         }
     }
 }
@@ -576,6 +578,7 @@ pub struct CatPatchDto {
     pub budget_cents: Option<Option<i64>>,
     pub excluded: Option<bool>,
     pub archived: Option<bool>,
+    pub essential: Option<bool>,
 }
 
 #[tauri::command]
@@ -666,8 +669,14 @@ pub fn update_category(state: State<'_, AppState>, id: i64, patch: CatPatchDto) 
         excluded: patch.excluded,
         archived: patch.archived,
         group_id: None,
+        essential: patch.essential,
     };
-    recorded(&state, "Edit Category".to_string(), |c| {
+    let label = match core.essential {
+        Some(true) => "Mark Essential",
+        Some(false) => "Unmark Essential",
+        None => "Edit Category",
+    };
+    recorded(&state, label.to_string(), |c| {
         if core.budget_cents.is_some() {
             budget_plan_core::adopt_display_currency(c)?;
         }
@@ -920,6 +929,19 @@ pub fn list_recurring(
         .into_iter()
         .map(|r| recurring_shown(&shown, r))
         .collect())
+}
+
+#[tauri::command]
+pub fn money_habits(
+    state: State<'_, AppState>,
+    profile_id: Option<i64>,
+    today: String,
+) -> IpcResult<slaybudget_core::habits::HabitsData> {
+    Ok(slaybudget_core::habits::money_habits(
+        &lock(&state),
+        profile_id,
+        &today,
+    )?)
 }
 
 #[tauri::command]
@@ -1602,6 +1624,22 @@ pub fn set_rollover(
 pub struct RebalanceChangeDto {
     pub category_id: i64,
     pub amount_cents: i64,
+}
+
+#[tauri::command]
+pub fn apply_budgets(
+    state: State<'_, AppState>,
+    month: String,
+    items: Vec<RebalanceChangeDto>,
+) -> IpcResult<()> {
+    let pairs: Vec<(i64, i64)> = items
+        .iter()
+        .map(|c| (c.category_id, c.amount_cents))
+        .collect();
+    recorded(&state, "Use Suggested Budgets".to_string(), |c| {
+        budget_plan_core::adopt_display_currency(c)?;
+        budget_plan_core::apply_budgets(c, &month, &pairs)
+    })
 }
 
 #[tauri::command]

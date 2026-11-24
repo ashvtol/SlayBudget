@@ -155,7 +155,7 @@ fn to_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
 
 /// Rows that can take part in a pair: not a split (parent or part), not a transfer, not linked as a refund.
 const ELIGIBLE: &str = "t.parent_id IS NULL AND t.refund_of IS NULL AND t.type != 'transfer'
-     AND NOT EXISTS (SELECT 1 FROM transactions c WHERE c.parent_id = t.id)";
+     AND t.id NOT IN (SELECT parent_id FROM transactions WHERE parent_id IS NOT NULL)";
 
 fn parse_day(s: &str) -> NaiveDate {
     NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_default()

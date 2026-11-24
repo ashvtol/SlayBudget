@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { create } from 'zustand';
 import { ipc } from '@/lib/ipc';
+import { budgetsForMonth } from '@/lib/budget-plan';
 import type { Category, HabitsData, Recurring } from '@/lib/types';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { useScreen } from '@/app/shell/screen';
@@ -20,6 +21,8 @@ interface HabitsState {
   hidden: HiddenTip[];
   /** Categories put in or left out of the suggested budget. */
   choices: Record<number, boolean>;
+  /** Each category's budget this month. */
+  budgets: Record<number, number | null>;
   data: HabitsData | null;
   categories: Category[];
   recurring: Recurring[];
@@ -64,6 +67,7 @@ export const useHabitsStore = create<HabitsState>((set, get) => ({
   targets: { fire: null, soft: null },
   hidden: [],
   choices: {},
+  budgets: {},
   data: null,
   categories: [],
   recurring: [],
@@ -80,13 +84,17 @@ export const useHabitsStore = create<HabitsState>((set, get) => ({
     });
   },
   async loadData(profileId, today) {
-    const [data, categories, recurring, sources] = await Promise.all([
+    const [data, categories, recurring, sources, plan] = await Promise.all([
       ipc().moneyHabits(profileId, today),
       ipc().listCategories(),
       ipc().analyticsRecurring(profileId, today),
       ipc().listSources(),
+      ipc().getBudgetPlan(),
     ]);
-    set({ data, categories, recurring, hasSavings: sources.some((s) => s.accountType === 'savings') });
+    // Each category's budget this month, as Categories shows it (overrides and shared group budgets included).
+    const month = budgetsForMonth(plan, categories, data.currentMonth).categories;
+    const budgets = Object.fromEntries(month.filter((c) => c.budgetCents != null).map((c) => [c.id, c.budgetCents]));
+    set({ data, categories, recurring, budgets, hasSavings: sources.some((s) => s.accountType === 'savings') });
   },
   async setStyle(style) {
     set({ style });

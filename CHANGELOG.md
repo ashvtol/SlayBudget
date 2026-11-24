@@ -5,6 +5,14 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.4] - 2026-11-23
+### Fixed
+- **"Needs category" no longer breaks onto two lines** next to a long transaction name (in search and lists).
+### Changed
+- **Suggested budget shows your budget now.** A Budget column sits next to the average, and each suggestion says how it
+  compares: ↓ lower, ↑ raise (when your budget is below what you can realistically keep to), same, or new. Use these
+  budgets changes only the ones that differ and says how many ("2 changed, 1 new").
+
 ## [0.8.3] - 2026-11-23
 ### Fixed
 - **No more hard focus box around the search row.** Fields with no box of their own (transaction search, the search

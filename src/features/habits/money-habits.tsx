@@ -8,6 +8,7 @@ import { Button } from '@/components/button';
 import { SegmentedControl } from '@/components/segmented-control';
 import { IconClose, IconHelp } from '@/components/icons';
 import { ipc } from '@/lib/ipc';
+import { localeFor } from '@/lib/format';
 import { useNavStore } from '@/lib/stores/nav-store';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { displayCurrency } from '@/features/currency/currency-store';
@@ -32,6 +33,7 @@ import {
   type HabitsContext,
   type Split,
   type Style,
+  type SuggestionRow,
   type Tip,
 } from './habits-model';
 import { useHabitsData, useHabitsStore } from './habits-store';
@@ -60,6 +62,7 @@ export function useHabitsContext(): HabitsContext | null {
     today,
     currency: displayCurrency(),
     choices: s.choices,
+    budgets: s.budgets,
   };
 }
 
@@ -263,16 +266,24 @@ function SuggestedBudget({ ctx }: { ctx: HabitsContext }) {
   };
   const apply = async () => {
     if (!s) return;
-    const items = s.rows.filter((r) => r.included).map((r) => {
-      const typed = editing?.[r.categoryId];
-      const dollars = typed == null ? NaN : Number(typed.replace(/[^0-9.]/g, ''));
-      return { categoryId: r.categoryId, amountCents: Number.isFinite(dollars) && typed?.trim() ? Math.round(dollars * 100) : r.suggestedCents };
-    });
+    // Only the budgets that actually change.
+    const items = s.rows
+      .filter((r) => r.included)
+      .map((r) => {
+        const typed = editing?.[r.categoryId];
+        const dollars = typed == null ? NaN : Number(typed.replace(/[^0-9.]/g, ''));
+        return { categoryId: r.categoryId, amountCents: Number.isFinite(dollars) && typed?.trim() ? Math.round(dollars * 100) : r.suggestedCents, currentCents: r.currentCents };
+      })
+      .filter((i) => i.amountCents !== i.currentCents);
+    if (items.length === 0) return;
+    const added = items.filter((i) => i.currentCents == null).length;
+    const changed = items.length - added;
+    const parts = [changed && `${changed} changed`, added && `${added} new`].filter(Boolean).join(', ');
     try {
-      await ipc().applyBudgets(ctx.data.currentMonth, items);
+      await ipc().applyBudgets(ctx.data.currentMonth, items.map(({ categoryId, amountCents }) => ({ categoryId, amountCents })));
       setEditing(null);
       setError(null);
-      setDone({ text: `Budgets set for ${items.length} ${items.length === 1 ? 'category' : 'categories'}. ⌘Z undoes it.`, steps: useUndoStore.getState().steps });
+      setDone({ text: `Budgets set: ${parts}. ⌘Z undoes it.`, steps: useUndoStore.getState().steps });
       void loadData(profileId, ctx.today);
     } catch (e) {
       setError(String(e));
@@ -323,8 +334,9 @@ function SuggestedBudget({ ctx }: { ctx: HabitsContext }) {
                     />
                   </th>
                   <th className="whitespace-nowrap pb-1.5 text-left font-semibold">Flexible spending</th>
-                  <th className="w-[90px] pb-1.5 text-right font-semibold">Average</th>
-                  <th className="w-[100px] pb-1.5 text-right font-semibold">Suggested</th>
+                  <th className="w-[80px] pb-1.5 text-right font-semibold">Average</th>
+                  <th className="w-[80px] pb-1.5 text-right font-semibold">Budget</th>
+                  <th className="w-[130px] pb-1.5 text-right font-semibold">Suggested</th>
                 </tr>
               </thead>
               <tbody>
@@ -351,6 +363,9 @@ function SuggestedBudget({ ctx }: { ctx: HabitsContext }) {
                       <td className="py-1.5 text-right">
                         <Money cents={r.avgCents} decimals={false} tone="muted" />
                       </td>
+                      <td className="py-1.5 text-right">
+                        {r.currentCents == null ? <span style={{ color: 'var(--subtle)' }}>—</span> : <Money cents={r.currentCents} decimals={false} tone="muted" />}
+                      </td>
                       <td className="py-1.5 text-right font-semibold">
                         {!r.included ? (
                           <span className="text-[12px] font-normal" style={{ color: 'var(--muted)' }}>Not budgeted</span>
@@ -362,7 +377,10 @@ function SuggestedBudget({ ctx }: { ctx: HabitsContext }) {
                             onChange={(e) => setEditing({ ...editing, [r.categoryId]: e.target.value })}
                           />
                         ) : (
-                          <Money cents={r.suggestedCents} decimals={false} tone={r.suggestedCents < r.avgCents ? 'pos' : 'default'} />
+                          <>
+                            <Money cents={r.suggestedCents} decimals={false} tone={r.suggestedCents < r.avgCents ? 'pos' : 'default'} />
+                            <ChangeMark row={r} />
+                          </>
                         )}
                       </td>
                     </tr>
@@ -402,12 +420,34 @@ function SuggestedBudget({ ctx }: { ctx: HabitsContext }) {
               ) : (
                 <Button onClick={() => { setEditing({}); setDone(null); }}>Adjust</Button>
               )}
-              <Button variant="primary" disabled={!s.rows.some((r) => r.included)} onClick={() => void apply()}>Use these budgets</Button>
+              <Button variant="primary" disabled={!editing && !s.rows.some((r) => r.included && r.change !== 'same')} onClick={() => void apply()}>
+                Use these budgets
+              </Button>
             </div>
           )}
         </div>
       )}
     </Card>
+  );
+}
+
+const wholeMoney = (cents: number) =>
+  new Intl.NumberFormat(localeFor(displayCurrency()), { style: 'currency', currency: displayCurrency(), maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(cents / 100);
+
+/** Next to a suggestion: how it compares with the budget you have now. */
+function ChangeMark({ row }: { row: SuggestionRow }) {
+  const by = Math.abs(row.suggestedCents - (row.currentCents ?? 0));
+  const mark =
+    row.change === 'lower' ? { text: `↓ ${wholeMoney(by)}`, color: 'var(--pos)', title: 'Lower than your budget now' }
+    : row.change === 'raise' ? { text: `↑ ${wholeMoney(by)}`, color: 'var(--warn)', title: 'Your budget now is below what you can realistically keep to' }
+    : row.change === 'same' ? { text: 'same', color: 'var(--subtle)', title: 'Already your budget' }
+    : row.change === 'new' ? { text: 'new', color: 'var(--subtle)', title: 'No budget yet' }
+    : null;
+  if (!mark) return null;
+  return (
+    <span title={mark.title} className="ml-1.5 inline-block min-w-[44px] text-left text-[11px] font-normal" style={{ color: mark.color }}>
+      {mark.text}
+    </span>
   );
 }
 

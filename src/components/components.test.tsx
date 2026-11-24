@@ -63,6 +63,12 @@ describe('CategoryPill', () => {
     rerender(<CategoryPill category={undefined} />);
     expect(screen.getByRole('button', { name: 'Needs category' })).toBeInTheDocument();
   });
+  it('never wraps or shrinks, even next to a long name (both kinds)', () => {
+    const { rerender } = render(<CategoryPill category={undefined} />);
+    expect(screen.getByRole('button', { name: 'Needs category' })).toHaveClass('whitespace-nowrap', 'shrink-0');
+    rerender(<CategoryPill category={cat} />);
+    expect(screen.getByRole('button', { name: /Restaurants/ })).toHaveClass('whitespace-nowrap');
+  });
 });
 
 describe('Card', () => {

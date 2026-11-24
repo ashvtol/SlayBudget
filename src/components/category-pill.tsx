@@ -32,7 +32,7 @@ export function CategoryPill({
       <button
         type="button"
         onClick={onClick}
-        className={`inline-flex items-center rounded-full border border-dashed font-semibold uppercase leading-none tracking-[0.02em] ${pad}`}
+        className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-dashed font-semibold uppercase leading-none tracking-[0.02em] ${pad}`}
         style={{ borderColor: 'var(--subtle)', color: 'var(--muted)' }}
       >
         Needs category

@@ -45,6 +45,8 @@ export interface HabitsContext {
   currency: string;
   /** Categories you put in or left out of the suggested budget (by id); others follow the default. */
   choices?: Record<number, boolean>;
+  /** Each category's budget this month (absent: none). */
+  budgets?: Record<number, number | null>;
 }
 
 export interface SuggestionRow {
@@ -54,6 +56,10 @@ export interface SuggestionRow {
   creptUp: boolean;
   /** In the budget; a left-out category keeps its average and gets no budget. */
   included: boolean;
+  /** Its budget this month, if it has one. */
+  currentCents: number | null;
+  /** The suggestion against that budget; 'out' when the category is left out. */
+  change: 'lower' | 'raise' | 'same' | 'new' | 'out';
 }
 
 export interface Suggestion {
@@ -176,13 +182,20 @@ export function suggestBudget(c: HabitsContext): Suggestion | null {
       left -= take;
     }
   }
-  const out = rows.map((r) => ({
-    categoryId: r.categoryId,
-    avgCents: r.avgCents,
-    suggestedCents: r.included ? roundTo(r.exact) : r.avgCents,
-    creptUp: r.creptUp,
-    included: r.included,
-  }));
+  const out = rows.map((r) => {
+    const suggestedCents = r.included ? roundTo(r.exact) : r.avgCents;
+    const currentCents = c.budgets?.[r.categoryId] ?? null;
+    const change: SuggestionRow['change'] = !r.included
+      ? 'out'
+      : currentCents == null
+        ? 'new'
+        : suggestedCents < currentCents
+          ? 'lower'
+          : suggestedCents > currentCents
+            ? 'raise'
+            : 'same';
+    return { categoryId: r.categoryId, avgCents: r.avgCents, suggestedCents, creptUp: r.creptUp, included: r.included, currentCents, change };
+  });
   const saved = rows.reduce((s, r) => s + (r.avgCents - r.exact), 0);
   const reachablePct = left > ROUND_TO ? pct(income - (spend - saved), income) : null;
   return { goalSpendCents, cutCents, rows: out, reachablePct };

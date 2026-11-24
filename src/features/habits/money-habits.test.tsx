@@ -129,7 +129,7 @@ describe('Your money habits on Insights', () => {
     await user.clear(field);
     await user.type(field, '600');
     await user.click(within(budgetCard()).getByRole('button', { name: 'Use these budgets' }));
-    await waitFor(() => expect(within(budgetCard()).getByRole('status')).toHaveTextContent('Budgets set for 2 categories'));
+    await waitFor(() => expect(within(budgetCard()).getByRole('status')).toHaveTextContent('Budgets set: 2 new. ⌘Z undoes it.'));
     const after = await ipc().listCategories();
     expect(after.find((c) => c.name === 'Restaurants')!.budgetCents).toBe(60000);
     expect(after.find((c) => c.name === 'Shopping')!.budgetCents).toBe(50000);
@@ -146,6 +146,35 @@ describe('Your money habits on Insights', () => {
     await act(() => useUndoStore.getState().undo());
     await waitFor(() => expect(within(budgetCard()).queryByRole('status')).not.toBeInTheDocument());
     expect((await ipc().listCategories()).find((c) => c.name === 'Restaurants')!.budgetCents).toBeNull();
+  });
+
+  it('shows the budget you have now and whether the suggestion lowers or raises it', async () => {
+    await ipc().setBudget(2, null, 40000); // Restaurants: $400 now; the suggestion is $630
+    render(<InsightsPage />);
+    await habits();
+    await waitFor(() => expect(budgetCard()).toHaveTextContent('35%'));
+    expect(within(budgetCard()).getByRole('columnheader', { name: 'Budget' })).toBeInTheDocument();
+    expect(within(budgetCard()).getByRole('row', { name: /Restaurants/ })).toHaveTextContent(/\$1,000.*\$400.*\$630.*↑ \$230/);
+    expect(within(budgetCard()).getByRole('row', { name: /Shopping/ })).toHaveTextContent(/\$800.*—.*\$500.*new/);
+  });
+
+  it('sets only the budgets that change, and says how many', async () => {
+    const user = userEvent.setup();
+    await ipc().setBudget(2, null, 63000); // Restaurants already at the suggestion
+    render(<InsightsPage />);
+    await habits();
+    await waitFor(() => expect(within(budgetCard()).getByRole('row', { name: /Restaurants/ })).toHaveTextContent('same'));
+    await user.click(within(budgetCard()).getByRole('button', { name: 'Use these budgets' }));
+    await waitFor(() => expect(within(budgetCard()).getByRole('status')).toHaveTextContent('Budgets set: 1 new. ⌘Z undoes it.'));
+  });
+
+  it('Use these budgets is off when every budget already matches', async () => {
+    await ipc().setBudget(2, null, 63000);
+    await ipc().setBudget(3, null, 50000);
+    render(<InsightsPage />);
+    await habits();
+    await waitFor(() => expect(within(budgetCard()).getByRole('row', { name: /Shopping/ })).toHaveTextContent('same'));
+    expect(within(budgetCard()).getByRole('button', { name: 'Use these budgets' })).toBeDisabled();
   });
 
   it('Cancel (or Escape) leaves editing without changing anything', async () => {

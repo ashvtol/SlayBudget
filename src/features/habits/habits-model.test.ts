@@ -146,6 +146,20 @@ describe('suggested budget', () => {
     expect(suggestBudget(ctx(extra, { categories: withOther, choices: { 6: true } }))!.rows.find((r) => r.categoryId === 6)!.included).toBe(true);
   });
 
+  it('compares each suggestion with the budget you have now: lower, raise, same or new', () => {
+    // Suggested: Restaurants $315, Shopping $275, Delivery $105.
+    const s = suggestBudget(ctx(d, { target: 35, budgets: { 1: 40000, 3: 5000 } }))!;
+    expect(s.rows.map((r) => [r.categoryId, r.currentCents, r.change])).toEqual([
+      [1, 40000, 'lower'],
+      [2, null, 'new'],
+      [3, 5000, 'raise'],
+    ]);
+    const same = suggestBudget(ctx(d, { target: 35, budgets: { 2: 27500 } }))!;
+    expect(same.rows.find((r) => r.categoryId === 2)!.change).toBe('same');
+    const out = suggestBudget(ctx(d, { target: 35, budgets: { 1: 40000 }, choices: { 1: false } }))!;
+    expect(out.rows.find((r) => r.categoryId === 1)).toMatchObject({ currentCents: 40000, change: 'out' });
+  });
+
   it('suggests no cut when you already spend less', () => {
     const s = suggestBudget(ctx(d, { target: 20 }))!;
     expect(s.cutCents).toBe(0);

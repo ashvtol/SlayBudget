@@ -59,6 +59,7 @@ fn kind_key(kind: Kind) -> &'static str {
         Kind::MoneyIn => "moneyIn",
         Kind::PossibleDuplicates => "possibleDuplicates",
         Kind::Statements => "statements",
+        Kind::MoneyTips => "moneyTips",
     }
 }
 

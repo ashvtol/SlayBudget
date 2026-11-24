@@ -5,6 +5,13 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-23
+### Added
+- **Money tip notifications.** When Your money habits has a new tip, one comes back after you hid it, or one turns into
+  a warning, it goes to the bell (and a Mac banner, if they're on). Clicking it opens the tips on Insights. More than 3
+  at once arrive as one; Settings → Notifications → Money tips turns them off. The first check after updating stays
+  quiet.
+
 ## [0.8.0] - 2026-11-23
 ### Added
 - **Your money habits** on Insights, below "Where your money went" and based on all your history (the time range at

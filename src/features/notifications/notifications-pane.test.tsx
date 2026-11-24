@@ -75,6 +75,15 @@ describe('NotificationsPane', () => {
     await waitFor(async () => expect((await saved()).quietHours.start).toBe('21:30'));
   });
 
+  it('has a Money tips row with bell and banner switches', async () => {
+    const user = userEvent.setup();
+    await renderPane();
+    const tips = row('Money tips');
+    expect(tips).toHaveTextContent('Your money habits has a new tip, one came back, or one turned into a warning.');
+    await user.click(within(tips).getByRole('switch', { name: 'Banner' }));
+    await waitFor(async () => expect((await saved()).kinds.moneyTips).toEqual({ bell: true, banner: false }));
+  });
+
   it('uses slide toggles everywhere, with Bell above Banner, and Banner off while Bell is off', async () => {
     const user = userEvent.setup();
     await renderPane();

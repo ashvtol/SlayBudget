@@ -457,7 +457,8 @@ export type NotificationKind =
   | 'reviewDigest'
   | 'moneyIn'
   | 'possibleDuplicates'
-  | 'statements';
+  | 'statements'
+  | 'moneyTips';
 
 /** Where clicking a notification goes. */
 export type NotificationTarget =
@@ -466,7 +467,8 @@ export type NotificationTarget =
   | { kind: 'transaction'; id: number }
   | { kind: 'category'; id: number | null; month: string }
   | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates'; text?: string }
-  | { kind: 'import' };
+  | { kind: 'import' }
+  | { kind: 'insights' };
 
 export interface NewNotification {
   key: string;

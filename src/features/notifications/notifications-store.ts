@@ -3,6 +3,7 @@
 
 import { create } from 'zustand';
 import { ipc } from '@/lib/ipc';
+import { checkTipNews } from '@/features/habits/tip-check';
 import { todayStr } from '@/features/analytics/analytics-store';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { inQuietHours, loadConfig } from './config';
@@ -73,6 +74,11 @@ export const useNotificationsStore = create<NotificationsState>((set, get) => ({
       await ipc().notificationsRefresh(todayStr(deps.now()), baseline);
     } catch {
       /* a failed check retries on the next tick */
+    }
+    try {
+      await checkTipNews(todayStr(deps.now()), profile());
+    } catch {
+      /* tips are checked again on the next tick */
     }
     await useInboxStore.getState().load();
     await get().deliverPending();

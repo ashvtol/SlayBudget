@@ -35,11 +35,11 @@ interface HabitsState {
   chooseAll(categoryIds: number[], included: boolean): Promise<void>;
 }
 
-const parseTarget = (v: string | null) => {
+export const parseTarget = (v: string | null) => {
   const n = v == null ? NaN : Number(v);
   return Number.isFinite(n) ? Math.min(MAX_TARGET, Math.max(MIN_TARGET, n)) : null;
 };
-const parseChoices = (v: string | null): Record<number, boolean> => {
+export const parseChoices = (v: string | null): Record<number, boolean> => {
   try {
     const o = v ? JSON.parse(v) : {};
     return o && typeof o === 'object' && !Array.isArray(o)
@@ -49,7 +49,7 @@ const parseChoices = (v: string | null): Record<number, boolean> => {
     return {};
   }
 };
-const parseHidden = (v: string | null): HiddenTip[] => {
+export const parseHidden = (v: string | null): HiddenTip[] => {
   try {
     const list = v ? JSON.parse(v) : [];
     return Array.isArray(list) ? list.filter((h) => h && typeof h.id === 'string' && typeof h.value === 'number') : [];

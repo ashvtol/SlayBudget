@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 pub const KEY: &str = "notifications.config";
 const OLD_HORIZON_KEY: &str = "reminder_horizon_days";
 
-const KINDS: [&str; 12] = [
+const KINDS: [&str; 13] = [
     "update",
     "billUpcoming",
     "billMissed",
@@ -23,6 +23,7 @@ const KINDS: [&str; 12] = [
     "moneyIn",
     "possibleDuplicates",
     "statements",
+    "moneyTips",
 ];
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

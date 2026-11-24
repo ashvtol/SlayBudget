@@ -55,7 +55,7 @@ on your own computer, this is it.
 | 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. |
 | 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
-| 🗺️ **Insights** | An interactive spending map: drill from category to merchant and see what grew. |
+| 🗺️ **Insights** | An interactive spending map for any time range: drill from category to merchant and see what grew. Below it, Your money habits looks at all your history (see the next row). |
 | 🔥 **Your money habits** | Pick a money style, **FIRE** (Financial Independence, Retire Early) or **Soft saving**, and see your savings rate, your FI number (25 times a year of spending) and roughly how many years to independence, worked out from all your history. A suggested budget trims flexible spending toward a savings target you choose (needs and bills stay as they are, and you can leave any category out, or all of them, with the header checkbox); apply it in one click and ⌘Z takes it back. Tips cover the 50/30/20 split, an emergency fund target, spending that grew faster than income, what subscriptions cost a year, small purchases that add up, no-spend days and paying yourself first. Hide any tip; it comes back if its numbers change a lot. Mark categories as Essential to tell needs from wants. Rules of thumb, not financial advice. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
@@ -63,7 +63,7 @@ on your own computer, this is it.
 | 💱 **Your currency, offline** | Show every amount in your currency (30+ to choose from): transactions, totals, budgets, charts and bills, each converted at its own month's rate. The European Central Bank's rates are built into the app, so nothing goes online to convert, and your data keeps its original currency. Changing numbers roll like a ticker. |
 | ↩️ **Undo and redo** | ⌘Z takes back your last change and ⇧⌘Z puts it back, 15 steps deep, like any Mac app: a category, a bulk "apply to others", a delete (with its splits and tags), a budget, an import. The Edit menu names the step ("Undo Change Category"). |
 | 🗑️ **Delete and undo imports** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
-| 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price changes, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, and paychecks or refunds arriving. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
+| 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price changes, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, paychecks or refunds arriving, and new money tips. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
 | ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
 | 👨‍👩‍👧 **Profiles** | Keep household members' accounts separate, or view everything combined. |
 | 🛡️ **Your data, your rules** | One-click database backup, and a rules export that leaves out anything identifying you. |
@@ -366,6 +366,15 @@ for early retirement). Years to FI assume you start from zero, earn 5% a year af
 
 A hidden tip stays hidden until its numbers change a lot: more than 10% (or 3 points for a percentage, like your
 50/30/20 split). Then it's news again. You can also bring any hidden tip back from "hidden tips" under the list.
+</details>
+
+<details>
+<summary><b>Will SlayBudget tell me about a new tip?</b></summary>
+
+Yes. After each import (and when the app starts) it checks Your money habits, and a tip that's new, came back after you
+hid it, or turned into a warning goes to the bell, and to a Mac banner if banners are on. Clicking it opens the tips on
+Insights. More than 3 at once arrive as one. Turn them off under Settings → Notifications → Money tips. The no-spend
+days tip never notifies (it changes every day), and the first check after updating stays quiet.
 </details>
 
 <details>

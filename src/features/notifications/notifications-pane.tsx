@@ -221,6 +221,7 @@ export function NotificationsPane() {
       </KindRow>
       <KindRow kind="possibleDuplicates" title="Possible duplicates" hint="An import found rows that look like ones you already had." config={config} onSwitch={onSwitch} />
       <KindRow kind="statements" title="Statements imported" hint="A statement in your watched folder or Downloads was imported, or needs an account." config={config} onSwitch={onSwitch} />
+      <KindRow kind="moneyTips" title="Money tips" hint="Your money habits has a new tip, one came back, or one turned into a warning." config={config} onSwitch={onSwitch} />
       <KindRow kind="update" title="Update available" hint="A new version of SlayBudget is ready." config={config} onSwitch={onSwitch} />
 
       <div className="flex items-center justify-between gap-3 pt-3" style={{ borderTop: '1px solid var(--line)' }}>

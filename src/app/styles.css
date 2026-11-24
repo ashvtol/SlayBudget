@@ -184,7 +184,8 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
 }
 .segmented-option:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 5px; }
 
-input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):focus-visible,
+/* A field with no box of its own (.field-bare: a search row, an inline rename) shows its caret, not a ring. */
+input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.field-bare):focus-visible,
 textarea:focus-visible {
   outline: none; box-shadow: var(--focus-ring), inset 0 0 0 0.5px var(--accent);
 }

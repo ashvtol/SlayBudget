@@ -5,6 +5,11 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-23
+### Fixed
+- **No more hard focus box around the search row.** Fields with no box of their own (transaction search, the search
+  palette, renaming a tag, a new category's name and budget) now show just the caret while you type.
+
 ## [0.8.2] - 2026-11-23
 ### Fixed
 - **Save budget looked greyed out in the Graphite theme.** It had white text on Graphite's white accent; it (and the

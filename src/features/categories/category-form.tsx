@@ -70,10 +70,10 @@ export function CategoryForm({
             })}
           </div>
           <EmojiPicker value={emoji} onChange={setEmoji} />
-          <input aria-label="Category name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className="w-full bg-transparent text-center text-[22px] font-semibold outline-none" style={{ color: 'var(--text)' }} />
+          <input aria-label="Category name" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Category name" className="field-bare w-full bg-transparent text-center text-[22px] font-semibold outline-none" style={{ color: 'var(--text)' }} />
           <div className="flex items-baseline gap-1 text-[18px] font-semibold">
             <span style={{ color: 'var(--muted)' }}>$</span>
-            <input aria-label="Budget" value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal" placeholder="Budget" className="w-[110px] bg-transparent text-center outline-none" style={{ color: 'var(--text)' }} />
+            <input aria-label="Budget" value={budget} onChange={(e) => setBudget(e.target.value)} inputMode="decimal" placeholder="Budget" className="field-bare w-[110px] bg-transparent text-center outline-none" style={{ color: 'var(--text)' }} />
           </div>
           <div className="flex w-full items-center gap-2 text-[12px]">
             <label htmlFor="category-group" style={{ color: 'var(--muted)' }}>Group</label>

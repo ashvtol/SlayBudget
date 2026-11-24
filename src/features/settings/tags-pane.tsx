@@ -122,7 +122,7 @@ function TagRow({ tag, autoFocus, onFocused, onError, onDelete }: { tag: Tag; au
             e.currentTarget.blur();
           }
         }}
-        className="h-full min-w-0 flex-1 bg-transparent px-3 text-[13px] outline-none"
+        className="field-bare h-full min-w-0 flex-1 bg-transparent px-3 text-[13px] outline-none"
         style={{ color: 'var(--text)' }}
       />
       <button

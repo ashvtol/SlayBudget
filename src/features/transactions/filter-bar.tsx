@@ -60,7 +60,7 @@ export function SearchField() {
         onChange={(e) => void applyFilter({ text: e.target.value || undefined })}
         placeholder="Search transactions"
         aria-label="Search transactions"
-        className="h-[24px] flex-1 bg-transparent text-[13px] outline-none"
+        className="field-bare h-[24px] flex-1 bg-transparent text-[13px] outline-none"
         style={{ color: 'var(--text)' }}
       />
     </div>

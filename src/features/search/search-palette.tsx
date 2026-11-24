@@ -53,7 +53,7 @@ export function SearchPalette() {
             }}
             placeholder="Search transactions…"
             aria-label="Search query"
-            className="flex-1 bg-transparent text-base outline-none"
+            className="field-bare flex-1 bg-transparent text-base outline-none"
             style={{ color: 'var(--text)' }}
           />
           {loading && <span className="text-xs" style={{ color: 'var(--muted)' }}>…</span>}

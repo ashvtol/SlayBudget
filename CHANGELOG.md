@@ -4,6 +4,8 @@ All notable changes to SlayBudget are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
+
+## [0.9.0] - 2026-11-24
 ### Added
 - **Smart categorization.** Imports use what SlayBudget learned from your own choices and a built-in list of about 900
   common merchants, all on your Mac. Money moved between your own accounts is paired as a transfer. Your history was

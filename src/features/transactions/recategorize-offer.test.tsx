@@ -154,4 +154,31 @@ describe('RecategorizeOffer', () => {
     expect(onDone).toHaveBeenCalledWith(null);
     expect((await ipc().listTransactions({})).filter((t) => t.categoryId === 2)).toHaveLength(0);
   });
+
+  it('rows you categorized yourself start unticked', async () => {
+    setup([...wsdot.slice(0, 2), tx(5, '2026-05-10', 'WSDOT GOODTOGO 5555', 'wsdot goodtogo', { categorySource: 'user', categoryId: 3 })]);
+    await ready();
+    const yours = within(panel()).getByRole('checkbox', { name: /WSDOT GOODTOGO 5555/ });
+    expect(yours).not.toBeChecked();
+    expect(within(panel()).getByRole('button', { name: /Apply to 2/ })).toBeInTheDocument();
+  });
+
+  it('shows a row’s statement details from its ⓘ', async () => {
+    const user = userEvent.setup();
+    setup(wsdot);
+    await ready();
+    const info = within(panel()).getByRole('button', { name: 'Statement details for WSDOT GOODTOGO 2222 on 2026-05-09' });
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+    await user.click(info);
+    const box = within(panel()).getByRole('group', { name: 'Statement for WSDOT GOODTOGO 2222' });
+    expect(box).toHaveTextContent('Appears on statement as');
+    await user.click(info);
+    expect(within(panel()).queryByRole('group', { name: 'Statement for WSDOT GOODTOGO 2222' })).not.toBeInTheDocument();
+    // The box closes from its own × too.
+    await user.click(info);
+    const again = within(panel()).getByRole('group', { name: 'Statement for WSDOT GOODTOGO 2222' });
+    await user.click(within(again).getByRole('button', { name: 'Close statement details' }));
+    expect(within(panel()).queryByRole('group', { name: 'Statement for WSDOT GOODTOGO 2222' })).not.toBeInTheDocument();
+    expect(info).toHaveAttribute('aria-expanded', 'false');
+  });
 });

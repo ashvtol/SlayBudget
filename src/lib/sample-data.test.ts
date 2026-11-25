@@ -61,3 +61,18 @@ describe('sampleSeed', () => {
     expect(checks.map((c) => [c.oldCents, c.newCents, c.direction])).toEqual([[5500, 8900, 'up']]);
   });
 });
+
+describe('sample smart categorization', () => {
+  it('suggests a category for each uncategorized row, with a reason, and explains a model choice', () => {
+    const seed = sampleSeed(new Date(2026, 10, 17));
+    const open = seed.transactions!.filter((t) => t.categoryId == null);
+    expect(open.length).toBeGreaterThan(0);
+    for (const t of open) {
+      expect(t.suggestedCategoryId).not.toBeNull();
+      expect(t.suggestedReason).toMatch(/^Like \d+ others you put in /);
+    }
+    const coffee = seed.transactions!.filter((t) => t.merchant === 'Blue Bottle' && t.categorySource === 'model');
+    expect(coffee).toHaveLength(1);
+    expect(coffee[0].categoryReason).toMatch(/^Like \d+ others you put in Coffee \(Blue Bottle\)$/);
+  });
+});

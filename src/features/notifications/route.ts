@@ -41,7 +41,9 @@ export async function openTarget(target: NotificationTarget): Promise<void> {
       const patch =
         target.filter === 'review'
           ? { reviewed: false }
-          : target.filter === 'duplicates'
+          : target.filter === 'suggested'
+            ? { suggested: true }
+            : target.filter === 'duplicates'
             ? { tagIds: await duplicateTagIds() }
             : { text: target.text ?? '' };
       await useTransactionsStore.getState().applyFilter({ ...clearAllPatch(), ...patch });

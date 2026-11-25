@@ -173,6 +173,7 @@ pub fn apply(conn: &Connection, choices: &[FtChoice]) -> Result<FtReport> {
         report.moved += tx.execute(
             &format!(
                 "UPDATE transactions SET category_id = ?2, reviewed = 1, type = {ty},
+                category_source = 'user', category_reason = NULL, suggested_category_id = NULL, suggested_reason = NULL,
                     updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
                  WHERE {MOVABLE}",
                 ty = crate::transactions::type_of_category_sql("?2")

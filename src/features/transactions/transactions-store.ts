@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { ipc } from '@/lib/ipc';
+import { cleanMerchant } from '@/lib/merchant';
 import { withGroupColors } from '@/lib/category-colors';
 import { useTagsStore } from '@/lib/stores/tags-store';
 import type { Category, DuplicateResolution, Recurring, Source, Transaction, TransactionFilter, TxType } from '@/lib/types';
@@ -35,13 +36,24 @@ interface TransactionsState {
   focusById(id: number): Promise<void>;
   /** The row another screen asked to show (a notification, say); the page opens it in the detail panel and clears it. */
   focused: number | null;
-  /** A manual change: teaches the merchant and opens the "apply to others" offer. */
+  /** A manual change: teaches the merchant and moves its other rows; when some moved, leaves a note. */
   setCategory(id: number, categoryId: number): Promise<void>;
-  offer: { transactionId: number; categoryId: number } | null;
-  /** Result of the last bulk apply, shown under the category. */
-  notice: string | null;
-  /** Close the offer; when transactions moved, reload and say how many. */
-  closeOffer(moved: number | null): Promise<void>;
+  /** "Moved 14 other Starbucks transactions to Coffee Shop", shown on the row you changed. */
+  moveNote: { transactionId: number; categoryId: number; text: string; step: number } | null;
+  /** After a payment app's category change: ask whether the others with its name go there too. */
+  platformOffer: { transactionId: number; categoryId: number; merchant: string } | null;
+  closePlatformOffer(): void;
+  /** Take back the whole change (the same as Undo in the Edit menu). */
+  undoMove(): Promise<void>;
+  /** Put the other rows back and keep the change on this one only. */
+  onlyThisOne(): Promise<void>;
+  /** Take or turn down suggested categories, then re-read. */
+  acceptSuggestions(ids: number[]): Promise<void>;
+  rejectSuggestions(ids: number[]): Promise<void>;
+  /** One category for several transactions (each becomes yours, nothing else moves); clears the selection. */
+  setCategories(ids: number[], categoryId: number): Promise<void>;
+  /** Accept every suggestion the current filter shows (all pages). */
+  acceptAllSuggested(): Promise<void>;
   setNotes(id: number, notes: string): Promise<void>;
   /** Change the type of transactions (categories that don't fit are cleared), then reload. */
   setType(ids: number[], type: TxType): Promise<void>;
@@ -75,8 +87,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   loading: false,
   filter: {},
   sort: 'newest',
-  offer: null,
-  notice: null,
+  moveNote: null,
+  platformOffer: null,
 
   async load(profileId, filter) {
     // The filter takes effect now, so a second change builds on it; only the newest load lands.
@@ -180,21 +192,60 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   async setCategory(id, categoryId) {
-    await ipc().setTransactionCategory(id, categoryId);
+    const change = await ipc().setTransactionCategory(id, categoryId);
     set((s) => ({
-      transactions: s.transactions.map((t) => (t.id === id ? { ...t, categoryId, reviewed: true } : t)),
-      offer: { transactionId: id, categoryId },
-      notice: null,
+      transactions: s.transactions.map((t) => (t.id === id ? { ...t, categoryId, reviewed: true, categorySource: 'user', categoryReason: null, suggestedCategoryId: null, suggestedReason: null } : t)),
+      moveNote: null,
+      platformOffer: change.platform ? { transactionId: id, categoryId, merchant: change.merchant } : null,
     }));
+    if (change.moved === 0 || change.step == null) return;
+    const step = change.step;
+    await get().refresh();
+    const name = get().categoriesById[categoryId]?.name ?? 'the category';
+    const rows = change.moved === 1 ? 'transaction' : 'transactions';
+    set({ moveNote: { transactionId: id, categoryId, text: `Moved ${change.moved} other ${cleanMerchant(change.merchant)} ${rows} to ${name}`, step } });
   },
 
-  async closeOffer(moved) {
-    const offer = get().offer;
-    set({ offer: null, notice: null });
-    if (!offer || !moved) return;
-    await get().applyFilter({});
-    const name = get().categoriesById[offer.categoryId]?.name ?? 'the category';
-    set({ notice: `Moved ${moved} ${moved === 1 ? 'transaction' : 'transactions'} to ${name}.` });
+  closePlatformOffer() {
+    set({ platformOffer: null });
+  },
+
+  async undoMove() {
+    const note = get().moveNote;
+    if (!note) return;
+    set({ moveNote: null });
+    // Only while that change is still the latest step: never undo something that came after it.
+    await ipc().undoStep(note.step).catch(() => null);
+    await get().refresh();
+  },
+
+  async acceptSuggestions(ids) {
+    await ipc().acceptSuggestions(ids);
+    await get().refresh();
+  },
+
+  async rejectSuggestions(ids) {
+    await ipc().rejectSuggestions(ids);
+    await get().refresh();
+  },
+
+  async setCategories(ids, categoryId) {
+    await ipc().setCategories(ids, categoryId);
+    set({ selected: new Set() });
+    await get().refresh();
+  },
+
+  async acceptAllSuggested() {
+    const rows = await ipc().listTransactions({ ...get().filter, suggested: true, limit: undefined, offset: 0 });
+    if (rows.length) await get().acceptSuggestions(rows.map((t) => t.id));
+  },
+
+  async onlyThisOne() {
+    const note = get().moveNote;
+    if (!note) return;
+    set({ moveNote: null });
+    await ipc().keepOnlyThisOne(note.transactionId, note.categoryId, note.step).catch(() => null);
+    await get().refresh();
   },
 
   async setType(ids, type) {

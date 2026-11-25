@@ -225,6 +225,7 @@ pub struct FilterDto {
     pub recurring_ids: Vec<i64>,
     #[serde(default)]
     pub tag_ids: Vec<i64>,
+    pub suggested: Option<bool>,
     pub limit: Option<i64>,
     #[serde(default)]
     pub offset: i64,
@@ -245,6 +246,7 @@ impl FilterDto {
             types: self.types,
             recurring_ids: self.recurring_ids,
             tag_ids: self.tag_ids,
+            suggested: self.suggested,
             limit: self.limit,
             offset: self.offset,
         })
@@ -273,6 +275,11 @@ pub struct TransactionDto {
     /// The amount and currency it was imported in, when it's shown converted.
     pub original_amount_cents: Option<i64>,
     pub original_currency: Option<String>,
+    pub category_source: slaybudget_core::transactions::CategorySource,
+    pub category_reason: Option<String>,
+    pub suggested_category_id: Option<i64>,
+    pub suggested_reason: Option<String>,
+    pub transfer_pair_id: Option<i64>,
 }
 
 impl TransactionDto {
@@ -351,6 +358,11 @@ impl From<Transaction> for TransactionDto {
             tag_ids: t.tag_ids,
             original_amount_cents: None,
             original_currency: None,
+            category_source: t.category_source,
+            category_reason: t.category_reason,
+            suggested_category_id: t.suggested_category_id,
+            suggested_reason: t.suggested_reason,
+            transfer_pair_id: t.transfer_pair_id,
         }
     }
 }
@@ -694,6 +706,7 @@ use slaybudget_core::import::pipeline::{self, ImportReport};
 #[serde(rename_all = "camelCase")]
 pub struct ImportReportDto {
     pub import_id: Option<i64>,
+    pub source_id: i64,
     pub source_name: String,
     pub inserted: usize,
     pub duplicates: usize,
@@ -707,6 +720,7 @@ impl From<ImportReport> for ImportReportDto {
     fn from(r: ImportReport) -> Self {
         ImportReportDto {
             import_id: r.import_id,
+            source_id: r.source_id,
             source_name: r.source_name,
             inserted: r.inserted,
             duplicates: r.duplicates,
@@ -1147,15 +1161,200 @@ pub struct RecatMatchDto {
     pub locked: bool,
 }
 
+/// What a category change did, and the undo step it made (the note's Undo and Only this one name it).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChangeDto {
+    pub moved: usize,
+    pub merchant: String,
+    pub suggested: usize,
+    pub platform: bool,
+    pub step: Option<u64>,
+}
+
+/// A category change, and the rest of history moving with it, as one undo step.
 #[tauri::command]
 pub fn set_transaction_category(
     state: State<'_, AppState>,
     id: i64,
     category_id: i64,
-) -> IpcResult<()> {
-    recorded(&state, "Change Category".to_string(), |c| {
-        recategorize::set_one(c, id, category_id)
+) -> IpcResult<ChangeDto> {
+    let conn = lock(&state);
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let before = stack.latest_id();
+    let change = stack.record(&conn, "Change Category", |c| {
+        recategorize::change_category(c, id, category_id)
+    });
+    show_undo_menu(&state, &stack);
+    let change = change?;
+    let after = stack.latest_id();
+    Ok(ChangeDto {
+        moved: change.moved,
+        merchant: change.merchant,
+        suggested: change.suggested,
+        platform: change.platform,
+        step: if after != before { after } else { None },
     })
+}
+
+/// The other transactions with this one's name, to ask about after a payment app's category change.
+#[tauri::command]
+pub fn same_merchant(
+    state: State<'_, AppState>,
+    id: i64,
+    category_id: i64,
+) -> IpcResult<Vec<RecatMatchDto>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    Ok(recategorize::same_merchant(&conn, id, category_id)?
+        .into_iter()
+        .map(|m| RecatMatchDto {
+            transaction: TransactionDto::shown(&shown, m.transaction),
+            similar: m.similar,
+            locked: m.locked,
+        })
+        .collect())
+}
+
+/// One category for the transactions you selected (each becomes yours; nothing else moves). One undo step.
+#[tauri::command]
+pub fn set_categories(
+    state: State<'_, AppState>,
+    ids: Vec<i64>,
+    category_id: i64,
+) -> IpcResult<usize> {
+    recorded(&state, count_label("Change Category", ids.len()), |c| {
+        recategorize::set_many(c, &ids, category_id)
+    })
+}
+
+/// Undo `step` only while it is still the latest step (the note's Undo after a category change).
+#[tauri::command]
+pub fn undo_step(state: State<'_, AppState>, step: u64) -> IpcResult<Option<String>> {
+    let conn = lock(&state);
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let done = stack.undo_step(&conn, step);
+    show_undo_menu(&state, &stack);
+    Ok(done?)
+}
+
+/// "Only this one": take back that change (only while it is still the latest step), then change just this row.
+#[tauri::command]
+pub fn keep_only_this_one(
+    state: State<'_, AppState>,
+    id: i64,
+    category_id: i64,
+    step: u64,
+) -> IpcResult<()> {
+    let conn = lock(&state);
+    let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
+    let done = stack.undo_step(&conn, step).and_then(|_| {
+        stack.record(&conn, "Change Category", |c| {
+            recategorize::set_only(c, id, category_id)
+        })
+    });
+    show_undo_menu(&state, &stack);
+    Ok(done?)
+}
+
+/// Take the suggested categories (the other side of a suggested transfer comes too).
+#[tauri::command]
+pub fn accept_suggestions(state: State<'_, AppState>, ids: Vec<i64>) -> IpcResult<usize> {
+    recorded(&state, count_label("Accept Suggestion", ids.len()), |c| {
+        slaybudget_core::categorize::history::accept(c, &ids)
+    })
+}
+
+/// Keep the current categories and drop the suggestions.
+#[tauri::command]
+pub fn reject_suggestions(state: State<'_, AppState>, ids: Vec<i64>) -> IpcResult<usize> {
+    recorded(&state, count_label("Reject Suggestion", ids.len()), |c| {
+        slaybudget_core::categorize::history::reject(c, &ids)
+    })
+}
+
+/// How many transactions have a category to check.
+#[tauri::command]
+pub fn suggestion_count(state: State<'_, AppState>, profile_id: Option<i64>) -> IpcResult<i64> {
+    Ok(slaybudget_core::categorize::history::suggestion_count(
+        &lock(&state),
+        profile_id,
+    )?)
+}
+
+/// Forget the merchants and what the classifier learned (the starter list is taught again). One undo step.
+#[tauri::command]
+pub fn reset_learning(state: State<'_, AppState>) -> IpcResult<()> {
+    recorded(&state, "Reset What SlayBudget Learned".to_string(), |c| {
+        slaybudget_core::categorize::history::reset_learning(c)
+    })
+}
+
+/// After updating: sort history once (backed up first, one undo step) and say what changed in the bell.
+pub fn sort_history_once(
+    conn: &rusqlite::Connection,
+    stack: &mut slaybudget_core::undo::UndoStack,
+) -> slaybudget_core::error::Result<()> {
+    if settings::get(conn, "smart_history_done")?.is_some() {
+        return Ok(());
+    }
+    slaybudget_core::db::backup_before(conn, "sort-transactions", &local_stamp())?;
+    slaybudget_core::categorize::history::prepare(conn)?;
+    let Some(r) = stack.record(
+        conn,
+        "Sort Transactions",
+        slaybudget_core::categorize::history::run_once,
+    )?
+    else {
+        return Ok(());
+    };
+    let changed = r.moved + r.transfers * 2;
+    if changed + r.suggested == 0 {
+        return Ok(());
+    }
+    let title = if changed > 0 {
+        format!(
+            "SlayBudget sorted {changed} {}",
+            if changed == 1 {
+                "transaction"
+            } else {
+                "transactions"
+            }
+        )
+    } else {
+        format!(
+            "{} {} to check",
+            r.suggested,
+            if r.suggested == 1 {
+                "category"
+            } else {
+                "categories"
+            }
+        )
+    };
+    let body = if r.suggested > 0 {
+        format!(
+            "{} {} suggestions to check. Undo from the Edit menu.",
+            r.suggested,
+            if r.suggested == 1 { "is a" } else { "are" }
+        )
+    } else {
+        "Undo from the Edit menu.".to_string()
+    };
+    slaybudget_core::notifications::add_if_new(
+        conn,
+        &slaybudget_core::notifications::NewNotification {
+            key: "sort-transactions-1".into(),
+            kind: slaybudget_core::notifications::Kind::ReviewDigest,
+            title,
+            body,
+            target: serde_json::json!({ "kind": "transactions", "filter": "suggested" }),
+            profile_id: None,
+        },
+        &now_utc(),
+        false,
+    )?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -2190,6 +2389,7 @@ mod currency_tests {
             tx_type: TxType::Regular,
             recurring_id: None,
             tag_ids: vec![],
+            ..Default::default()
         }
     }
 
@@ -2232,5 +2432,78 @@ mod currency_tests {
             parts_back(&shown("USD"), &parent, &[-4_000, -6_000]),
             vec![-4_000, -6_000]
         );
+    }
+}
+
+#[cfg(test)]
+mod sort_history_tests {
+    use super::*;
+    use slaybudget_core::undo::UndoStack;
+
+    fn with_history(conn: &rusqlite::Connection) {
+        let p = slaybudget_core::profiles::create(conn, "Alex", None).unwrap();
+        let s = slaybudget_core::profiles::find_or_create_source(
+            conn,
+            p,
+            "Amex",
+            slaybudget_core::profiles::SourceKind::Csv,
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO transactions (profile_id, source_id, posted_on, description, merchant, amount_cents, currency, dedupe_hash, category_id)
+             VALUES (?1, ?2, '2026-02-01', 'STARBUCKS STORE 1', 'starbucks store', -650, 'USD', 'h1',
+                     (SELECT id FROM categories WHERE legacy_name = 'Other'))",
+            [p, s],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn sorting_history_runs_once_as_one_undo_step_and_tells_the_bell() {
+        let conn = slaybudget_core::db::open_in_memory().unwrap();
+        with_history(&conn);
+        let mut stack = UndoStack::new();
+        sort_history_once(&conn, &mut stack).unwrap();
+        assert_eq!(stack.state().undo.as_deref(), Some("Sort Transactions"));
+        let bell = slaybudget_core::notifications::list(&conn, None).unwrap();
+        assert_eq!(bell.len(), 1);
+        assert_eq!(bell[0].title, "1 category to check");
+        sort_history_once(&conn, &mut stack).unwrap();
+        assert_eq!(
+            slaybudget_core::notifications::list(&conn, None)
+                .unwrap()
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn nothing_to_sort_leaves_the_bell_quiet() {
+        let conn = slaybudget_core::db::open_in_memory().unwrap();
+        let mut stack = UndoStack::new();
+        sort_history_once(&conn, &mut stack).unwrap();
+        assert!(slaybudget_core::notifications::list(&conn, None)
+            .unwrap()
+            .is_empty());
+    }
+
+    #[test]
+    fn a_new_install_has_no_sort_step_and_undoing_the_sort_keeps_what_was_learned() {
+        let conn = slaybudget_core::db::open_in_memory().unwrap();
+        let mut stack = UndoStack::new();
+        sort_history_once(&conn, &mut stack).unwrap();
+        assert_eq!(stack.state().undo, None, "nothing visible changed");
+
+        let conn = slaybudget_core::db::open_in_memory().unwrap();
+        with_history(&conn);
+        let mut stack = UndoStack::new();
+        sort_history_once(&conn, &mut stack).unwrap();
+        stack.undo(&conn).unwrap();
+        let docs: f64 = conn
+            .query_row("SELECT coalesce(sum(docs), 0) FROM model_totals", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert!(docs > 0.0, "the starter list and your rows stay learned");
     }
 }

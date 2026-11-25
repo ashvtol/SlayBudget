@@ -456,6 +456,14 @@ describe('memory ipc recurrings match the core', () => {
     expect((await ipc.listTransactions({}))[0].recurringId ?? null).toBeNull();
   });
 
+  it('a bill paid every few years is next due that many years on', async () => {
+    for (const [frequency, next] of [['biennial', '2028-10-01'], ['triennial', '2029-10-01'], ['quadrennial', '2030-10-01']] as const) {
+      const ipc = createMemoryIpc({ transactions: [charge(1, '2026-10-01')] });
+      await ipc.createRecurring({ ...rule, frequency });
+      expect((await ipc.listRecurring(null))[0].nextDate).toBe(next);
+    }
+  });
+
   it('a bill paid a few days early is next due a period after the date it paid', async () => {
     const ipc = createMemoryIpc({ transactions: [charge(1, '2026-10-01'), charge(2, '2026-10-30')] });
     await ipc.createRecurring(rule);

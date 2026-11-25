@@ -18,6 +18,12 @@ pub enum Cadence {
     Monthly,
     Quarterly,
     Yearly,
+    /// Every 2 years.
+    Biennial,
+    /// Every 3 years.
+    Triennial,
+    /// Every 4 years.
+    Quadrennial,
 }
 
 impl Cadence {
@@ -28,6 +34,27 @@ impl Cadence {
             Cadence::Monthly => "monthly",
             Cadence::Quarterly => "quarterly",
             Cadence::Yearly => "yearly",
+            Cadence::Biennial => "biennial",
+            Cadence::Triennial => "triennial",
+            Cadence::Quadrennial => "quadrennial",
+        }
+    }
+    /// How a saved bill stores it: the multi-year ones are 'yearly' with a count of years.
+    pub fn stored(self) -> (&'static str, u32) {
+        match self {
+            Cadence::Biennial => ("yearly", 2),
+            Cadence::Triennial => ("yearly", 3),
+            Cadence::Quadrennial => ("yearly", 4),
+            other => (other.as_str(), 1),
+        }
+    }
+    /// A saved bill's frequency from its stored text and count of years.
+    pub fn from_stored(s: &str, years: u32) -> Cadence {
+        match (Cadence::parse(s), years) {
+            (Cadence::Yearly, 2) => Cadence::Biennial,
+            (Cadence::Yearly, 3) => Cadence::Triennial,
+            (Cadence::Yearly, 4) => Cadence::Quadrennial,
+            (c, _) => c,
         }
     }
     pub fn parse(s: &str) -> Cadence {
@@ -36,6 +63,9 @@ impl Cadence {
             "biweekly" => Cadence::Biweekly,
             "quarterly" => Cadence::Quarterly,
             "yearly" => Cadence::Yearly,
+            "biennial" => Cadence::Biennial,
+            "triennial" => Cadence::Triennial,
+            "quadrennial" => Cadence::Quadrennial,
             _ => Cadence::Monthly,
         }
     }
@@ -47,6 +77,9 @@ impl Cadence {
             Cadence::Monthly => add_months(from, 1),
             Cadence::Quarterly => add_months(from, 3),
             Cadence::Yearly => add_months(from, 12),
+            Cadence::Biennial => add_months(from, 24),
+            Cadence::Triennial => add_months(from, 36),
+            Cadence::Quadrennial => add_months(from, 48),
         }
     }
     fn classify(median_gap: i64) -> Option<Cadence> {

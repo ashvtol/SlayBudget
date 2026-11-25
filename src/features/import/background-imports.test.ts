@@ -59,4 +59,36 @@ describe('background imports (watched folder and Downloads)', () => {
     expect(useBackgroundImports.getState().waiting).toEqual([]);
     expect(await ipc().listTransactions({})).toEqual([]);
   });
+
+  it('one answer imports several waiting files into one new account, and Skip all clears the rest', async () => {
+    setup([
+      file('/Users/me/Downloads/Amex1004-oct.csv', 'Date,Description,Amount\n2026-10-08,COFFEE,-4.50\n'),
+      file('/Users/me/Downloads/Amex1004-nov.csv', 'Date,Description,Amount\n2026-11-08,BAGEL,-3.00\n'),
+      file('/Users/me/Downloads/x.csv', 'Date,Description,Amount\n2026-11-08,TEA,-4.50\n'),
+    ]);
+    await useBackgroundImports.getState().scan();
+    const paths = useBackgroundImports.getState().waiting.map((w) => w.path).filter((p) => p.includes('Amex'));
+    expect(paths).toHaveLength(2);
+    const before = (await ipc().listSources()).length;
+    await useBackgroundImports.getState().answerMany(paths, {
+      kind: 'new',
+      account: { name: 'Gold', institution: 'American Express', accountType: 'card', color: null, defaultTagId: null },
+      remember: false,
+    });
+    expect((await ipc().listSources()).length).toBe(before + 1);
+    expect((await ipc().listTransactions({})).map((t) => t.description).sort()).toEqual(['BAGEL', 'COFFEE']);
+    expect(useBackgroundImports.getState().waiting.map((w) => w.name)).toEqual(['x.csv']);
+    useBackgroundImports.getState().skipMany(['/Users/me/Downloads/x.csv']);
+    expect(useBackgroundImports.getState().waiting).toEqual([]);
+  });
+
+  it('several statements that need an account make one bell item, not one each', async () => {
+    setup([
+      file('/Users/me/Downloads/Amex1004-oct.csv', 'Date,Description,Amount\n2026-10-08,COFFEE,-4.50\n'),
+      file('/Users/me/Downloads/Amex1004-nov.csv', 'Date,Description,Amount\n2026-11-08,BAGEL,-3.00\n'),
+      file('/Users/me/Downloads/x.csv', 'Date,Description,Amount\n2026-11-08,TEA,-4.50\n'),
+    ]);
+    await useBackgroundImports.getState().scan();
+    expect(await titles()).toEqual(['3 statements need an account']);
+  });
 });

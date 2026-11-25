@@ -37,6 +37,9 @@ const CADENCE: Record<Recurring['cadence'], string> = {
   monthly: 'every month',
   quarterly: 'every quarter',
   yearly: 'every year',
+  biennial: 'every 2 years',
+  triennial: 'every 3 years',
+  quadrennial: 'every 4 years',
 };
 const pad = (n: number) => String(n).padStart(2, '0');
 

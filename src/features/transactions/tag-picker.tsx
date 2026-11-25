@@ -80,7 +80,7 @@ export function TagPicker({ ids, onClose, className = 'left-0 top-[30px]' }: { i
         }}
         placeholder="Add tags..."
         aria-label="Add tags"
-        className="w-full border-b bg-transparent px-3 py-2.5 text-[13px] outline-none"
+        className="field-bare w-full border-b bg-transparent px-3 py-2.5 text-[13px] outline-none"
         style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
       />
       <div className="max-h-[40vh] overflow-y-auto p-1.5">

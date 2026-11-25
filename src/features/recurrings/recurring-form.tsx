@@ -1,3 +1,4 @@
+import { CategoryPopup } from '@/components/category-popup';
 import { useEffect, useMemo, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { cleanMerchant } from '@/lib/merchant';
@@ -10,6 +11,9 @@ const FREQUENCIES: [Cadence, string][] = [
   ['monthly', 'Monthly'],
   ['quarterly', 'Quarterly'],
   ['yearly', 'Annually'],
+  ['biennial', 'Every 2 years'],
+  ['triennial', 'Every 3 years'],
+  ['quadrennial', 'Every 4 years'],
 ];
 
 const dollars = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
@@ -128,12 +132,16 @@ export function RecurringForm({
         </Field>
       </div>
       <Field label="Category">
-        <Select className="w-full" selectClassName="h-[34px]" aria-label="Category" value={categoryId ?? ''} onChange={(e) => setCategoryId(e.target.value ? Number(e.target.value) : null)}>
-          <option value="">From its transactions</option>
-          {sortedCategories.map((c) => (
-            <option key={c.id} value={c.id}>{c.emoji ? `${c.emoji} ` : ''}{c.name}</option>
-          ))}
-        </Select>
+        <CategoryPopup
+          className="w-full"
+          buttonClassName="h-[34px]"
+          label="Category"
+          categories={sortedCategories}
+          value={categoryId}
+          placeholder="From its transactions"
+          noneLabel="From its transactions"
+          onChange={setCategoryId}
+        />
       </Field>
       {preview && matches != null && (
         <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
@@ -213,7 +221,7 @@ export function NewRecurringDialog({
             placeholder="Search a name, e.g. Netflix"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            className={fieldClass}
+            className={`field-bare ${fieldClass}`}
             style={fieldStyle}
           />
           {results.map((t) => (

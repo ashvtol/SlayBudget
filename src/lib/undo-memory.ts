@@ -47,6 +47,10 @@ export const UNDO_LABELS: Record<string, (args: Args) => string> = {
   importOfxText: (a) => `Import ${fileName(a[1] as string)}`,
   importPdfDoc: (a) => `Import ${fileName(a[1] as string)}`,
   setTransactionCategory: () => 'Change Category',
+  setCategories: (a) => countLabel('Change Category', (a[0] as number[]).length),
+  acceptSuggestions: (a) => countLabel('Accept Suggestion', (a[0] as number[]).length),
+  rejectSuggestions: (a) => countLabel('Reject Suggestion', (a[0] as number[]).length),
+  resetLearning: () => 'Reset What SlayBudget Learned',
   applyRecategorize: (a) => countLabel('Change Category', (a[0] as number[]).length),
   saveRule: () => 'Save Rule',
   setTransactionType: (a) => countLabel('Change Type', (a[0] as number[]).length),
@@ -78,9 +82,11 @@ export const UNDO_LABELS: Record<string, (args: Args) => string> = {
 
 /** Steps hold the data as it was before (undo) or after (redo) the action. */
 export function createUndoStack<S>(capture: () => S, restore: (s: S) => void, same: (a: S, b: S) => boolean) {
-  const undo: { label: string; before: S; after: S }[] = [];
-  let redo: { label: string; before: S; after: S }[] = [];
+  type Step = { id: number; label: string; before: S; after: S };
+  const undo: Step[] = [];
+  let redo: Step[] = [];
   let depth = 0;
+  let nextId = 1;
   return {
     /** Run one action as one step; nested recorded calls belong to the outer one. */
     async record<T>(label: string, run: () => Promise<T>): Promise<T> {
@@ -91,7 +97,7 @@ export function createUndoStack<S>(capture: () => S, restore: (s: S) => void, sa
         const value = await run();
         const after = capture();
         if (!same(before, after)) {
-          undo.push({ label, before, after });
+          undo.push({ id: nextId++, label, before, after });
           if (undo.length > UNDO_DEPTH) undo.shift();
           redo = [];
         }
@@ -99,6 +105,15 @@ export function createUndoStack<S>(capture: () => S, restore: (s: S) => void, sa
       } finally {
         depth--;
       }
+    },
+    /** The id of the step Undo would take back next (mirrors UndoStack::latest_id). */
+    latestId(): number | null {
+      return undo.at(-1)?.id ?? null;
+    },
+    /** Take back step `id` only while it is still the latest (mirrors UndoStack::undo_step). */
+    undoStep(id: number): string | null {
+      if (undo.at(-1)?.id !== id) throw new Error('That change was already undone, or something else changed after it.');
+      return this.undo();
     },
     undo(): string | null {
       const step = undo.pop();

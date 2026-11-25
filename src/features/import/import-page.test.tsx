@@ -1,8 +1,8 @@
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, vi } from 'vitest';
-import type { Ipc } from '@/lib/ipc';
-import type { ImportReport } from '@/lib/types';
+import { createMemoryIpc, setIpc, type Ipc } from '@/lib/ipc';
+import type { AccountChoice, ImportReport } from '@/lib/types';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { ImportPage } from './import-page';
 import { useBackgroundImports } from './background-imports';
@@ -112,21 +112,180 @@ describe('ImportPage: which account is this?', () => {
   });
 });
 
+const needsFor = (bank: string | null, last4: string | null, guess: number | null = null): ImportReport => ({
+  ...needs(guess),
+  needsAccount: { ...needs(guess).needsAccount!, clues: { last4, bank, layout: 'csv:x', folder: null }, suggestedName: `${bank ?? 'Card'} ${last4 ?? ''}`.trim() },
+});
+
+describe('ImportPage: many statements, one question per account', () => {
+  /** A fake importer: files are unknown until an answer remembers their card; chosen accounts get ids 9, 10, ... */
+  function batch(cardOf: (name: string) => [string | null, string | null]) {
+    const remembered = new Map<string, number>();
+    let next = 9;
+    const importCsvText = vi.fn(async (_p: number, path: string, _t: string, account?: AccountChoice) => {
+      const [bank, last4] = cardOf(path);
+      const key = `${bank}|${last4}`;
+      if (account) {
+        const id = account.kind === 'existing' ? account.sourceId : next++;
+        if (account.remember && last4) remembered.set(key, id);
+        return report({ sourceId: id, sourceName: `Account ${id}`, inserted: 2 });
+      }
+      const known = remembered.get(key);
+      return known ? report({ sourceId: known, sourceName: `Account ${known}`, inserted: 2 }) : needsFor(bank, last4);
+    });
+    return { importCsvText, d: deps({ importCsvText, listSources: vi.fn(async () => sources), listTags: vi.fn(async () => []) } as Partial<Ipc>) };
+  }
+  const chaseOrAmex = (name: string): [string | null, string | null] => (name.startsWith('amex') ? ['Amex', '1009'] : ['Chase', '7781']);
+
+  it('asks once for three statements from the same card and imports all three into it', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    const { importCsvText, d } = batch(chaseOrAmex);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('chase-jan.csv'), csv('chase-feb.csv'), csv('chase-mar.csv')]);
+    const asks = await screen.findAllByRole('region', { name: /Which account/ });
+    expect(asks).toHaveLength(1);
+    const ask = asks[0];
+    expect(ask).toHaveAccessibleName('Which account is Chase ending 7781?');
+    expect(ask).toHaveTextContent('3 statements');
+    expect(ask).toHaveTextContent('Show 3 files');
+    await user.click(within(ask).getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Which account/ })).not.toBeInTheDocument());
+    const answered = importCsvText.mock.calls.filter((c) => c[3]);
+    expect(answered.map((c) => c[3])).toEqual([
+      expect.objectContaining({ kind: 'new' }),
+      { kind: 'existing', sourceId: 9, remember: true },
+      { kind: 'existing', sourceId: 9, remember: true },
+    ]);
+    expect(screen.getByLabelText('Import results')).toHaveTextContent('Imported 6 transactions');
+  });
+
+  it('Import all answers every card with its best guess, making one account per card', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    const { importCsvText, d } = batch(chaseOrAmex);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('chase-jan.csv'), csv('amex-jan.csv'), csv('chase-feb.csv'), csv('amex-feb.csv')]);
+    expect(await screen.findAllByRole('region', { name: /Which account/ })).toHaveLength(2);
+    const bar = screen.getByRole('region', { name: '4 statements need an account' });
+    await user.click(within(bar).getByRole('button', { name: 'Import all' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Which account/ })).not.toBeInTheDocument());
+    const created = importCsvText.mock.calls.filter((c) => c[3]?.kind === 'new');
+    expect(created).toHaveLength(2);
+    expect(screen.getByLabelText('Import results')).toHaveTextContent('Imported 8 transactions');
+  });
+
+  it('Skip all leaves every waiting statement out', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    const { importCsvText, d } = batch(chaseOrAmex);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('chase-jan.csv'), csv('amex-jan.csv')]);
+    const bar = await screen.findByRole('region', { name: '2 statements need an account' });
+    await user.click(within(bar).getByRole('button', { name: 'Skip all' }));
+    expect(screen.queryByRole('region', { name: /Which account/ })).not.toBeInTheDocument();
+    expect(importCsvText).toHaveBeenCalledTimes(2);
+  });
+
+  it('statements without an account number can be picked one by one', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    const { importCsvText, d } = batch(() => [null, null]);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('one.csv'), csv('two.csv'), csv('three.csv')]);
+    const ask = await screen.findByRole('region', { name: 'Which account are these statements?' });
+    expect(ask).toHaveTextContent('Statements without an account number');
+    const boxes = within(ask).getAllByRole('checkbox', { name: /\.csv$/ });
+    expect(boxes.map((b) => (b as HTMLInputElement).checked)).toEqual([true, true, true]);
+    await user.click(within(ask).getByRole('checkbox', { name: 'two.csv' }));
+    await user.click(within(ask).getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(importCsvText.mock.calls.filter((c) => c[3]).map((c) => c[1])).toEqual(['one.csv', 'three.csv']));
+    const left = await screen.findByRole('region', { name: 'Which account is two.csv?' });
+    expect(left).toBeInTheDocument();
+  });
+
+  it('turns Import off for the group when no statement is picked', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    const { d } = batch(() => [null, null]);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('one.csv'), csv('two.csv')]);
+    const ask = await screen.findByRole('region', { name: 'Which account are these statements?' });
+    await user.click(within(ask).getByRole('checkbox', { name: 'one.csv' }));
+    await user.click(within(ask).getByRole('checkbox', { name: 'two.csv' }));
+    expect(within(ask).getByRole('button', { name: 'Import' })).toBeDisabled();
+  });
+
+  it('after an answer that is remembered, other waiting statements are checked again', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    // The Amex files turn out to be recognized once anything is remembered (as when a folder or layout matches).
+    let answered = false;
+    const base = batch(chaseOrAmex);
+    const importCsvText = vi.fn(async (p: number, path: string, t: string, account?: AccountChoice) => {
+      if (account) answered = true;
+      if (!account && answered && path.startsWith('amex')) return report({ sourceId: 3, sourceName: 'Gold', inserted: 1 });
+      return base.importCsvText(p, path, t, account);
+    });
+    const d = deps({ importCsvText, listSources: vi.fn(async () => sources), listTags: vi.fn(async () => []) } as Partial<Ipc>);
+    render(<ImportPage deps={d} />);
+    await user.upload(screen.getByLabelText('Choose files'), [csv('chase-jan.csv'), csv('amex-jan.csv')]);
+    const ask = await screen.findByRole('region', { name: 'Which account is chase-jan.csv?' });
+    await user.click(within(ask).getByRole('button', { name: 'Import' }));
+    await waitFor(() => expect(screen.queryByRole('region', { name: /Which account/ })).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Import results')).toHaveTextContent('Gold · 1 added');
+  });
+});
+
 describe('ImportPage: statements found in the background', () => {
   it('shows ones waiting for an account, and answering imports them', async () => {
     setProfiles();
     const user = userEvent.setup();
-    const answer = vi.fn(async () => null);
+    const answerMany = vi.fn(async () => {});
     useBackgroundImports.setState({
       waiting: [{ path: '/Users/me/Downloads/Chase7781_Activity.csv', name: 'Chase7781_Activity.csv', modifiedMs: 1, needs: needs(1).needsAccount! }],
-      answer,
+      answerMany,
     });
     render(<ImportPage deps={deps({ listSources: vi.fn(async () => sources), listTags: vi.fn(async () => []) } as Partial<Ipc>)} />);
     const found = await screen.findByRole('region', { name: 'Found in your folders' });
     const ask = within(found).getByRole('region', { name: 'Which account is Chase7781_Activity.csv?' });
     await waitFor(() => expect(within(ask).getAllByRole('radio')[0]).toHaveAccessibleName('Freedom Likely'));
     await user.click(within(ask).getByRole('button', { name: 'Import' }));
-    expect(answer).toHaveBeenCalledWith('/Users/me/Downloads/Chase7781_Activity.csv', { kind: 'existing', sourceId: 1, remember: true });
+    expect(answerMany).toHaveBeenCalledWith(['/Users/me/Downloads/Chase7781_Activity.csv'], { kind: 'existing', sourceId: 1, remember: true });
+    useBackgroundImports.setState({ waiting: [] });
+  });
+});
+
+describe('ImportPage: Import all for statements found in folders', () => {
+  it('says it is importing while it works, then refreshes Recent imports', async () => {
+    setProfiles();
+    const user = userEvent.setup();
+    let finish = () => {};
+    const answerMany = vi.fn(() => new Promise<void>((r) => (finish = r)));
+    const listImports = vi.fn(async () => []);
+    setIpc({ ...createMemoryIpc(), listImports } as unknown as Ipc);
+    const chase = needsFor('Chase', '7781').needsAccount!;
+    const amex = needsFor('Amex', '1009').needsAccount!;
+    useBackgroundImports.setState({
+      waiting: [
+        { path: '/w/chase.csv', name: 'chase.csv', modifiedMs: 1, needs: chase },
+        { path: '/w/amex.csv', name: 'amex.csv', modifiedMs: 1, needs: amex },
+      ],
+      answerMany,
+    });
+    render(<ImportPage deps={deps({ listSources: vi.fn(async () => sources), listTags: vi.fn(async () => []) } as Partial<Ipc>)} />);
+    const bar = await screen.findByRole('region', { name: '2 statements need an account' });
+    await waitFor(() => expect(listImports).toHaveBeenCalled());
+    const loads = listImports.mock.calls.length;
+    await user.click(within(bar).getByRole('button', { name: 'Import all' }));
+    expect(within(bar).getByRole('button', { name: 'Importing…' })).toBeDisabled();
+    expect(within(bar).getByRole('button', { name: 'Skip all' })).toBeDisabled();
+    finish();
+    await waitFor(() => expect(answerMany).toHaveBeenCalledTimes(1));
+    finish();
+    await waitFor(() => expect(answerMany).toHaveBeenCalledTimes(2));
+    finish();
+    await waitFor(() => expect(listImports.mock.calls.length).toBeGreaterThan(loads));
     useBackgroundImports.setState({ waiting: [] });
   });
 });

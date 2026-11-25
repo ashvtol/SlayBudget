@@ -110,7 +110,7 @@ export function FilterMenu({ onClose }: { onClose: () => void }) {
       onChange={(e) => setQuery(e.target.value)}
       placeholder="Search..."
       aria-label={`Search ${item}`}
-      className="mb-1 w-full rounded-md border bg-transparent px-2 py-1 text-[12px]"
+      className="field-bare mb-1 w-full rounded-md border bg-transparent px-2 py-1 text-[12px]"
       style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
     />
   );
@@ -195,7 +195,7 @@ export function FilterMenu({ onClose }: { onClose: () => void }) {
             }}
             placeholder="Name or note, then Enter"
             aria-label="Keyword"
-            className="w-full rounded-md border bg-transparent px-2 py-1 text-[12px]"
+            className="field-bare w-full rounded-md border bg-transparent px-2 py-1 text-[12px]"
             style={{ borderColor: 'var(--line)', color: 'var(--text)' }}
           />
         );
@@ -261,6 +261,7 @@ export function FilterMenu({ onClose }: { onClose: () => void }) {
           <>
             {check('Reviewed', filter.reviewed === true, () => pick({ kind: 'review', value: true }), 'r')}
             {check('Not reviewed', filter.reviewed === false, () => pick({ kind: 'review', value: false }), 'n')}
+            {check('Suggested category', !!filter.suggested, () => pick({ kind: 'suggested', value: true }), 's')}
           </>
         );
     }

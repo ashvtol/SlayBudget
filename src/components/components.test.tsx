@@ -50,24 +50,27 @@ describe('percentChange and DeltaBadge', () => {
   });
 });
 
+/** A pill by its text (a plain pill isn't a button). */
+const pill = (text: string) => screen.getByText(text).closest('.rounded-full') as HTMLElement;
+
 describe('CategoryPill', () => {
   const cat: Category = { id: 1, groupId: 1, name: 'Restaurants', emoji: '🍔', color: '#e8743b', budgetCents: null, excluded: false, kind: 'expense', sortOrder: 0, archived: false };
   it('shows the name and emoji, tinted by the category color', () => {
     render(<CategoryPill category={cat} />);
-    const pill = screen.getByRole('button', { name: /Restaurants/ });
-    expect(pill.style.background).toContain('rgb(232, 116, 59)');
+    const shown = pill('Restaurants');
+    expect(shown.style.background).toContain('rgb(232, 116, 59)');
   });
   it('falls back to the given color and to "Needs category"', () => {
     const { rerender } = render(<CategoryPill category={{ ...cat, color: null }} fallbackColor="#123456" />);
-    expect(screen.getByRole('button', { name: /Restaurants/ }).style.background).toContain('rgb(18, 52, 86)');
+    expect(pill('Restaurants').style.background).toContain('rgb(18, 52, 86)');
     rerender(<CategoryPill category={undefined} />);
-    expect(screen.getByRole('button', { name: 'Needs category' })).toBeInTheDocument();
+    expect(pill('Needs category')).toBeInTheDocument();
   });
   it('never wraps or shrinks, even next to a long name (both kinds)', () => {
     const { rerender } = render(<CategoryPill category={undefined} />);
-    expect(screen.getByRole('button', { name: 'Needs category' })).toHaveClass('whitespace-nowrap', 'shrink-0');
+    expect(pill('Needs category')).toHaveClass('whitespace-nowrap', 'shrink-0');
     rerender(<CategoryPill category={cat} />);
-    expect(screen.getByRole('button', { name: /Restaurants/ })).toHaveClass('whitespace-nowrap');
+    expect(pill('Restaurants')).toHaveClass('whitespace-nowrap');
   });
 });
 

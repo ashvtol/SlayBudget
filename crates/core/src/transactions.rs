@@ -52,6 +52,50 @@ impl TxType {
     }
 }
 
+/// Where a transaction's category came from. Automatic changes never touch `User` (or a locked row).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CategorySource {
+    /// You chose it (or reviewed the row before this was tracked).
+    User,
+    Rule,
+    /// The merchant you put in this category before.
+    Learned,
+    /// The learning classifier.
+    Model,
+    /// Paired with the other side of money moved between your accounts.
+    Transfer,
+    /// The bank's own category.
+    Bank,
+    #[default]
+    Keyword,
+}
+
+impl CategorySource {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CategorySource::User => "user",
+            CategorySource::Rule => "rule",
+            CategorySource::Learned => "learned",
+            CategorySource::Model => "model",
+            CategorySource::Transfer => "transfer",
+            CategorySource::Bank => "bank",
+            CategorySource::Keyword => "keyword",
+        }
+    }
+    pub fn parse(s: &str) -> Self {
+        match s {
+            "user" => CategorySource::User,
+            "rule" => CategorySource::Rule,
+            "learned" => CategorySource::Learned,
+            "model" => CategorySource::Model,
+            "transfer" => CategorySource::Transfer,
+            "bank" => CategorySource::Bank,
+            _ => CategorySource::Keyword,
+        }
+    }
+}
+
 /// SQL for the type a category implies (its kind), given a placeholder or column for its id.
 pub(crate) fn type_of_category_sql(id: &str) -> String {
     format!(
@@ -59,7 +103,7 @@ pub(crate) fn type_of_category_sql(id: &str) -> String {
     )
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct Transaction {
     pub id: TransactionId,
     pub profile_id: ProfileId,
@@ -81,6 +125,19 @@ pub struct Transaction {
     /// Tags on this row, by id ascending.
     #[serde(default)]
     pub tag_ids: Vec<i64>,
+    #[serde(default)]
+    pub category_source: CategorySource,
+    /// Why an automatic category was chosen ("Like 6 others you put in Coffee Shop").
+    #[serde(default)]
+    pub category_reason: Option<String>,
+    /// A category to check, and why.
+    #[serde(default)]
+    pub suggested_category_id: Option<i64>,
+    #[serde(default)]
+    pub suggested_reason: Option<String>,
+    /// The other side of a transfer between your own accounts.
+    #[serde(default)]
+    pub transfer_pair_id: Option<TransactionId>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +171,9 @@ pub struct TransactionFilter {
     /// Tags; a row with any of them matches.
     #[serde(default)]
     pub tag_ids: Vec<i64>,
+    /// Only rows with (or without) a suggested category to check.
+    #[serde(default)]
+    pub suggested: Option<bool>,
     pub limit: Option<i64>,
     pub offset: i64,
 }
@@ -192,6 +252,16 @@ impl TransactionFilter {
         if let Some(r) = self.reviewed {
             clauses.push("reviewed = ?".into());
             args.push((r as i64).into());
+        }
+        if let Some(s) = self.suggested {
+            clauses.push(
+                if s {
+                    "suggested_category_id IS NOT NULL"
+                } else {
+                    "suggested_category_id IS NULL"
+                }
+                .into(),
+            );
         }
         if let Some(text) = self
             .text
@@ -278,9 +348,9 @@ pub fn insert(conn: &Connection, tx: &NewTransaction) -> Result<InsertOutcome> {
 }
 
 /// The column list in `row_to_tx` order, for queries that build their own FROM.
-pub(crate) const SELECT_COLS: &str = "id, profile_id, source_id, posted_on, description, merchant, amount_cents, currency, category_id, category_locked, reviewed, notes, refund_of, parent_id, type, recurring_id";
+pub(crate) const SELECT_COLS: &str = "id, profile_id, source_id, posted_on, description, merchant, amount_cents, currency, category_id, category_locked, reviewed, notes, refund_of, parent_id, type, recurring_id, category_source, category_reason, suggested_category_id, suggested_reason, transfer_pair_id";
 
-const SELECT: &str = "SELECT id, profile_id, source_id, posted_on, description, merchant, amount_cents, currency, category_id, category_locked, reviewed, notes, refund_of, parent_id, type, recurring_id FROM transactions";
+const SELECT: &str = "SELECT id, profile_id, source_id, posted_on, description, merchant, amount_cents, currency, category_id, category_locked, reviewed, notes, refund_of, parent_id, type, recurring_id, category_source, category_reason, suggested_category_id, suggested_reason, transfer_pair_id FROM transactions";
 
 pub(crate) fn row_to_tx(r: &rusqlite::Row<'_>) -> rusqlite::Result<Transaction> {
     let date: String = r.get(3)?;
@@ -304,6 +374,11 @@ pub(crate) fn row_to_tx(r: &rusqlite::Row<'_>) -> rusqlite::Result<Transaction> 
         tx_type: TxType::parse(&r.get::<_, String>(14)?),
         recurring_id: r.get(15)?,
         tag_ids: Vec::new(),
+        category_source: CategorySource::parse(&r.get::<_, String>(16)?),
+        category_reason: r.get(17)?,
+        suggested_category_id: r.get(18)?,
+        suggested_reason: r.get(19)?,
+        transfer_pair_id: r.get(20)?,
     })
 }
 
@@ -391,6 +466,10 @@ pub fn bulk_update(
             type_sql = format!("type = {}", type_of_category_sql(&id.to_string()));
             sets.push(&type_sql);
         }
+        // A category you pick is yours: nothing automatic changes it, and any suggestion is answered.
+        sets.push(
+            "category_source = 'user', category_reason = NULL, suggested_category_id = NULL, suggested_reason = NULL",
+        );
     }
     if let Some(l) = patch.category_locked {
         sets.push("category_locked = ?");

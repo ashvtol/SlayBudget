@@ -4,6 +4,7 @@ import { afterEach, vi } from 'vitest';
 import { createMemoryIpc, setIpc, ipc } from '@/lib/ipc';
 import type { Category, Transaction } from '@/lib/types';
 import { CleanUpOther } from './clean-up-other';
+import { KeptScreen } from '@/app/shell/screen';
 
 afterEach(() => cleanup());
 
@@ -59,7 +60,8 @@ describe('CleanUpOther', () => {
     const user = userEvent.setup();
     const { onChanged } = setup();
     await waitFor(() => expect(list()).toHaveTextContent('5 left in Other'));
-    await user.selectOptions(within(list()).getByRole('combobox', { name: 'Category for Good To Go' }), 'Tolls');
+    await user.click(within(list()).getByRole('button', { name: 'Category for Good To Go' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'tol{Enter}');
     const offer = await screen.findByRole('region', { name: /Apply .Tolls. to other transactions/ });
     await user.click(within(offer).getByRole('button', { name: 'Apply to 2' }));
     await waitFor(() => expect(list()).toHaveTextContent('3 left in Other'));
@@ -71,10 +73,50 @@ describe('CleanUpOther', () => {
     const user = userEvent.setup();
     setup();
     await waitFor(() => expect(list()).toHaveTextContent('5 left in Other'));
-    await user.selectOptions(within(list()).getByRole('combobox', { name: /Category for geico/i }), 'Tolls');
+    await user.click(within(list()).getByRole('button', { name: /Category for geico/i }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'tol{Enter}');
     const offer = await screen.findByRole('region', { name: /Apply .Tolls. to other transactions/ });
     expect(within(offer).getByRole('button', { name: 'Apply to 1' })).toBeEnabled();
     expect(within(offer).queryByText('GEICO AUTO 2')).not.toBeInTheDocument();
+  });
+
+  it('"Just this one" moves the row in Other (nothing else), and counts only rows in Other', async () => {
+    const user = userEvent.setup();
+    const { onChanged } = setup();
+    await waitFor(() => expect(list()).toHaveTextContent('5 left in Other'));
+    await user.click(within(list()).getByRole('button', { name: /Category for geico/i }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'tol{Enter}');
+    const offer = await screen.findByRole('region', { name: /Apply .Tolls. to other transactions/ });
+    // GEICO AUTO 2 is in Insurance already, so only one is in Other.
+    expect(within(offer).getByText(/All named/).closest('label')).toHaveTextContent(/1$/);
+    const saveRule = vi.spyOn(ipc(), 'saveRule');
+    await user.click(within(offer).getByRole('radio', { name: 'Just this one' }));
+    await user.click(within(offer).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(list()).toHaveTextContent('4 left in Other'));
+    expect(onChanged).toHaveBeenCalled();
+    const all = await ipc().listTransactions({});
+    expect(all.find((t) => t.description === 'GEICO AUTO')?.categoryId).toBe(2);
+    expect(all.find((t) => t.description === 'GEICO AUTO 2')?.categoryId).toBe(3);
+    expect(saveRule).not.toHaveBeenCalled();
+  });
+
+  it('opens the offer right under the row it is for', async () => {
+    const user = userEvent.setup();
+    setup();
+    await waitFor(() => expect(list()).toHaveTextContent('5 left in Other'));
+    const geico = within(list()).getAllByRole('row').find((r) => r.textContent?.includes('GEICO'))!;
+    await user.click(within(geico).getByRole('button', { name: /Category for geico/i }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'tol{Enter}');
+    const offer = await screen.findByRole('region', { name: /Apply .Tolls. to other transactions/ });
+    expect(geico.nextElementSibling).toContainElement(offer);
+  });
+
+  it('leaves out transactions marked as transfers (they need no category)', async () => {
+    const t = { ...tx('CAPITAL ONE TRANSFER RT09', 'capital one transfer', 15000, null), txType: 'transfer' as const };
+    setIpc(createMemoryIpc({ groups: categories.map((c) => ({ id: c.id, name: c.name, emoji: null, color: '#888888', sortOrder: c.id })), categories, transactions: [t] }));
+    render(<CleanUpOther categories={categories} categoriesById={categoriesById} onChanged={() => {}} onReviewEach={() => {}} />);
+    await waitFor(() => expect(list()).toHaveTextContent('0 left in Other'));
+    expect(list()).not.toHaveTextContent('Capital');
   });
 
   it('platform groups link to transactions', async () => {
@@ -109,5 +151,52 @@ describe('CleanUpOther bank categories', () => {
     expect(await screen.findByRole('region', { name: /Apply .Insurance. to other transactions/ })).toBeInTheDocument();
     const goodToGo = within(list()).getAllByRole('row').find((r) => r.textContent?.includes('Good To Go'))!;
     expect(within(goodToGo).queryByRole('button', { name: /^Use / })).not.toBeInTheDocument();
+  });
+
+  it('shows what is left when you come back to it, after fixing rows elsewhere', async () => {
+    setup();
+    cleanup();
+    const props = { categories, categoriesById, onChanged: vi.fn(), onReviewEach: vi.fn() };
+    const { rerender } = render(
+      <KeptScreen id="categories" active>
+        <CleanUpOther {...props} />
+      </KeptScreen>,
+    );
+    await waitFor(() => expect(list()).toHaveTextContent('Venmo'));
+    rerender(
+      <KeptScreen id="categories" active={false}>
+        <CleanUpOther {...props} />
+      </KeptScreen>,
+    );
+    // Fixed on the Transactions screen while this one was hidden.
+    await ipc().setTransactionCategory(4, 2);
+    await ipc().setTransactionCategory(5, 2);
+    rerender(
+      <KeptScreen id="categories" active>
+        <CleanUpOther {...props} />
+      </KeptScreen>,
+    );
+    await waitFor(() => expect(list()).not.toHaveTextContent('Venmo'));
+    expect(list()).toHaveTextContent('3 left in Other');
+  });
+
+  it('shows the statement details of a group from the ⓘ beside its name', async () => {
+    const user = userEvent.setup();
+    setup();
+    await waitFor(() => expect(list()).toHaveTextContent('5 left in Other'));
+    expect(within(list()).queryByRole('button', { name: /Statement details for Venmo/ })).not.toBeInTheDocument();
+    const info = within(list()).getByRole('button', { name: 'Statement details for Good To Go' });
+    await user.click(info);
+    expect(await within(list()).findByRole('group', { name: 'Statement for WSDOT GOODTOGO 1' })).toHaveTextContent('Appears on statement as');
+    expect(within(list()).getByRole('group', { name: 'Statement for WSDOT GOODTOGO 2' })).toBeInTheDocument();
+    await user.click(info);
+    expect(within(list()).queryByRole('group', { name: 'Statement for WSDOT GOODTOGO 1' })).not.toBeInTheDocument();
+    // One × at the top of the group's details closes them all.
+    await user.click(info);
+    await within(list()).findByRole('group', { name: 'Statement for WSDOT GOODTOGO 1' });
+    const closes = within(list()).getAllByRole('button', { name: 'Close statement details' });
+    expect(closes).toHaveLength(1);
+    await user.click(closes[0]);
+    expect(within(list()).queryByRole('group', { name: /Statement for WSDOT/ })).not.toBeInTheDocument();
   });
 });

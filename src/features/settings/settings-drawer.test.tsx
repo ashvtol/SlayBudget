@@ -52,6 +52,14 @@ describe('SettingsDrawer', () => {
     expect(screen.getByRole('button', { name: 'New tag' })).toBeInTheDocument();
   });
 
+  it('opens Categorization from its row under Features', async () => {
+    const user = userEvent.setup();
+    render(<SettingsDrawer />);
+    await user.click(screen.getByRole('button', { name: /^Categorization/ }));
+    expect(screen.getByRole('heading', { name: 'Categorization' })).toBeInTheDocument();
+    expect(await screen.findByRole('switch', { name: 'Automatically categorize when confident' })).toBeInTheDocument();
+  });
+
   it('opens straight at a pane when asked (View tag settings)', () => {
     useNavStore.setState({ settingsOpen: true, settingsPane: 'tags' });
     render(<SettingsDrawer />);

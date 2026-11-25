@@ -12,6 +12,8 @@ export interface DashboardData {
   toReview: Transaction[];
   /** Transactions in Other (or uncategorized), across all profiles. */
   otherCount: number;
+  /** Transactions with a suggested category to check. */
+  suggestedCount: number;
   categoriesById: Record<number, Category>;
   groupsById: Record<number, CategoryGroup>;
   sourcesById: Record<number, Source>;
@@ -31,7 +33,7 @@ export function useDashboardData(): DashboardData | null {
     const [y, m] = today.split('-').map(Number);
     const prevStart = m === 1 ? `${y - 1}-12-01` : `${y}-${pad(m - 1)}-01`;
     void (async () => {
-      const [transactions, categories, groups, recurring, toReview, sources, other, plan] = await Promise.all([
+      const [transactions, categories, groups, recurring, toReview, sources, other, plan, suggestedCount] = await Promise.all([
         ipc().listTransactions({ profileId, from: prevStart, to: today }),
         ipc().listCategories(),
         ipc().listCategoryGroups(),
@@ -40,12 +42,14 @@ export function useDashboardData(): DashboardData | null {
         ipc().listSources(),
         ipc().otherGroups(),
         ipc().getBudgetPlan(),
+        ipc().suggestionCount(profileId),
       ]);
       if (!live) return;
       setData({
         model: buildDashboard({ transactions, categories, groups, recurring, today, plan }),
         toReview,
         otherCount: other.reduce((n, g) => n + g.count, 0),
+        suggestedCount,
         categoriesById: Object.fromEntries(withGroupColors(categories, groups).map((c) => [c.id, c])),
         groupsById: Object.fromEntries(groups.map((g) => [g.id, g])),
         sourcesById: Object.fromEntries(sources.map((s) => [s.id, s])),

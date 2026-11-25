@@ -165,3 +165,14 @@ fn works_without_a_model_file_and_rejects_bad_json() {
     )
     .is_err());
 }
+
+#[test]
+fn migrated_categories_count_as_yours() {
+    let conn = open_in_memory().unwrap();
+    migrate_legacy(&conn, &input()).unwrap();
+    let all = transactions::list(&conn, &TransactionFilter::default()).unwrap();
+    assert!(!all.is_empty());
+    assert!(all
+        .iter()
+        .all(|t| t.category_source == transactions::CategorySource::User));
+}

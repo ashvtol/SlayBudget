@@ -136,7 +136,18 @@ export interface Transaction {
   recurringId?: number | null;
   /** Tags on this row, by id ascending. Absent means none. */
   tagIds?: number[];
+  /** Where the category came from; automatic changes never touch 'user'. Absent means 'keyword'. */
+  categorySource?: CategorySource;
+  /** Why an automatic category was chosen. */
+  categoryReason?: string | null;
+  /** A category to check, and why. */
+  suggestedCategoryId?: number | null;
+  suggestedReason?: string | null;
+  /** The other side of a transfer between your own accounts. */
+  transferPairId?: number | null;
 }
+
+export type CategorySource = 'user' | 'rule' | 'learned' | 'model' | 'transfer' | 'bank' | 'keyword';
 
 /** Budgets beyond each category's default (`Category.budgetCents`, "all months"). */
 export interface BudgetPlan {
@@ -182,6 +193,8 @@ export interface TransactionFilter {
   categoryIds?: number[];
   sourceIds?: number[];
   reviewed?: boolean;
+  /** Only rows with (or without) a suggested category to check. */
+  suggested?: boolean;
   text?: string;
   /** Calendar months ("2026-06"); a row matches any of them. */
   months?: string[];
@@ -246,7 +259,8 @@ export interface CashFlow {
   netDeltaCents: number;
 }
 
-export type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly';
+/** biennial, triennial, quadrennial: every 2, 3 and 4 years (multi-year subscriptions). */
+export type Cadence = 'weekly' | 'biweekly' | 'monthly' | 'quarterly' | 'yearly' | 'biennial' | 'triennial' | 'quadrennial';
 
 /** A charge that may be a bill at a new price, asked about once (amounts are positive cents). */
 export interface PriceCheck {
@@ -365,6 +379,8 @@ export type DuplicateResolution = 'deleted' | 'kept' | 'other_deleted';
 
 export interface ImportReport {
   importId?: number | null;
+  /** The account the file went into (0 when it is still waiting for one). */
+  sourceId?: number;
   sourceName: string;
   inserted: number;
   duplicates: number;
@@ -466,7 +482,7 @@ export type NotificationTarget =
   | { kind: 'recurring'; id: number }
   | { kind: 'transaction'; id: number }
   | { kind: 'category'; id: number | null; month: string }
-  | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates'; text?: string }
+  | { kind: 'transactions'; filter: 'review' | 'search' | 'duplicates' | 'suggested'; text?: string }
   | { kind: 'import' }
   | { kind: 'insights' };
 
@@ -529,4 +545,17 @@ export interface HabitsData {
   daysThisMonth: DaySpend[];
   merchants: MerchantStat[];
   billsRaisedLast12: number;
+}
+
+/** What a category change did to the rest of history. */
+export interface CategoryChange {
+  /** Other rows from the same merchant that moved with it. */
+  moved: number;
+  merchant: string;
+  /** Rows from similar merchants that got it as a suggestion. */
+  suggested: number;
+  /** A payment app or gas station: nothing moved; ask about the others with sameMerchant. */
+  platform: boolean;
+  /** The undo step this change made (for the note's Undo and Only this one); null when nothing changed. */
+  step: number | null;
 }

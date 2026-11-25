@@ -7,10 +7,21 @@ const read = (p: string) => readFileSync(resolve(__dirname, '..', p), 'utf8');
 const css = read('app/styles.css').replace(/\s+/g, ' ');
 
 describe('bare text fields', () => {
-  it('are left out of the text-field focus ring (by the rule itself, so a more specific rule cannot bring it back)', () => {
-    const ring = css.match(/([^}]*)\{ outline: none; box-shadow: var\(--focus-ring\), inset 0 0 0 0\.5px var\(--accent\); \}/)?.[1] ?? '';
-    expect(ring).toContain('input:');
-    expect(ring).toContain(':not(.field-bare)');
+  it('no text field draws a focus ring: the caret shows where you are typing', () => {
+    const rule = css.match(/input:not\(\[type="checkbox"\]\)[^{]*textarea:focus-visible \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('outline: none');
+    expect(rule).not.toContain('--focus-ring');
+    expect(rule).not.toContain('box-shadow: var');
+  });
+
+  it('dropdowns draw no focus ring either (clicking one counts as keyboard focus in the app window)', () => {
+    const rule = css.match(/\.popup:focus-visible \{([^}]*)\}/)?.[1] ?? '';
+    expect(rule).toContain('outline: none');
+    expect(rule).not.toContain('--focus-ring');
+  });
+
+  it('draw no outline of their own either (the browser default would replace the ring)', () => {
+    expect(css).toMatch(/\.field-bare:focus(-visible)? \{ outline: none; \}/);
   });
 
   it.each([
@@ -19,6 +30,14 @@ describe('bare text fields', () => {
     ['features/settings/tags-pane.tsx', 'Tag name'],
     ['features/categories/category-form.tsx', 'Category name'],
     ['features/categories/category-form.tsx', 'aria-label="Budget"'],
+    // Search and pick fields that open focused inside a menu: the caret is enough.
+    ['components/category-menu.tsx', 'Search categories'],
+    ['features/transactions/filter-menu.tsx', 'placeholder="Search..."'],
+    ['features/transactions/filter-menu.tsx', 'aria-label="Keyword"'],
+    ['features/transactions/tag-picker.tsx', 'aria-label="Add tags"'],
+    ['features/categories/emoji-picker.tsx', 'Or paste any emoji'],
+    ['features/recurrings/recurring-form.tsx', 'Search a name, e.g. Netflix'],
+    ['features/search/search-page.tsx', 'aria-label="Search query"'],
   ])('%s marks its bare field (%s)', (file, marker) => {
     const src = read(file);
     const at = src.indexOf(marker);

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SpendMap, SpendTile } from '@/features/analytics/spend-map';
-import { layoutSpendMap, SpendTreemap } from './treemap';
+import { cardPlacement, layoutSpendMap, SpendTreemap } from './treemap';
 
 afterEach(() => cleanup());
 
@@ -109,6 +109,22 @@ describe('SpendTreemap', () => {
     expect(screen.queryByTestId('map-card')).toBeNull();
   });
 
+  it('raises the card on a lighter surface with a see-through border (shadows barely show in dark themes)', () => {
+    draw();
+    fireEvent.pointerMove(within(mapGroup()).getByRole('button', { name: /Groceries/ }), { clientX: 100, clientY: 100 });
+    const card = screen.getByTestId('map-card');
+    expect(card.style.background).toBe('color-mix(in oklab, var(--panel), var(--text) 7%)');
+    expect(card.style.borderColor).toBe('color-mix(in oklab, var(--text) 14%, transparent)');
+  });
+
+  it('draws the card over the whole window, so the edge of the map never cuts it off', () => {
+    draw();
+    fireEvent.pointerMove(within(mapGroup()).getByRole('button', { name: /Groceries/ }), { clientX: 100, clientY: 100 });
+    const card = screen.getByTestId('map-card');
+    expect(card.parentElement).toBe(document.body);
+    expect(card.style.position).toBe('fixed');
+  });
+
   it('clicking a category opens its merchants; the breadcrumb goes back', async () => {
     const user = userEvent.setup();
     draw();
@@ -139,5 +155,24 @@ describe('SpendTreemap', () => {
     await new Promise((r) => setTimeout(r, 50));
     expect(within(mapGroup()).getByRole('button', { name: /Rent/ }).style.transition).toBe('');
     spy.mockRestore();
+  });
+});
+
+describe('cardPlacement', () => {
+  const view = { width: 1000, height: 800 };
+  const card = { width: 260, height: 200 };
+  it('sits below and to the right of the pointer when there is room', () => {
+    expect(cardPlacement({ x: 100, y: 100 }, card, view)).toEqual({ left: 114, top: 114 });
+  });
+  it('goes above the pointer near the bottom of the window', () => {
+    expect(cardPlacement({ x: 100, y: 700 }, card, view)).toEqual({ left: 114, top: 486 });
+  });
+  it('goes left of the pointer near the right edge', () => {
+    expect(cardPlacement({ x: 900, y: 100 }, card, view)).toEqual({ left: 626, top: 114 });
+  });
+  it('stays inside the window when neither side fits', () => {
+    const tall = { width: 260, height: 790 };
+    expect(cardPlacement({ x: 100, y: 400 }, tall, view).top).toBe(8);
+    expect(cardPlacement({ x: 120, y: 100 }, { width: 900, height: 200 }, view).left).toBe(92);
   });
 });

@@ -1,0 +1,949 @@
+# Starter knowledge: common US merchants and descriptor patterns.
+# pattern<TAB>category (legacy name or name); the first that exists here wins, separated by |.
+# Seeds the classifier at weight 1. Reviewed by hand. No payment apps (Venmo, Zelle, PayPal, Cash App).
+
+# Coffee Shop
+starbucks	Coffee Shop|Food & Dining
+dunkin	Coffee Shop|Food & Dining
+dunkin donuts	Coffee Shop|Food & Dining
+peets	Coffee Shop|Food & Dining
+peets coffee	Coffee Shop|Food & Dining
+philz	Coffee Shop|Food & Dining
+blue bottle	Coffee Shop|Food & Dining
+tim hortons	Coffee Shop|Food & Dining
+dutch bros	Coffee Shop|Food & Dining
+coffee bean	Coffee Shop|Food & Dining
+la colombe	Coffee Shop|Food & Dining
+coffee	Coffee Shop|Food & Dining
+cafe	Coffee Shop|Food & Dining
+espresso	Coffee Shop|Food & Dining
+roasters	Coffee Shop|Food & Dining
+boba	Coffee Shop|Food & Dining
+kung fu tea	Coffee Shop|Food & Dining
+# Food & Dining
+mcdonalds	Food & Dining
+mcdonald's	Food & Dining
+burger king	Food & Dining
+wendys	Food & Dining
+wendy's	Food & Dining
+taco bell	Food & Dining
+chipotle	Food & Dining
+subway	Food & Dining
+chick fil a	Food & Dining
+chick-fil-a	Food & Dining
+kfc	Food & Dining
+popeyes	Food & Dining
+panda express	Food & Dining
+five guys	Food & Dining
+in n out	Food & Dining
+in-n-out	Food & Dining
+shake shack	Food & Dining
+wingstop	Food & Dining
+jack in the box	Food & Dining
+arbys	Food & Dining
+sonic drive	Food & Dining
+dairy queen	Food & Dining
+whataburger	Food & Dining
+culvers	Food & Dining
+raising canes	Food & Dining
+qdoba	Food & Dining
+panera	Food & Dining
+panera bread	Food & Dining
+sweetgreen	Food & Dining
+cava	Food & Dining
+jersey mikes	Food & Dining
+jimmy johns	Food & Dining
+firehouse subs	Food & Dining
+potbelly	Food & Dining
+dominos	Food & Dining
+domino's	Food & Dining
+pizza hut	Food & Dining
+papa johns	Food & Dining
+little caesars	Food & Dining
+blaze pizza	Food & Dining
+mod pizza	Food & Dining
+olive garden	Food & Dining
+applebees	Food & Dining
+chilis	Food & Dining
+chili's	Food & Dining
+red lobster	Food & Dining
+outback	Food & Dining
+texas roadhouse	Food & Dining
+longhorn steakhouse	Food & Dining
+cheesecake factory	Food & Dining
+red robin	Food & Dining
+buffalo wild wings	Food & Dining
+ihop	Food & Dining
+dennys	Food & Dining
+denny's	Food & Dining
+waffle house	Food & Dining
+cracker barrel	Food & Dining
+bj's restaurant	Food & Dining
+p.f. chang	Food & Dining
+pf changs	Food & Dining
+first watch	Food & Dining
+krispy kreme	Food & Dining
+jamba	Food & Dining
+jamba juice	Food & Dining
+smoothie king	Food & Dining
+tropical smoothie	Food & Dining
+baskin robbins	Food & Dining
+cold stone	Food & Dining
+crumbl	Food & Dining
+insomnia cookies	Food & Dining
+halal guys	Food & Dining
+pret a manger	Food & Dining
+einstein bros	Food & Dining
+smashburger	Food & Dining
+steak n shake	Food & Dining
+white castle	Food & Dining
+poke	Food & Dining
+sushi	Food & Dining
+ramen	Food & Dining
+pho	Food & Dining
+taqueria	Food & Dining
+pizzeria	Food & Dining
+bistro	Food & Dining
+restaurant	Food & Dining
+diner	Food & Dining
+bbq	Food & Dining
+steakhouse	Food & Dining
+tavern	Food & Dining
+bakery	Food & Dining
+deli	Food & Dining
+bagel	Food & Dining
+donut	Food & Dining
+burrito	Food & Dining
+shawarma	Food & Dining
+noodle	Food & Dining
+dumpling	Food & Dining
+tst	Food & Dining
+toast	Food & Dining
+resy	Food & Dining
+opentable	Food & Dining
+tock	Food & Dining
+# Takeout
+uber eats	Takeout|Food & Dining
+doordash	Takeout|Food & Dining
+grubhub	Takeout|Food & Dining
+postmates	Takeout|Food & Dining
+seamless	Takeout|Food & Dining
+caviar	Takeout|Food & Dining
+gopuff	Takeout|Food & Dining
+slice	Takeout|Food & Dining
+# Drinks
+pub	Drinks|Food & Dining
+brewery	Drinks|Food & Dining
+brewing	Drinks|Food & Dining
+taproom	Drinks|Food & Dining
+winery	Drinks|Food & Dining
+distillery	Drinks|Food & Dining
+total wine	Drinks|Food & Dining
+bevmo	Drinks|Food & Dining
+liquor	Drinks|Food & Dining
+# Groceries
+safeway	Groceries
+kroger	Groceries
+trader joe	Groceries
+trader joes	Groceries
+trader joe's	Groceries
+costco	Groceries
+sams club	Groceries
+sam's club	Groceries
+walmart grocery	Groceries
+walmart supercenter	Groceries
+aldi	Groceries
+lidl	Groceries
+publix	Groceries
+albertsons	Groceries
+vons	Groceries
+ralphs	Groceries
+heb	Groceries
+h-e-b	Groceries
+meijer	Groceries
+wegmans	Groceries
+food lion	Groceries
+giant eagle	Groceries
+stop & shop	Groceries
+stop and shop	Groceries
+shoprite	Groceries
+hannaford	Groceries
+harris teeter	Groceries
+winn dixie	Groceries
+winco	Groceries
+sprouts	Groceries
+smart & final	Groceries
+fred meyer	Groceries
+king soopers	Groceries
+grocery outlet	Groceries
+hyvee	Groceries
+fresh market	Groceries
+the fresh market	Groceries
+99 ranch	Groceries
+h mart	Groceries
+hmart	Groceries
+patel brothers	Groceries
+instacart	Groceries
+amazon fresh	Groceries
+shipt	Groceries
+grocery	Groceries
+supermarket	Groceries
+# Whole Foods Groceries
+whole foods	Whole Foods Groceries|Groceries
+wholefds	Whole Foods Groceries|Groceries
+whole foods market	Whole Foods Groceries|Groceries
+wfm	Whole Foods Groceries|Groceries
+# Entertainment
+amc theatres	Entertainment
+amc	Entertainment
+regal cinemas	Entertainment
+regal	Entertainment
+cinemark	Entertainment
+alamo drafthouse	Entertainment
+fandango	Entertainment
+ticketmaster	Entertainment
+live nation	Entertainment
+stubhub	Entertainment
+seatgeek	Entertainment
+vivid seats	Entertainment
+eventbrite	Entertainment
+axs	Entertainment
+topgolf	Entertainment
+dave & busters	Entertainment
+dave and busters	Entertainment
+main event	Entertainment
+bowlero	Entertainment
+six flags	Entertainment
+disneyland	Entertainment
+walt disney world	Entertainment
+universal studios	Entertainment
+seaworld	Entertainment
+museum	Entertainment
+zoo	Entertainment
+aquarium	Entertainment
+theater	Entertainment
+theatre	Entertainment
+cinema	Entertainment
+concert	Entertainment
+comedy club	Entertainment
+escape room	Entertainment
+arcade	Entertainment
+bowling	Entertainment
+mini golf	Entertainment
+trampoline	Entertainment
+# Digital Entertainment
+steam	Digital Entertainment|Entertainment
+steampowered	Digital Entertainment|Entertainment
+playstation	Digital Entertainment|Entertainment
+sony playstation	Digital Entertainment|Entertainment
+xbox	Digital Entertainment|Entertainment
+microsoft xbox	Digital Entertainment|Entertainment
+nintendo	Digital Entertainment|Entertainment
+epic games	Digital Entertainment|Entertainment
+roblox	Digital Entertainment|Entertainment
+twitch	Digital Entertainment|Entertainment
+audible	Digital Entertainment|Entertainment
+kindle	Digital Entertainment|Entertainment
+google play	Digital Entertainment|Entertainment
+app store	Digital Entertainment|Entertainment
+itunes	Digital Entertainment|Entertainment
+# Subscriptions
+netflix	Subscriptions
+hulu	Subscriptions
+disney plus	Subscriptions
+disneyplus	Subscriptions
+hbo max	Subscriptions
+max com	Subscriptions
+paramount plus	Subscriptions
+peacock	Subscriptions
+apple tv	Subscriptions
+amazon prime	Subscriptions
+prime video	Subscriptions
+youtube premium	Subscriptions
+youtube tv	Subscriptions
+spotify	Subscriptions
+apple music	Subscriptions
+pandora	Subscriptions
+sirius xm	Subscriptions
+siriusxm	Subscriptions
+crunchyroll	Subscriptions
+espn plus	Subscriptions
+sling tv	Subscriptions
+discovery plus	Subscriptions
+nytimes	Subscriptions
+new york times	Subscriptions
+wall street journal	Subscriptions
+wsj	Subscriptions
+washington post	Subscriptions
+substack	Subscriptions
+patreon	Subscriptions
+duolingo	Subscriptions
+headspace	Subscriptions
+calm com	Subscriptions
+peloton	Subscriptions
+noom	Subscriptions
+weight watchers	Subscriptions
+icloud	Subscriptions
+apple com bill	Subscriptions
+google one	Subscriptions
+google storage	Subscriptions
+dropbox	Subscriptions
+onedrive	Subscriptions
+microsoft 365	Subscriptions
+office 365	Subscriptions
+adobe	Subscriptions
+canva	Subscriptions
+grammarly	Subscriptions
+1password	Subscriptions
+nordvpn	Subscriptions
+expressvpn	Subscriptions
+github	Subscriptions
+chatgpt	Subscriptions
+openai	Subscriptions
+anthropic	Subscriptions
+claude ai	Subscriptions
+notion	Subscriptions
+zoom us	Subscriptions
+slack	Subscriptions
+linkedin premium	Subscriptions
+match com	Subscriptions
+tinder	Subscriptions
+bumble	Subscriptions
+hinge	Subscriptions
+skillshare	Subscriptions
+coursera plus	Subscriptions
+kindle unlimited	Subscriptions
+# Transportation - Parking
+parking	Transportation - Parking
+parkmobile	Transportation - Parking
+spothero	Transportation - Parking
+paybyphone	Transportation - Parking
+laz parking	Transportation - Parking
+sp plus	Transportation - Parking
+ace parking	Transportation - Parking
+parkwhiz	Transportation - Parking
+the parking spot	Transportation - Parking
+municipal parking	Transportation - Parking
+# Transportation - Cab/Rideshare
+uber	Transportation - Cab/Rideshare
+lyft	Transportation - Cab/Rideshare
+uber trip	Transportation - Cab/Rideshare
+yellow cab	Transportation - Cab/Rideshare
+taxi	Transportation - Cab/Rideshare
+blacklane	Transportation - Cab/Rideshare
+# Transportation - Fuel
+shell	Transportation - Fuel
+chevron	Transportation - Fuel
+exxon	Transportation - Fuel
+exxonmobil	Transportation - Fuel
+mobil	Transportation - Fuel
+bp	Transportation - Fuel
+arco	Transportation - Fuel
+valero	Transportation - Fuel
+texaco	Transportation - Fuel
+sunoco	Transportation - Fuel
+citgo	Transportation - Fuel
+marathon	Transportation - Fuel
+speedway	Transportation - Fuel
+phillips 66	Transportation - Fuel
+conoco	Transportation - Fuel
+circle k	Transportation - Fuel
+wawa	Transportation - Fuel
+sheetz	Transportation - Fuel
+quiktrip	Transportation - Fuel
+racetrac	Transportation - Fuel
+caseys	Transportation - Fuel
+casey's	Transportation - Fuel
+kwik trip	Transportation - Fuel
+flying j	Transportation - Fuel
+love's travel	Transportation - Fuel
+murphy usa	Transportation - Fuel
+costco gas	Transportation - Fuel
+sams fuel	Transportation - Fuel
+kroger fuel	Transportation - Fuel
+safeway fuel	Transportation - Fuel
+fuel	Transportation - Fuel
+gas station	Transportation - Fuel
+ev charging	Transportation - Fuel
+chargepoint	Transportation - Fuel
+electrify america	Transportation - Fuel
+evgo	Transportation - Fuel
+tesla supercharger	Transportation - Fuel
+# Transportation - Tolls
+fastrak	Transportation - Tolls
+ez pass	Transportation - Tolls
+e-zpass	Transportation - Tolls
+ezpass	Transportation - Tolls
+sunpass	Transportation - Tolls
+toll tag	Transportation - Tolls
+toll road	Transportation - Tolls
+tolls	Transportation - Tolls
+turnpike	Transportation - Tolls
+thruway	Transportation - Tolls
+# Transportation - Public Transit
+clipper	Transportation - Public Transit
+bart	Transportation - Public Transit
+caltrain	Transportation - Public Transit
+mta	Transportation - Public Transit
+metrocard	Transportation - Public Transit
+omny	Transportation - Public Transit
+nyct	Transportation - Public Transit
+lirr	Transportation - Public Transit
+njt	Transportation - Public Transit
+nj transit	Transportation - Public Transit
+septa	Transportation - Public Transit
+wmata	Transportation - Public Transit
+smartrip	Transportation - Public Transit
+marta	Transportation - Public Transit
+cta ventra	Transportation - Public Transit
+ventra	Transportation - Public Transit
+metra	Transportation - Public Transit
+mbta	Transportation - Public Transit
+charliecard	Transportation - Public Transit
+sound transit	Transportation - Public Transit
+la metro	Transportation - Public Transit
+sfmta	Transportation - Public Transit
+amtrak	Transportation - Public Transit
+greyhound	Transportation - Public Transit
+megabus	Transportation - Public Transit
+flixbus	Transportation - Public Transit
+transit	Transportation - Public Transit
+# Transportation - Other
+lime	Transportation - Other
+bird scooter	Transportation - Other
+citi bike	Transportation - Other
+citibike	Transportation - Other
+zipcar	Transportation - Other
+turo	Transportation - Other
+enterprise rent	Transportation - Other
+hertz	Transportation - Other
+avis	Transportation - Other
+budget rent	Transportation - Other
+national car	Transportation - Other
+alamo rent	Transportation - Other
+sixt	Transportation - Other
+u-haul	Transportation - Other
+uhaul	Transportation - Other
+penske truck	Transportation - Other
+dmv	Transportation - Other
+department of motor vehicles	Transportation - Other
+car wash	Transportation - Other
+# Car Maintenance
+jiffy lube	Car Maintenance
+valvoline	Car Maintenance
+firestone	Car Maintenance
+goodyear	Car Maintenance
+pep boys	Car Maintenance
+midas	Car Maintenance
+meineke	Car Maintenance
+discount tire	Car Maintenance
+les schwab	Car Maintenance
+mavis	Car Maintenance
+autozone	Car Maintenance
+advance auto	Car Maintenance
+oreilly auto	Car Maintenance
+o'reilly auto	Car Maintenance
+napa auto	Car Maintenance
+caliber collision	Car Maintenance
+maaco	Car Maintenance
+safelite	Car Maintenance
+tire	Car Maintenance
+auto repair	Car Maintenance
+auto body	Car Maintenance
+collision	Car Maintenance
+mechanic	Car Maintenance
+oil change	Car Maintenance
+car service	Car Maintenance
+dealership service	Car Maintenance
+# Housing & Utilities
+pg&e	Housing & Utilities
+pge	Housing & Utilities
+pacific gas	Housing & Utilities
+southern california edison	Housing & Utilities
+sdg&e	Housing & Utilities
+con edison	Housing & Utilities
+coned	Housing & Utilities
+duke energy	Housing & Utilities
+dominion energy	Housing & Utilities
+georgia power	Housing & Utilities
+florida power	Housing & Utilities
+fpl	Housing & Utilities
+xcel energy	Housing & Utilities
+national grid	Housing & Utilities
+eversource	Housing & Utilities
+pseg	Housing & Utilities
+puget sound energy	Housing & Utilities
+socalgas	Housing & Utilities
+southern california gas	Housing & Utilities
+water district	Housing & Utilities
+water utility	Housing & Utilities
+water dept	Housing & Utilities
+utilities	Housing & Utilities
+sewer	Housing & Utilities
+waste management	Housing & Utilities
+republic services	Housing & Utilities
+trash	Housing & Utilities
+# Rent
+rent	Rent|Housing & Utilities - Rent|Housing & Utilities
+apartments	Rent|Housing & Utilities - Rent|Housing & Utilities
+apartment	Rent|Housing & Utilities - Rent|Housing & Utilities
+property management	Rent|Housing & Utilities - Rent|Housing & Utilities
+leasing	Rent|Housing & Utilities - Rent|Housing & Utilities
+realty	Rent|Housing & Utilities - Rent|Housing & Utilities
+landlord	Rent|Housing & Utilities - Rent|Housing & Utilities
+bilt rent	Rent|Housing & Utilities - Rent|Housing & Utilities
+apartments com	Rent|Housing & Utilities - Rent|Housing & Utilities
+greystar	Rent|Housing & Utilities - Rent|Housing & Utilities
+# Mobile
+verizon wireless	Mobile|Phone & Internet
+t-mobile	Mobile|Phone & Internet
+tmobile	Mobile|Phone & Internet
+at&t wireless	Mobile|Phone & Internet
+att wireless	Mobile|Phone & Internet
+mint mobile	Mobile|Phone & Internet
+visible	Mobile|Phone & Internet
+cricket wireless	Mobile|Phone & Internet
+metro by t-mobile	Mobile|Phone & Internet
+metropcs	Mobile|Phone & Internet
+boost mobile	Mobile|Phone & Internet
+google fi	Mobile|Phone & Internet
+xfinity mobile	Mobile|Phone & Internet
+spectrum mobile	Mobile|Phone & Internet
+# Internet
+comcast	Internet|Phone & Internet
+xfinity	Internet|Phone & Internet
+spectrum	Internet|Phone & Internet
+charter	Internet|Phone & Internet
+cox communications	Internet|Phone & Internet
+cox	Internet|Phone & Internet
+optimum	Internet|Phone & Internet
+frontier	Internet|Phone & Internet
+centurylink	Internet|Phone & Internet
+google fiber	Internet|Phone & Internet
+starlink	Internet|Phone & Internet
+verizon fios	Internet|Phone & Internet
+fios	Internet|Phone & Internet
+at&t internet	Internet|Phone & Internet
+att internet	Internet|Phone & Internet
+verizon	Internet|Phone & Internet
+at&t	Internet|Phone & Internet
+# Shopping
+amazon	Shopping
+amzn	Shopping
+amazon mktplace	Shopping
+amazon com	Shopping
+target	Shopping
+walmart	Shopping
+walmart com	Shopping
+best buy	Shopping
+bestbuy	Shopping
+apple store	Shopping
+apple com	Shopping
+home depot	Shopping
+lowes	Shopping
+lowe's	Shopping
+ikea	Shopping
+wayfair	Shopping
+overstock	Shopping
+bed bath	Shopping
+crate & barrel	Shopping
+crate and barrel	Shopping
+pottery barn	Shopping
+west elm	Shopping
+williams sonoma	Shopping
+homegoods	Shopping
+tj maxx	Shopping
+tjmaxx	Shopping
+marshalls	Shopping
+ross stores	Shopping
+ross dress	Shopping
+burlington	Shopping
+nordstrom	Shopping
+nordstrom rack	Shopping
+macys	Shopping
+macy's	Shopping
+bloomingdales	Shopping
+kohls	Shopping
+kohl's	Shopping
+saks	Shopping
+neiman marcus	Shopping
+old navy	Shopping
+gap	Shopping
+banana republic	Shopping
+athleta	Shopping
+uniqlo	Shopping
+h&m	Shopping
+zara	Shopping
+american eagle	Shopping
+abercrombie	Shopping
+hollister	Shopping
+j crew	Shopping
+madewell	Shopping
+lululemon	Shopping
+nike	Shopping
+adidas	Shopping
+under armour	Shopping
+foot locker	Shopping
+dsw	Shopping
+rei	Shopping
+dicks sporting	Shopping
+dick's sporting	Shopping
+academy sports	Shopping
+sephora	Shopping
+ulta	Shopping
+bath & body	Shopping
+victoria's secret	Shopping
+victorias secret	Shopping
+michaels	Shopping
+joann	Shopping
+hobby lobby	Shopping
+party city	Shopping
+staples	Shopping
+office depot	Shopping
+officemax	Shopping
+barnes & noble	Shopping
+barnes noble	Shopping
+gamestop	Shopping
+guitar center	Shopping
+petco	Shopping
+petsmart	Shopping
+chewy	Shopping
+etsy	Shopping
+ebay	Shopping
+shein	Shopping
+temu	Shopping
+aliexpress	Shopping
+poshmark	Shopping
+depop	Shopping
+mercari	Shopping
+thredup	Shopping
+asos	Shopping
+zappos	Shopping
+everlane	Shopping
+allbirds	Shopping
+warby parker	Shopping
+casper	Shopping
+purple mattress	Shopping
+dollar tree	Shopping
+dollar general	Shopping
+family dollar	Shopping
+five below	Shopping
+big lots	Shopping
+ace hardware	Shopping
+true value	Shopping
+harbor freight	Shopping
+menards	Shopping
+costco online	Shopping
+sams club online	Shopping
+shopify	Shopping
+square online	Shopping
+# Healthcare
+cvs	Healthcare
+cvs pharmacy	Healthcare
+walgreens	Healthcare
+rite aid	Healthcare
+duane reade	Healthcare
+pharmacy	Healthcare
+kaiser	Healthcare
+kaiser permanente	Healthcare
+sutter health	Healthcare
+one medical	Healthcare
+carbon health	Healthcare
+minuteclinic	Healthcare
+urgent care	Healthcare
+medical	Healthcare
+clinic	Healthcare
+hospital	Healthcare
+dental	Healthcare
+dentist	Healthcare
+orthodont	Healthcare
+optometr	Healthcare
+eyecare	Healthcare
+lenscrafters	Healthcare
+pearle vision	Healthcare
+labcorp	Healthcare
+quest diagnostics	Healthcare
+cigna	Healthcare
+aetna	Healthcare
+unitedhealth	Healthcare
+blue shield	Healthcare
+blue cross	Healthcare
+anthem	Healthcare
+humana	Healthcare
+goodrx	Healthcare
+amazon pharmacy	Healthcare
+betterhelp	Healthcare
+zocdoc	Healthcare
+teladoc	Healthcare
+planned parenthood	Healthcare
+# Haircut
+great clips	Haircut|Personal Care
+supercuts	Haircut|Personal Care
+sport clips	Haircut|Personal Care
+barber	Haircut|Personal Care
+barbershop	Haircut|Personal Care
+salon	Haircut|Personal Care
+hair	Haircut|Personal Care
+haircut	Haircut|Personal Care
+# Personal Care
+massage envy	Personal Care
+hand & stone	Personal Care
+european wax	Personal Care
+drybar	Personal Care
+nail	Personal Care
+nails	Personal Care
+spa	Personal Care
+beauty	Personal Care
+cosmetics	Personal Care
+equinox	Personal Care
+24 hour fitness	Personal Care
+la fitness	Personal Care
+planet fitness	Personal Care
+anytime fitness	Personal Care
+crunch fitness	Personal Care
+gold's gym	Personal Care
+golds gym	Personal Care
+orangetheory	Personal Care
+soulcycle	Personal Care
+classpass	Personal Care
+ymca	Personal Care
+gym	Personal Care
+fitness	Personal Care
+yoga	Personal Care
+pilates	Personal Care
+dry clean	Personal Care
+dry cleaner	Personal Care
+laundry	Personal Care
+# Education
+tuition	Education
+university	Education
+college	Education
+school	Education
+academy	Education
+community college	Education
+student loan	Education
+navient	Education
+nelnet	Education
+mohela	Education
+sallie mae	Education
+coursera	Education
+udemy	Education
+edx	Education
+linkedin learning	Education
+rosetta stone	Education
+babbel	Education
+college board	Education
+bookstore	Education
+textbook	Education
+# Travel
+airbnb	Travel
+vrbo	Travel
+booking com	Travel
+expedia	Travel
+hotels com	Travel
+priceline	Travel
+kayak	Travel
+hopper	Travel
+orbitz	Travel
+travelocity	Travel
+agoda	Travel
+trip com	Travel
+marriott	Travel
+hilton	Travel
+hyatt	Travel
+ihg	Travel
+holiday inn	Travel
+best western	Travel
+wyndham	Travel
+choice hotels	Travel
+radisson	Travel
+sheraton	Travel
+westin	Travel
+four seasons	Travel
+ritz carlton	Travel
+motel 6	Travel
+la quinta	Travel
+hampton inn	Travel
+courtyard	Travel
+embassy suites	Travel
+doubletree	Travel
+residence inn	Travel
+extended stay	Travel
+united airlines	Travel
+united air	Travel
+american airlines	Travel
+american air	Travel
+delta air	Travel
+southwest air	Travel
+jetblue	Travel
+alaska air	Travel
+alaska airlines	Travel
+spirit airlines	Travel
+spirit air	Travel
+frontier airlines	Travel
+allegiant	Travel
+hawaiian airlines	Travel
+air canada	Travel
+british airways	Travel
+lufthansa	Travel
+air france	Travel
+klm	Travel
+emirates	Travel
+qatar airways	Travel
+singapore airlines	Travel
+ryanair	Travel
+easyjet	Travel
+air india	Travel
+tsa precheck	Travel
+clear secure	Travel
+global entry	Travel
+priority pass	Travel
+airport	Travel
+duty free	Travel
+hotel	Travel
+resort	Travel
+inn	Travel
+lodge	Travel
+hostel	Travel
+cruise	Travel
+carnival cruise	Travel
+royal caribbean	Travel
+norwegian cruise	Travel
+princess cruise	Travel
+# Investments
+robinhood	Investments
+vanguard	Investments
+fidelity	Investments
+schwab	Investments
+charles schwab	Investments
+e trade	Investments
+etrade	Investments
+td ameritrade	Investments
+merrill	Investments
+merrill edge	Investments
+wealthfront	Investments
+betterment	Investments
+acorns	Investments
+stash	Investments
+m1 finance	Investments
+public com	Investments
+webull	Investments
+sofi invest	Investments
+interactive brokers	Investments
+ally invest	Investments
+coinbase	Investments
+kraken	Investments
+gemini	Investments
+binance	Investments
+crypto com	Investments
+treasurydirect	Investments
+brokerage	Investments
+# Insurance
+geico	Insurance
+state farm	Insurance
+progressive	Insurance
+allstate	Insurance
+farmers insurance	Insurance
+liberty mutual	Insurance
+nationwide	Insurance
+usaa	Insurance
+travelers	Insurance
+american family	Insurance
+lemonade	Insurance
+aaa insurance	Insurance
+insurance	Insurance
+ins prem	Insurance
+northwestern mutual	Insurance
+new york life	Insurance
+prudential	Insurance
+metlife	Insurance
+# Renters’ Insurance
+renters insurance	Renters’ Insurance|Insurance
+assurant renters	Renters’ Insurance|Insurance
+lemonade renters	Renters’ Insurance|Insurance
+jetty	Renters’ Insurance|Insurance
+# Bank Fees
+overdraft	Bank Fees
+nsf fee	Bank Fees
+maintenance fee	Bank Fees
+annual fee	Bank Fees
+late fee	Bank Fees
+foreign transaction fee	Bank Fees
+atm fee	Bank Fees
+wire fee	Bank Fees
+service charge	Bank Fees
+interest charge	Bank Fees
+finance charge	Bank Fees
+# Gifts & Donations
+gofundme	Gifts & Donations
+red cross	Gifts & Donations
+american red cross	Gifts & Donations
+unicef	Gifts & Donations
+salvation army	Gifts & Donations
+goodwill	Gifts & Donations
+st jude	Gifts & Donations
+wikipedia	Gifts & Donations
+charity	Gifts & Donations
+donation	Gifts & Donations
+donate	Gifts & Donations
+foundation	Gifts & Donations
+church	Gifts & Donations
+1-800-flowers	Gifts & Donations
+1800flowers	Gifts & Donations
+florist	Gifts & Donations
+flowers	Gifts & Donations
+gift card	Gifts & Donations
+giftcard	Gifts & Donations
+hallmark	Gifts & Donations
+shutterfly	Gifts & Donations
+# Income - Salary
+payroll	Income - Salary
+direct dep	Income - Salary
+direct deposit	Income - Salary
+salary	Income - Salary
+adp	Income - Salary
+gusto	Income - Salary
+paychex	Income - Salary
+# Income - Interest
+interest paid	Income - Interest
+interest payment	Income - Interest
+interest earned	Income - Interest
+dividend	Income - Interest
+# Income - Other
+irs treas	Income - Other
+tax refund	Income - Other
+state tax refund	Income - Other
+social security	Income - Other
+cashback reward	Income - Other
+cash back reward	Income - Other
+# Payment
+payment thank you	Payment
+autopay	Payment
+auto pay	Payment
+online payment	Payment
+mobile payment	Payment
+card payment	Payment
+credit card payment	Payment
+amex epayment	Payment
+chase credit crd	Payment
+citi card online	Payment
+discover e-payment	Payment
+capital one online	Payment
+bank of america credit	Payment
+apple card	Payment
+# Transfer
+online transfer	Transfer
+transfer to savings	Transfer
+transfer from savings	Transfer
+transfer to checking	Transfer
+transfer from checking	Transfer
+internal transfer	Transfer
+xfer	Transfer
+funds transfer	Transfer
+ach transfer	Transfer
+wire transfer out	Transfer
+# Credits/Refunds
+refund	Credits/Refunds
+return credit	Credits/Refunds
+reversal	Credits/Refunds
+chargeback	Credits/Refunds

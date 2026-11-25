@@ -47,7 +47,8 @@ pub struct OtherGroup {
 pub const MIN_CONTAINS: usize = 3;
 
 /// Rows in "Other": the seeded Other category or no category, top-level only.
-const IN_OTHER: &str = "parent_id IS NULL AND (category_id IS NULL OR category_id IN
+/// Transfers need no category, so they are never left to clean up.
+const IN_OTHER: &str = "parent_id IS NULL AND transactions.type <> 'transfer' AND (category_id IS NULL OR category_id IN
     (SELECT id FROM categories WHERE legacy_name = 'Other'))";
 
 /// Transactions in every profile that `target` matches and that are not already in
@@ -121,6 +122,7 @@ pub fn apply(conn: &Connection, ids: &[TransactionId], category_id: i64) -> Resu
     let n = tx.execute(
         &format!(
             "UPDATE transactions SET category_id = ?1, reviewed = 1, type = {ty},
+                category_source = 'user', category_reason = NULL, suggested_category_id = NULL, suggested_reason = NULL,
                 updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
              WHERE category_locked = 0 AND id IN ({marks})",
             ty = crate::transactions::type_of_category_sql("?1")
@@ -131,9 +133,128 @@ pub fn apply(conn: &Connection, ids: &[TransactionId], category_id: i64) -> Resu
     Ok(n)
 }
 
-/// A manual change to one transaction: set its category, mark it reviewed, and teach the
-/// learned model its merchant (payment platforms are never learned).
+/// A manual change to one transaction (see `change_category`).
 pub fn set_one(conn: &Connection, id: TransactionId, category_id: i64) -> Result<()> {
+    change_category(conn, id, category_id).map(|_| ())
+}
+
+/// What a category change did to the rest of history.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Change {
+    /// Other rows from the same merchant that moved with it.
+    pub moved: usize,
+    pub merchant: String,
+    /// Rows from similar merchants that got this category as a suggestion.
+    pub suggested: usize,
+    /// A payment app or gas station: nothing moved; ask about the others with `same_merchant`.
+    pub platform: bool,
+}
+
+/// You changed one transaction's category: it becomes yours, SlayBudget learns the merchant and the classifier learns
+/// the example, the merchant's other rows move too (never yours, locked ones or payment apps), and similar merchants
+/// get it as a suggestion.
+pub fn change_category(conn: &Connection, id: TransactionId, category_id: i64) -> Result<Change> {
+    set_only(conn, id, category_id)?;
+    let t = transactions::get(conn, id)?;
+    let merchant = t.merchant.trim().to_lowercase();
+    // Payment apps and gas stations differ payment to payment (the merchant key can lose the word, as Zelle's does):
+    // nothing moves, and you're asked about the others.
+    let platform = is_payment_platform(&merchant) || is_payment_platform(&t.description);
+    let mut change = Change {
+        moved: 0,
+        merchant: merchant.clone(),
+        suggested: 0,
+        platform,
+    };
+    if merchant.is_empty() || platform {
+        return Ok(change);
+    }
+    learning::learn(conn, &merchant, category_id, None)?;
+    let name = crate::categories::get(conn, category_id)?.name;
+    // Never yours, locked, split parts, or either side of a transfer between your accounts.
+    const MOVABLE: &str =
+        "id != ?2 AND parent_id IS NULL AND category_locked = 0 AND category_source != 'user'
+        AND transfer_pair_id IS NULL AND category_id IS NOT ?1";
+    change.moved = conn.execute(
+        &format!(
+            "UPDATE transactions SET category_id = ?1, type = {ty}, category_source = 'learned', category_reason = ?4,
+                suggested_category_id = NULL, suggested_reason = NULL,
+                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+             WHERE merchant = ?3 AND {MOVABLE}",
+            ty = transactions::type_of_category_sql("?1")
+        ),
+        params![
+            category_id,
+            id,
+            merchant,
+            format!("Moved with your change to {}", super::model::title(&merchant))
+        ],
+    )?;
+    let mut stmt = conn.prepare(&format!(
+        "SELECT id, merchant FROM transactions WHERE merchant != ?3 AND {MOVABLE}"
+    ))?;
+    let similar: Vec<i64> = stmt
+        .query_map(params![category_id, id, merchant], |r| {
+            Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+        })?
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .filter(|(_, m)| !is_payment_platform(m) && similarity(m, &merchant) >= MATCH_THRESHOLD)
+        .map(|(i, _)| i)
+        .collect();
+    let reason = format!(
+        "Similar to {}, which you put in {name}",
+        super::model::title(&merchant)
+    );
+    for other in &similar {
+        conn.execute(
+            "UPDATE transactions SET suggested_category_id = ?1, suggested_reason = ?2 WHERE id = ?3",
+            params![category_id, reason, other],
+        )?;
+    }
+    change.suggested = similar.len();
+    Ok(change)
+}
+
+/// The other transactions with exactly this one's name, not already in `category_id`, newest first: what to ask
+/// about after a payment app's category change (nothing moves until you say). Yours are included; locked ones show.
+pub fn same_merchant(conn: &Connection, id: TransactionId, category_id: i64) -> Result<Vec<Match>> {
+    let t = transactions::get(conn, id)?;
+    if t.merchant.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {SELECT_COLS} FROM transactions
+         WHERE parent_id IS NULL AND id != ?1 AND merchant = ?2 AND category_id IS NOT ?3
+         ORDER BY posted_on DESC, id DESC"
+    ))?;
+    let rows = stmt.query_map(params![id, t.merchant, category_id], row_to_tx)?;
+    Ok(rows
+        .collect::<std::result::Result<Vec<_>, _>>()?
+        .into_iter()
+        .map(|t| Match {
+            locked: t.category_locked,
+            similar: false,
+            transaction: t,
+        })
+        .collect())
+}
+
+/// You chose one category for several transactions at once: each becomes yours and the classifier learns each.
+/// Nothing else moves (you picked exactly these). Returns how many changed.
+pub fn set_many(conn: &Connection, ids: &[TransactionId], category_id: i64) -> Result<usize> {
+    crate::db::atomically(conn, |c| {
+        for &id in ids {
+            set_only(c, id, category_id)?;
+        }
+        Ok(ids.len())
+    })
+}
+
+/// Change only this transaction: it becomes yours and the classifier learns from it, but no merchant is saved and
+/// nothing else moves.
+pub fn set_only(conn: &Connection, id: TransactionId, category_id: i64) -> Result<()> {
     transactions::update(
         conn,
         id,
@@ -144,7 +265,9 @@ pub fn set_one(conn: &Connection, id: TransactionId, category_id: i64) -> Result
         },
     )?;
     let t = transactions::get(conn, id)?;
-    learning::learn(conn, &t.merchant, category_id, None)?;
+    let account = crate::accounts::account_kind(conn, t.source_id)?;
+    let f = super::model::features(&t.description, &t.merchant, t.amount_cents, account);
+    super::model::train(conn, &f, category_id, 3.0)?;
     Ok(())
 }
 
@@ -224,8 +347,8 @@ pub fn other_groups(conn: &Connection) -> Result<Vec<OtherGroup>> {
     let mut groups: Vec<OtherGroup> = rows.collect::<std::result::Result<_, _>>()?;
     // The bank's category per merchant: the most common "Category" statement detail.
     let mut bank = conn.prepare(&format!(
-        "SELECT json_extract(j.value, '$[1]') AS c, count(*) FROM transactions t, json_each(t.details) j
-         WHERE {IN_OTHER} AND t.merchant = ?1 AND json_extract(j.value, '$[0]') = 'Category'
+        "SELECT json_extract(j.value, '$[1]') AS c, count(*) FROM transactions, json_each(transactions.details) j
+         WHERE {IN_OTHER} AND transactions.merchant = ?1 AND json_extract(j.value, '$[0]') = 'Category'
          GROUP BY c ORDER BY count(*) DESC, c LIMIT 1"
     ))?;
     for g in groups.iter_mut() {

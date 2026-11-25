@@ -7,6 +7,7 @@ import { useProfileStore } from '@/lib/stores/profile-store';
 import { CategoryPicker } from './category-picker';
 import { DetailActions, DetailPane } from './detail-pane';
 import { FilterChips, SearchField, SortMenu } from './filter-bar';
+import { CategoryMenu } from '@/components/category-menu';
 import { FilterMenu } from './filter-menu';
 import { TagPicker } from './tag-picker';
 import { isFiltered } from './filter-model';
@@ -36,8 +37,10 @@ export function TransactionsPage() {
 
   const [openId, setOpenId] = useState<number | null>(null);
   const [pickerId, setPickerId] = useState<number | null>(null);
-  const [popover, setPopover] = useState<'filter' | 'sort' | 'type' | 'tag' | null>(null);
+  const [popover, setPopover] = useState<'filter' | 'sort' | 'type' | 'tag' | 'category' | null>(null);
   const setType = useTransactionsStore((s) => s.setType);
+  const setCategories = useTransactionsStore((s) => s.setCategories);
+  const categoriesById = useTransactionsStore((s) => s.categoriesById);
   const [searchOpen, setSearchOpen] = useState(false);
 
   // Shown again after another screen: refresh in the background, keeping the view.
@@ -115,6 +118,22 @@ export function TransactionsPage() {
                   </button>
                 ))}
               </div>
+            )}
+          </div>
+          <div className="relative">
+            <ToolbarButton aria-label="Set category" active={popover === 'category'} onClick={() => setPopover(popover === 'category' ? null : 'category')}>
+              Category
+            </ToolbarButton>
+            {popover === 'category' && (
+              <CategoryMenu
+                className="absolute left-0 top-[34px]"
+                categories={Object.values(categoriesById)}
+                onClose={closePopover}
+                onPick={(id) => {
+                  closePopover();
+                  if (id != null) void setCategories(selectedIds, id);
+                }}
+              />
             )}
           </div>
           <div className="relative">

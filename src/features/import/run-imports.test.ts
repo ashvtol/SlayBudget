@@ -1,7 +1,8 @@
 import { vi } from 'vitest';
 import type { Ipc } from '@/lib/ipc';
 import type { ImportReport } from '@/lib/types';
-import { classifyFile, importPath, runImports, summarize } from './run-imports';
+import { answerGroup, classifyFile, importPath, runImports, summarize } from './run-imports';
+import type { AccountChoice } from '@/lib/types';
 
 function file(name: string, body = 'data', relPath?: string): File {
   const f = new File([body], name, { type: 'text/plain' });
@@ -71,5 +72,45 @@ describe('runImports', () => {
       { name: 'c', error: 'nope' },
     ];
     expect(summarize(results)).toEqual({ imported: 8, duplicates: 3, failed: 1, waiting: 0 });
+  });
+});
+
+describe('answerGroup', () => {
+  const NEW: AccountChoice = {
+    kind: 'new',
+    account: { name: 'Chase 7781', institution: 'Chase', accountType: 'card', color: null, defaultTagId: null },
+    remember: false,
+  };
+
+  it('makes the new account once and puts the rest of the group in it', async () => {
+    const importCsvText = vi.fn(async () => report({ sourceId: 9, sourceName: 'Chase 7781' }));
+    const files = ['a', 'b', 'c'].map((id) => ({ id, file: file(`${id}.csv`) }));
+    const results = await answerGroup(files, 1, deps(fakeIpc({ importCsvText })), NEW);
+    expect(importCsvText).toHaveBeenCalledTimes(3);
+    expect((importCsvText.mock.calls as unknown[][])[0][3]).toEqual(NEW);
+    expect((importCsvText.mock.calls as unknown[][])[1][3]).toEqual({ kind: 'existing', sourceId: 9, remember: false });
+    expect((importCsvText.mock.calls as unknown[][])[2][3]).toEqual({ kind: 'existing', sourceId: 9, remember: false });
+    expect([...results.keys()]).toEqual(['a', 'b', 'c']);
+    expect(results.get('c')?.report?.sourceName).toBe('Chase 7781');
+  });
+
+  it('when the first file fails, the next one gets the original choice, so the account is still made once', async () => {
+    let n = 0;
+    const importCsvText = vi.fn(async () => {
+      n++;
+      if (n === 1) throw new Error('unreadable');
+      return report({ sourceId: 9 });
+    });
+    const files = ['a', 'b', 'c'].map((id) => ({ id, file: file(`${id}.csv`) }));
+    const results = await answerGroup(files, 1, deps(fakeIpc({ importCsvText })), NEW);
+    expect((importCsvText.mock.calls as unknown[][])[1][3]).toEqual(NEW);
+    expect((importCsvText.mock.calls as unknown[][])[2][3]).toEqual({ kind: 'existing', sourceId: 9, remember: false });
+    expect(results.get('a')?.error).toBe('unreadable');
+  });
+
+  it('passes the path a file was found at', async () => {
+    const importCsvText = vi.fn(async () => report({ sourceId: 2 }));
+    await answerGroup([{ id: 'x', file: file('x.csv'), path: '/Users/me/Statements/x.csv' }], 1, deps(fakeIpc({ importCsvText })), { kind: 'existing', sourceId: 2, remember: true });
+    expect((importCsvText.mock.calls as unknown[][])[0][1]).toBe('/Users/me/Statements/x.csv');
   });
 });

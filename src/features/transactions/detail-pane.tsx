@@ -3,10 +3,12 @@ import { TagPill } from '@/components/tag-pill';
 import { useTagsStore } from '@/lib/stores/tags-store';
 import { useDisplayStore } from '@/lib/stores/display-store';
 import { TagPicker } from './tag-picker';
-import { statementClues } from '@/lib/statement-clues';
 import { CategoryPill } from '@/components/category-pill';
+import { CategoryMenu } from '@/components/category-menu';
+import { PlatformOffer } from './platform-offer';
+import { StatementBox } from './statement-box';
 import { ipc } from '@/lib/ipc';
-import type { Category, NewRecurring, PriceCheck, SplitPart, StatementInfo, Transaction } from '@/lib/types';
+import type { Category, NewRecurring, PriceCheck, SplitPart, Transaction } from '@/lib/types';
 import { PriceCheckBox } from '@/features/recurrings/price-check-box';
 import { dayHeaderLabel, formatSignedMoney, groupByDay } from '@/lib/format';
 import { Money } from '@/components/money';
@@ -16,7 +18,6 @@ import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DuplicateBox } from './duplicate-box';
 import { displayMerchant, TransactionRow, TransferPill } from './transaction-row';
 import { similarTransactions } from './similar';
-import { RecategorizeOffer } from './recategorize-offer';
 import { Modal, RecurringForm } from '@/features/recurrings/recurring-form';
 import { displayName } from '@/features/analytics/recurrings-model';
 import { txTypeOf } from '@/lib/tx-type';
@@ -177,42 +178,10 @@ function longDate(day: string): string {
 
 /** What the statement said: the raw line, clues read from it, extra columns, and the file. */
 function StatementField({ tx }: { tx: Transaction }) {
-  const [info, setInfo] = useState<StatementInfo | null>(null);
-  useEffect(() => {
-    let live = true;
-    void ipc()
-      .statementInfo(tx.id)
-      .then((i) => live && setInfo(i))
-      .catch(() => live && setInfo(null));
-    return () => {
-      live = false;
-    };
-  }, [tx.id]);
-  const clues = useMemo(() => statementClues(tx.description), [tx.description]);
-  const fields = info?.fields ?? [];
-  const imported = info?.importedAt ? new Date(info.importedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : null;
   return (
     <div role="group" aria-label="Statement">
       <FieldLabel>Statement</FieldLabel>
-      <div className="rounded-md border px-3 py-2.5" style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}>
-        <div className="text-[11px]" style={{ color: 'var(--subtle)' }}>Appears on statement as</div>
-        <div className="mt-0.5 select-text whitespace-pre-wrap break-words font-mono text-[12px]" style={{ color: 'var(--text)' }}>{tx.description}</div>
-        {(clues.length > 0 || fields.length > 0) && (
-          <dl className="m-0 mt-2.5 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[12px]">
-            {[...clues.map((c) => [c.label, c.value] as const), ...fields].map(([label, value], i) => (
-              <div key={`${label}-${i}`} data-row className="contents">
-                <dt style={{ color: 'var(--muted)' }}>{label}</dt>
-                <dd className="m-0 select-text whitespace-pre-wrap break-words" style={{ color: 'var(--text)' }}>{value}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {info?.fileName && (
-          <div className="mt-2.5 text-[11px]" style={{ color: 'var(--subtle)' }}>
-            Imported from {info.fileName} ({info.sourceName}){imported ? `, ${imported}` : ''}
-          </div>
-        )}
-      </div>
+      <StatementBox tx={tx} />
     </div>
   );
 }
@@ -287,6 +256,58 @@ export function DetailActions({ id }: { id: number }) {
   );
 }
 
+/** Why the category was chosen (a transfer links to its other side), and a suggested category to accept or reject. */
+function WhyCategory({ tx, categoriesById, onOpen }: { tx: Transaction; categoriesById: Record<number, Category>; onOpen?: (id: number) => void }) {
+  const accept = useTransactionsStore((s) => s.acceptSuggestions);
+  const reject = useTransactionsStore((s) => s.rejectSuggestions);
+  const setCategory = useTransactionsStore((s) => s.setCategory);
+  const [choosing, setChoosing] = useState(false);
+  const pair = tx.transferPairId ?? null;
+  const suggested = tx.suggestedCategoryId != null ? categoriesById[tx.suggestedCategoryId] : undefined;
+  if (!tx.categoryReason && tx.suggestedCategoryId == null) return null;
+  return (
+    <div className="-mt-4 flex flex-col gap-3 text-[12px]">
+      {tx.categoryReason &&
+        (pair != null && tx.categorySource === 'transfer' ? (
+          <button type="button" onClick={() => onOpen?.(pair)} className="w-fit font-semibold" style={{ color: 'var(--accent)' }}>
+            {tx.categoryReason}
+          </button>
+        ) : (
+          <p className="m-0" style={{ color: 'var(--muted)' }}>{tx.categoryReason}</p>
+        ))}
+      {tx.suggestedCategoryId != null && (
+        <div role="group" aria-label="Suggested category" className="flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <span style={{ color: 'var(--muted)' }}>Suggested</span>
+          <CategoryPill category={suggested} size="sm" />
+          {tx.suggestedReason && <span style={{ color: 'var(--muted)' }}>{tx.suggestedReason}</span>}
+          <span className="relative ml-auto flex gap-2">
+            <button type="button" onClick={() => setChoosing(!choosing)} className="h-[24px] rounded-md px-2.5 font-semibold" style={{ background: 'var(--hover)', color: 'var(--text)' }}>
+              Choose another
+            </button>
+            {choosing && (
+              <CategoryMenu
+                className="absolute right-0 top-[30px]"
+                categories={Object.values(categoriesById)}
+                onClose={() => setChoosing(false)}
+                onPick={(id) => {
+                  setChoosing(false);
+                  if (id != null) void setCategory(tx.id, id);
+                }}
+              />
+            )}
+            <button type="button" onClick={() => void reject([tx.id])} className="h-[24px] rounded-md px-2.5 font-semibold" style={{ background: 'var(--hover)', color: 'var(--text)' }}>
+              Reject
+            </button>
+            <button type="button" onClick={() => void accept([tx.id])} className="h-[24px] rounded-md px-2.5 font-semibold" style={{ background: 'var(--accent)', color: 'var(--bg)' }}>
+              Accept
+            </button>
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** The detail panel body for one transaction (Copilot layout). Renders nothing when `id` is null. */
 export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; onClose?: () => void; onPickCategory: (id: number) => void; onOpen?: (id: number) => void }) {
   const tx = useTransactionsStore((s) => (id != null ? s.byId(id) : undefined));
@@ -295,9 +316,12 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
   const transactions = useTransactionsStore((s) => s.transactions);
   const setNotes = useTransactionsStore((s) => s.setNotes);
   const applyFilter = useTransactionsStore((s) => s.applyFilter);
-  const offer = useTransactionsStore((s) => s.offer);
-  const notice = useTransactionsStore((s) => s.notice);
-  const closeOffer = useTransactionsStore((s) => s.closeOffer);
+  const moveNote = useTransactionsStore((s) => s.moveNote);
+  const undoMove = useTransactionsStore((s) => s.undoMove);
+  const onlyThisOne = useTransactionsStore((s) => s.onlyThisOne);
+  const platformOffer = useTransactionsStore((s) => s.platformOffer);
+  const closePlatformOffer = useTransactionsStore((s) => s.closePlatformOffer);
+  const setCategories = useTransactionsStore((s) => s.setCategories);
   const setType = useTransactionsStore((s) => s.setType);
   const signs = useDisplayStore((s) => s.signs);
 
@@ -350,6 +374,8 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
         </div>
       </div>
 
+      <WhyCategory tx={tx} categoriesById={categoriesById} onOpen={onOpen} />
+
       <RecurringField tx={tx} />
 
       <div>
@@ -374,18 +400,27 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
         </div>
       </div>
 
-      {offer && offer.transactionId === tx.id && (
-        <RecategorizeOffer
-          key={`${offer.transactionId}-${offer.categoryId}`}
-          merchant={tx.merchant}
-          sampleDescription={tx.description}
-          categoryId={offer.categoryId}
+      {platformOffer && platformOffer.transactionId === tx.id && (
+        <PlatformOffer
+          key={`${platformOffer.transactionId}-${platformOffer.categoryId}`}
+          transactionId={platformOffer.transactionId}
+          categoryId={platformOffer.categoryId}
+          merchant={platformOffer.merchant}
           categoriesById={categoriesById}
-          onDone={(moved) => void closeOffer(moved)}
+          onApply={setCategories}
+          onDone={closePlatformOffer}
         />
       )}
-      {notice && (
-        <p role="status" className="m-0 -mt-3 text-[12px]" style={{ color: 'var(--pos)' }}>{notice}</p>
+      {moveNote && moveNote.transactionId === tx.id && (
+        <div role="status" className="-mt-3 flex flex-wrap items-center gap-3 text-[12px]">
+          <span style={{ color: 'var(--pos)' }}>{moveNote.text}</span>
+          <button type="button" onClick={() => void undoMove()} className="font-semibold" style={{ color: 'var(--accent)' }}>
+            Undo
+          </button>
+          <button type="button" onClick={() => void onlyThisOne()} className="font-semibold" style={{ color: 'var(--accent)' }}>
+            Only this one
+          </button>
+        </div>
       )}
 
       <div>

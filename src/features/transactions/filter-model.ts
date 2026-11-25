@@ -8,6 +8,7 @@ export type FilterValue =
   | { kind: 'keyword'; value: string }
   | { kind: 'recurring'; value: number }
   | { kind: 'review'; value: boolean }
+  | { kind: 'suggested'; value: true }
   | { kind: 'tag'; value: number }
   | { kind: 'type'; value: TxType };
 
@@ -59,6 +60,8 @@ export function togglePatch(f: TransactionFilter, v: FilterValue): Partial<Trans
     }
     case 'review':
       return { reviewed: f.reviewed === v.value ? undefined : v.value };
+    case 'suggested':
+      return { suggested: f.suggested ? undefined : true };
   }
 }
 
@@ -66,21 +69,22 @@ export function togglePatch(f: TransactionFilter, v: FilterValue): Partial<Trans
 export function removePillPatch(f: TransactionFilter, pill: FilterPill): Partial<TransactionFilter> {
   if (pill.filter.kind === 'keyword') return { text: undefined };
   if (pill.filter.kind === 'review') return { reviewed: undefined };
+  if (pill.filter.kind === 'suggested') return { suggested: undefined };
   return togglePatch(f, pill.filter);
 }
 
 /** Every filter kind cleared (profile and paging kept). */
 export function clearAllPatch(): Partial<TransactionFilter> {
-  return { sourceIds: undefined, categoryIds: undefined, months: undefined, merchants: undefined, recurringIds: undefined, tagIds: undefined, types: undefined, text: undefined, reviewed: undefined, from: undefined, to: undefined };
+  return { sourceIds: undefined, categoryIds: undefined, months: undefined, merchants: undefined, recurringIds: undefined, tagIds: undefined, types: undefined, text: undefined, reviewed: undefined, suggested: undefined, from: undefined, to: undefined };
 }
 
 export function isFiltered(f: TransactionFilter): boolean {
   return Boolean(
-    f.sourceIds?.length || f.categoryIds?.length || f.months?.length || f.merchants?.length || f.recurringIds?.length || f.tagIds?.length || f.types?.length || f.text?.trim() || f.reviewed != null || f.from || f.to,
+    f.sourceIds?.length || f.categoryIds?.length || f.months?.length || f.merchants?.length || f.recurringIds?.length || f.tagIds?.length || f.types?.length || f.text?.trim() || f.reviewed != null || f.suggested || f.from || f.to,
   );
 }
 
-/** Pills in this order: account, category, month, keyword, recurring, tag, type, review. */
+/** Pills in this order: account, category, month, keyword, recurring, tag, type, review, suggested. */
 export function filterPills(
   f: TransactionFilter,
   ctx: { categoriesById: Record<number, Category>; sourcesById: Record<number, Source>; sourceColors: Record<number, string>; recurringNames?: Record<number, string>; tagsById?: Record<number, Tag> },
@@ -102,6 +106,7 @@ export function filterPills(
   }
   for (const t of f.types ?? []) pills.push({ key: `type-${t}`, filter: { kind: 'type', value: t }, label: TYPE_LABELS[t] });
   if (f.reviewed != null) pills.push({ key: 'review', filter: { kind: 'review', value: f.reviewed }, label: f.reviewed ? 'Reviewed' : 'Not reviewed' });
+  if (f.suggested) pills.push({ key: 'suggested', filter: { kind: 'suggested', value: true }, label: 'Suggested category' });
   return pills;
 }
 

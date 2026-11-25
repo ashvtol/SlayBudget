@@ -24,9 +24,11 @@ describe('EmojiPicker placement', () => {
   it("opens from the icon's left edge into the panel, not centred over the list pane beside it", async () => {
     const user = userEvent.setup();
     render(<EmojiPicker value="🙂" onChange={() => {}} />);
-    await user.click(screen.getByRole('button', { name: /emoji/i }));
+    const button = screen.getByRole('button', { name: /emoji/i });
+    button.getBoundingClientRect = () => ({ left: 40, right: 72, top: 100, bottom: 132, width: 32, height: 32, x: 40, y: 100, toJSON: () => ({}) }) as DOMRect;
+    await user.click(button);
     const panel = screen.getByRole('dialog', { name: 'Choose emoji' });
-    expect(panel).toHaveClass('left-0');
+    expect(panel.style.left).toBe('40px');
     expect(panel).not.toHaveClass('-translate-x-1/2');
   });
 });
@@ -63,5 +65,32 @@ describe('EmojiPicker paste field Enter', () => {
     await user.clear(field);
     await user.paste('✄');
     expect(onChange).toHaveBeenCalledWith('✄');
+  });
+});
+
+describe('EmojiPicker placement', () => {
+  it('opens above everything, so a pane that clips its content cannot cut it off', async () => {
+    const user = userEvent.setup();
+    render(
+      <div data-testid="pane" style={{ overflow: 'hidden', width: 120 }}>
+        <EmojiPicker value={null} onChange={() => {}} />
+      </div>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Choose emoji' }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose emoji' });
+    expect(screen.getByTestId('pane')).not.toContainElement(dialog);
+    expect(dialog.style.position).toBe('fixed');
+  });
+
+  it('stays inside the window near its right edge', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(1000);
+    render(<EmojiPicker value={null} onChange={() => {}} />);
+    const button = screen.getByRole('button', { name: 'Choose emoji' });
+    button.getBoundingClientRect = () => ({ left: 950, right: 990, top: 100, bottom: 140, width: 40, height: 40, x: 950, y: 100, toJSON: () => ({}) }) as DOMRect;
+    await user.click(button);
+    const dialog = screen.getByRole('dialog', { name: 'Choose emoji' });
+    expect(parseFloat(dialog.style.left) + 264).toBeLessThanOrEqual(1000 - 8);
+    expect(dialog.style.top).toBe('148px');
   });
 });

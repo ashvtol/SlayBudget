@@ -28,6 +28,9 @@ const CADENCE_LABEL: Record<Recurring['cadence'], string> = {
   monthly: 'Monthly',
   quarterly: 'Quarterly',
   yearly: 'Annually',
+  biennial: 'Every 2 years',
+  triennial: 'Every 3 years',
+  quadrennial: 'Every 4 years',
 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 

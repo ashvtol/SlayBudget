@@ -55,20 +55,65 @@ describe('transactions store', () => {
     expect(t3.reviewed).toBe(true);
   });
 
-  it('setCategory teaches the merchant and opens the offer', async () => {
+  it('setCategory moves the merchant’s other rows and leaves a note with Undo and Only this one', async () => {
+    setIpc(
+      createMemoryIpc({
+        transactions: [
+          tx({ id: 1, postedOn: '2026-11-14', description: 'WHOLE FOODS', amountCents: -6418, categoryId: 10 }),
+          tx({ id: 2, postedOn: '2026-11-10', description: 'WHOLE FOODS', amountCents: -4800, categoryId: 10 }),
+          tx({ id: 3, postedOn: '2026-10-05', description: 'NETFLIX', amountCents: -1799 }),
+        ],
+      }),
+    );
     const s = () => useTransactionsStore.getState();
     await s().load(null);
-    const { ipc } = await import('@/lib/ipc');
-    const spy = vi.spyOn(ipc(), 'setTransactionCategory');
+    await s().setCategory(1, 20);
+    expect(s().byId(2)?.categoryId).toBe(20);
+    const name = s().categoriesById[20]?.name;
+    expect(s().moveNote).toMatchObject({ transactionId: 1, categoryId: 20, text: `Moved 1 other Whole Foods transaction to ${name}` });
+
+    await s().onlyThisOne();
+    expect(s().moveNote).toBeNull();
+    expect(s().byId(1)?.categoryId).toBe(20);
+    expect(s().byId(2)?.categoryId).toBe(10);
+
+    await s().setCategory(1, 30);
+    await s().undoMove();
+    expect(s().moveNote).toBeNull();
+    expect(s().byId(1)?.categoryId).toBe(20);
+    expect(s().byId(2)?.categoryId).toBe(10);
+  });
+
+  it('a note left from before another change does nothing, and goes away', async () => {
+    setIpc(
+      createMemoryIpc({
+        transactions: [
+          tx({ id: 1, postedOn: '2026-11-14', description: 'WHOLE FOODS', amountCents: -6418, categoryId: 10 }),
+          tx({ id: 2, postedOn: '2026-11-10', description: 'WHOLE FOODS', amountCents: -4800, categoryId: 10 }),
+          tx({ id: 3, postedOn: '2026-10-05', description: 'NETFLIX', amountCents: -1799 }),
+        ],
+      }),
+    );
+    const s = () => useTransactionsStore.getState();
+    await s().load(null);
+    await s().setCategory(1, 20);
+    await s().setNotes(3, 'later');
+    await s().onlyThisOne();
+    expect(s().moveNote).toBeNull();
+    expect(s().byId(2)?.categoryId).toBe(20);
+    expect(s().byId(3)?.notes).toBe('later');
+    await s().setCategory(2, 10);
+    await s().setNotes(3, 'again');
+    await s().undoMove();
+    expect(s().byId(3)?.notes).toBe('again');
+  });
+
+  it('a change that moves nothing leaves no note', async () => {
+    const s = () => useTransactionsStore.getState();
+    await s().load(null);
     await s().setCategory(3, 10);
-    expect(spy).toHaveBeenCalledWith(3, 10);
-    expect(s().offer).toEqual({ transactionId: 3, categoryId: 10 });
-    await s().closeOffer(4);
-    expect(s().offer).toBeNull();
-    expect(s().notice).toMatch(/^Moved 4 transactions to /);
-    await s().setCategory(3, 10);
-    await s().closeOffer(null);
-    expect(s().notice).toBeNull();
+    expect(s().byId(3)?.categoryId).toBe(10);
+    expect(s().moveNote).toBeNull();
   });
 
   it('toggles filters from the latest filter, even before loads finish', async () => {

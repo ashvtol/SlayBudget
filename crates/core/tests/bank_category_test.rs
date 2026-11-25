@@ -73,6 +73,12 @@ fn other_groups_carry_the_banks_category_and_a_suggestion() {
                11/02/2026,ZZQ FLORBLE KOLA,20.00,,,,,,,'2',Restaurant-Restaurant\n\
                11/03/2026,ZZQ GRUNTLE PEX,10.00,,,,,,,'3',\n";
     pipeline::import_csv(&conn, p, "Statements/Alex/Amex/new.csv", csv).unwrap();
+    // Imports now use the bank's category themselves; rows from before that sit in Other.
+    conn.execute(
+        "UPDATE transactions SET category_id = (SELECT id FROM categories WHERE legacy_name = 'Other')",
+        [],
+    )
+    .unwrap();
     let groups = other_groups(&conn).unwrap();
     let bistro = groups
         .iter()

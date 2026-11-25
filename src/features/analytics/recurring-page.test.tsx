@@ -118,7 +118,7 @@ describe('RecurringPage', () => {
     useAnalyticsStore.setState({ today: '2026-11-21' });
     render(<RecurringPage />);
     const list = await screen.findByRole('list', { name: 'This month' });
-    expect(within(list).getByRole('button', { name: /Groceries/ }).style.background).toContain('rgb(255, 149, 0)');
+    expect((within(list).getAllByText('Groceries').map((e) => e.closest('.rounded-full')).find(Boolean) as HTMLElement).style.background).toContain('rgb(255, 149, 0)');
   });
 
   it('shows bills that stopped arriving under Not seen lately', async () => {

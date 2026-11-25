@@ -5,7 +5,7 @@
  */
 
 import type { BillPriceChange, PriceAnswer, PriceChange, PriceCheck } from './types';
-import type { AccountChoice, AccountClue, AccountPatch, AppNotification, StatementCandidate, MoveReport, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
+import type { CategoryChange, AccountChoice, AccountClue, AccountPatch, AppNotification, StatementCandidate, MoveReport, DuplicateFlag, DuplicateResolution, ImportRecord, NewNotification, UndoState } from './types';
 import { UNDO_LABELS, createUndoStack, fileName } from './undo-memory';
 import { builtinRates, shownFor, type Shown } from './fx';
 import { DUPLICATE_TAG_NAME, duplicatesBeforeDelete, openFlagFor, settle, stillFlagged } from './duplicates-memory';
@@ -70,6 +70,7 @@ import {
   resolveRange,
 } from './analytics';
 import { parseQuery, runSearch } from './search';
+import { cleanMerchant } from './merchant';
 import { normalizedName } from './category-names';
 import { budgetsForMonth } from './budget-plan';
 
@@ -107,8 +108,27 @@ export interface Ipc {
 
   /** Change the type of transactions; categories that don't fit the new type are cleared. */
   setTransactionType(ids: number[], type: TxType): Promise<number>;
-  /** A manual change: set the category, mark reviewed, and learn the merchant. */
-  setTransactionCategory(id: number, categoryId: number): Promise<void>;
+  /** A manual change: set the category, mark it yours, learn the merchant, and move the merchant's other rows
+   *  (not yours or locked ones) with it; similar merchants get it as a suggestion. */
+  setTransactionCategory(id: number, categoryId: number): Promise<CategoryChange>;
+  /** "Only this one" after a change that moved other rows: take that change back, then change just this row
+   *  (no merchant saved). One undo step. */
+  keepOnlyThisOne(id: number, categoryId: number, step: number): Promise<void>;
+  /** The other transactions with exactly this one's name, not already in the category (yours included): what to
+   *  ask about after a payment app's change. */
+  sameMerchant(id: number, categoryId: number): Promise<RecatMatch[]>;
+  /** One category for the transactions you selected: each becomes yours, nothing else moves. Returns how many. */
+  setCategories(ids: number[], categoryId: number): Promise<number>;
+  /** Undo step `step` only while it is still the latest; rejects otherwise. Returns its label. */
+  undoStep(step: number): Promise<string | null>;
+  /** Take the suggested categories; the other side of a suggested transfer comes too. Returns rows changed. */
+  acceptSuggestions(ids: number[]): Promise<number>;
+  /** Keep the current categories (they become yours) and drop the suggestions. Returns rows changed. */
+  rejectSuggestions(ids: number[]): Promise<number>;
+  /** Rows with a category to check, in one profile or all (null). */
+  suggestionCount(profileId: number | null): Promise<number>;
+  /** Forget learned merchants and what the classifier learned (the starter list is taught again). */
+  resetLearning(): Promise<void>;
   /** Transactions (all profiles) a change would move, newest first; rows already in the category are left out. */
   previewRecategorize(target: RecatTarget, categoryId: number): Promise<RecatMatch[]>;
   /** Move the unlocked transactions among `ids`, marking them reviewed. Returns how many changed. */
@@ -317,6 +337,7 @@ function matches(t: Transaction, f: TransactionFilter): boolean {
   if (f.categoryIds?.length && (t.categoryId == null || !f.categoryIds.includes(t.categoryId))) return false;
   if (f.sourceIds?.length && !f.sourceIds.includes(t.sourceId)) return false;
   if (f.reviewed != null && t.reviewed !== f.reviewed) return false;
+  if (f.suggested != null && (t.suggestedCategoryId != null) !== f.suggested) return false;
   if (f.months?.length && !f.months.includes(t.postedOn.slice(0, 7))) return false;
   if (f.types?.length && !f.types.includes(t.txType ?? 'regular')) return false;
   if (f.tagIds?.length && !(t.tagIds ?? []).some((id) => f.tagIds!.includes(id))) return false;
@@ -516,8 +537,9 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     dt.setUTCDate(dt.getUTCDate() + n);
     return dt.toISOString().slice(0, 10);
   };
+  const MONTHS_PER: Partial<Record<SavedRecurring['frequency'], number>> = { monthly: 1, quarterly: 3, yearly: 12, biennial: 24, triennial: 36, quadrennial: 48 };
   const nextAfter = (freq: SavedRecurring['frequency'], day: string) =>
-    freq === 'weekly' ? addDays(day, 7) : freq === 'biweekly' ? addDays(day, 14) : addMonths(day, freq === 'quarterly' ? 3 : freq === 'yearly' ? 12 : 1);
+    freq === 'weekly' ? addDays(day, 7) : freq === 'biweekly' ? addDays(day, 14) : addMonths(day, MONTHS_PER[freq] ?? 1);
   // Mirrors `recurrings::next_due`: with a due day, a charge pays the nearest due date.
   const nextDue = (s: SavedRecurring, last: string): string => {
     if (s.dayOfMonth == null || s.frequency === 'weekly' || s.frequency === 'biweekly') return nextAfter(s.frequency, last);
@@ -706,7 +728,32 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   let nextRuleId = 1;
 
   /** The type a category implies (as the core does). */
-  const typeOfCategory = (id: number | null): TxType => {
+  /** One row becomes yours in this category (mirrors recategorize::set_only). */
+  const setOnly = (t: Transaction, categoryId: number) => {
+    t.categoryId = categoryId;
+    t.txType = typeOfCategory(categoryId);
+    t.reviewed = true;
+    t.categorySource = 'user';
+    t.categoryReason = null;
+    t.suggestedCategoryId = null;
+    t.suggestedReason = null;
+  };
+/** Answer the suggestion on each row (and on the other side of a suggested transfer). Returns rows answered. */
+  const answerSuggestions = (ids: number[], answer: (t: Transaction, paired: boolean) => void): number => {
+    const queue = [...ids];
+    let n = 0;
+    while (queue.length) {
+      const id = queue.pop();
+      const t = transactions.find((x) => x.id === id);
+      if (!t || t.suggestedCategoryId == null) continue;
+      const pair = t.transferPairId ?? null;
+      answer(t, pair != null);
+      n++;
+      if (pair != null) queue.push(pair);
+    }
+    return n;
+  };
+    const typeOfCategory = (id: number | null): TxType => {
     const kind = categories.find((c) => c.id === id)?.kind;
     return kind === 'income' ? 'income' : kind === 'transfer' ? 'transfer' : 'regular';
   };
@@ -748,10 +795,65 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async setTransactionCategory(id, categoryId) {
       const t = transactions.find((x) => x.id === id);
       if (!t) throw new Error('not_found');
-      t.categoryId = categoryId;
-      t.txType = typeOfCategory(categoryId);
-      t.reviewed = true;
-      if (t.merchant && !isPaymentPlatform(t.merchant)) learned.set(t.merchant, categoryId);
+      setOnly(t, categoryId);
+      const platform = isPaymentPlatform(t.merchant) || isPaymentPlatform(t.description);
+      const change: CategoryChange = { moved: 0, merchant: t.merchant, suggested: 0, platform, step: null };
+      if (!t.merchant || platform) return change;
+      learned.set(t.merchant, categoryId);
+      for (const o of transactions) {
+        if (o.id === id || o.merchant !== t.merchant || o.categoryLocked || o.categorySource === 'user' || o.categoryId === categoryId) continue;
+        o.categoryId = categoryId;
+        o.txType = typeOfCategory(categoryId);
+        o.categorySource = 'learned';
+        o.categoryReason = `Moved with your change to ${cleanMerchant(t.merchant)}`;
+        change.moved++;
+      }
+      return change;
+    },
+    async acceptSuggestions(ids) {
+      return answerSuggestions(ids, (t) => setOnly(t, t.suggestedCategoryId!));
+    },
+    async rejectSuggestions(ids) {
+      return answerSuggestions(ids, (t, paired) => {
+        t.suggestedCategoryId = null;
+        t.suggestedReason = null;
+        t.categorySource = 'user';
+        t.reviewed = true;
+        if (paired) t.transferPairId = null;
+      });
+    },
+    async suggestionCount(profileId) {
+      return transactions.filter((t) => t.suggestedCategoryId != null && (profileId == null || t.profileId === profileId)).length;
+    },
+    async resetLearning() {
+      learned.clear();
+    },
+    async sameMerchant(id, categoryId) {
+      const t = transactions.find((x) => x.id === id);
+      if (!t?.merchant.trim()) return [];
+      return transactions
+        .filter((o) => o.id !== id && o.merchant === t.merchant && o.categoryId !== categoryId)
+        .sort(newestFirst)
+        .map((o) => ({ transaction: { ...o }, similar: false, locked: o.categoryLocked }));
+    },
+    async setCategories(ids, categoryId) {
+      let n = 0;
+      for (const t of transactions) {
+        if (!ids.includes(t.id)) continue;
+        setOnly(t, categoryId);
+        n++;
+      }
+      return n;
+    },
+    async undoStep(step) {
+      return history.undoStep(step);
+    },
+    async keepOnlyThisOne(id, categoryId, step) {
+      history.undoStep(step);
+      await history.record('Change Category', async () => {
+        const t = transactions.find((x) => x.id === id);
+        if (t) setOnly(t, categoryId);
+      });
     },
     async setTransactionType(ids, type) {
       const keep = type === 'regular' ? 'expense' : type === 'income' ? 'income' : null;
@@ -803,7 +905,8 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async otherGroups() {
       const by = new Map<string, OtherGroup>();
       for (const t of transactions) {
-        if (t.categoryId != null && t.categoryId !== otherId) continue;
+        // Transfers need no category, so they are never left to clean up.
+        if ((t.categoryId != null && t.categoryId !== otherId) || t.txType === 'transfer') continue;
         const key = t.merchant.toLowerCase();
         const g = by.get(key) ?? { merchant: key, count: 0, totalCents: 0, platform: isPaymentPlatform(key), sampleDescription: t.description };
         g.count++;
@@ -1477,7 +1580,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         added.push(id);
       }
       importsLog.push({ id: Math.max(0, ...importsLog.map((i) => i.id)) + 1, sourceId: target.id, sourceName: target.name, fileName: name, importedAt: new Date().toISOString(), importedRows: added.length, skippedRows: duplicates, transactionIds: added });
-      return { sourceName: target.name, inserted: added.length, duplicates, skipped: 0, alreadyImported: false };
+      return { sourceId: target.id, sourceName: target.name, inserted: added.length, duplicates, skipped: 0, alreadyImported: false };
     },
     async importOfxText() {
       throw new Error('import is only available in the desktop app');
@@ -1697,7 +1800,16 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
   for (const [name, label] of Object.entries(UNDO_LABELS)) {
     const method = (ipc as unknown as Record<string, (...args: unknown[]) => Promise<unknown>>)[name];
     if (!method) continue;
-    (ipc as unknown as Record<string, unknown>)[name] = (...args: unknown[]) => history.record(label(args), () => method.apply(ipc, args));
+    (ipc as unknown as Record<string, unknown>)[name] = async (...args: unknown[]) => {
+      const before = history.latestId();
+      const value = await history.record(label(args), () => method.apply(ipc, args));
+      // A category change says which undo step it made (mirrors set_transaction_category).
+      if (name === 'setTransactionCategory') {
+        const after = history.latestId();
+        return { ...(value as CategoryChange), step: after !== before ? after : null };
+      }
+      return value;
+    };
   }
   // Moving an import names the file and the account, as the app does.
   const moveImport = ipc.moveImport;

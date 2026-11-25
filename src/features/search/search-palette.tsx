@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ipc } from '@/lib/ipc';
 import { useNavStore } from '@/lib/stores/nav-store';
 import { useTransactionsStore } from '@/features/transactions/transactions-store';
-import type { Transaction } from '@/lib/types';
+import type { Category, Transaction } from '@/lib/types';
 import { SearchResults } from './search-results';
 import { useSearchStore } from './search-store';
 import { openSearchWindow } from './open-window';
@@ -9,12 +10,21 @@ import { openSearchWindow } from './open-window';
 /** Command-palette search overlay. Opens on Cmd/Ctrl+K or Cmd/Ctrl+F. */
 export function SearchPalette() {
   const { open, query, results, loading, setQuery, closePalette } = useSearchStore();
-  const categoriesById = useTransactionsStore((s) => s.categoriesById);
+  // Read fresh each time it opens: the Transactions screen's copy is empty until that screen has been shown.
+  const [categoriesById, setCategoriesById] = useState<Record<number, Category>>({});
   const go = useNavStore((s) => s.go);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (open) inputRef.current?.focus();
+    if (!open) return;
+    inputRef.current?.focus();
+    let live = true;
+    void ipc()
+      .listCategories()
+      .then((cats) => live && setCategoriesById(Object.fromEntries(cats.map((c) => [c.id, c]))));
+    return () => {
+      live = false;
+    };
   }, [open]);
 
   const pick = useMemo(

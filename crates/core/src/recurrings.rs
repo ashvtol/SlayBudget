@@ -113,6 +113,7 @@ fn row_to_saved(r: &rusqlite::Row<'_>) -> rusqlite::Result<SavedRecurring> {
     let freq: String = r.get(7)?;
     let status: String = r.get(9)?;
     let created: String = r.get(10)?;
+    let years: u32 = r.get(11)?;
     Ok(SavedRecurring {
         id: r.get(0)?,
         name: r.get(1)?,
@@ -125,14 +126,14 @@ fn row_to_saved(r: &rusqlite::Row<'_>) -> rusqlite::Result<SavedRecurring> {
         pattern: r.get(4)?,
         min_cents: r.get(5)?,
         max_cents: r.get(6)?,
-        frequency: Cadence::parse(&freq),
+        frequency: Cadence::from_stored(&freq, years),
         day_of_month: r.get(8)?,
         status: Status::parse(&status),
         created_on: created.get(..10).unwrap_or(&created).to_string(),
     })
 }
 
-const COLS: &str = "id, name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, status, created_at";
+const COLS: &str = "id, name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, status, created_at, every_years";
 
 pub fn list(conn: &Connection) -> Result<Vec<SavedRecurring>> {
     let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM recurrings ORDER BY id"))?;
@@ -338,8 +339,8 @@ pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
 pub fn create(conn: &Connection, r: &NewRecurring) -> Result<i64> {
     validate(r)?;
     conn.execute(
-        "INSERT INTO recurrings (name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        "INSERT INTO recurrings (name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, every_years)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             r.name.trim(),
             r.category_id,
@@ -347,8 +348,9 @@ pub fn create(conn: &Connection, r: &NewRecurring) -> Result<i64> {
             r.pattern.trim().to_lowercase(),
             r.min_cents,
             r.max_cents,
-            r.frequency.as_str(),
-            r.day_of_month
+            r.frequency.stored().0,
+            r.day_of_month,
+            r.frequency.stored().1
         ],
     )?;
     let id = conn.last_insert_rowid();
@@ -360,7 +362,7 @@ pub fn update(conn: &Connection, id: i64, r: &NewRecurring) -> Result<MatchRepor
     validate(r)?;
     let n = conn.execute(
         "UPDATE recurrings SET name = ?1, category_id = ?2, match_kind = ?3, pattern = ?4, min_cents = ?5,
-            max_cents = ?6, frequency = ?7, day_of_month = ?8 WHERE id = ?9",
+            max_cents = ?6, frequency = ?7, day_of_month = ?8, every_years = ?10 WHERE id = ?9",
         params![
             r.name.trim(),
             r.category_id,
@@ -368,9 +370,10 @@ pub fn update(conn: &Connection, id: i64, r: &NewRecurring) -> Result<MatchRepor
             r.pattern.trim().to_lowercase(),
             r.min_cents,
             r.max_cents,
-            r.frequency.as_str(),
+            r.frequency.stored().0,
             r.day_of_month,
-            id
+            id,
+            r.frequency.stored().1
         ],
     )?;
     if n == 0 {

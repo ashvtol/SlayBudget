@@ -15,6 +15,7 @@ import type { DashboardModel, TopGroup } from './dashboard-model';
 import { useDashboardData, type DashboardData } from './use-dashboard-data';
 import { CategoryLine } from './category-line';
 import { DashboardTips } from '@/features/habits/dashboard-tips';
+import { openTarget } from '@/features/notifications/route';
 
 export function DashboardPage() {
   const data = useDashboardData();
@@ -109,9 +110,24 @@ function ToReview({ data, onLink }: { data: DashboardData; onLink: () => void })
             />
           ))
         )}
+        {data.suggestedCount > 0 && <SuggestedRow count={data.suggestedCount} />}
         {data.otherCount > 0 && <OtherRow count={data.otherCount} />}
       </div>
     </Card>
+  );
+}
+
+/** "N suggested categories · Check": opens Transactions filtered to them. */
+function SuggestedRow({ count }: { count: number }) {
+  return (
+    <div className="mx-5 mt-2 flex items-center justify-between border-t pt-3 text-[12px]" style={{ borderColor: 'var(--line)', color: 'var(--muted)' }}>
+      <span>
+        {count.toLocaleString()} suggested {count === 1 ? 'category' : 'categories'}
+      </span>
+      <button type="button" aria-label="Check suggested categories" onClick={() => void openTarget({ kind: 'transactions', filter: 'suggested' })} className="font-semibold" style={{ color: 'var(--accent)' }}>
+        Check
+      </button>
+    </div>
   );
 }
 

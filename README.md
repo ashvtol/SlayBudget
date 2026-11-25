@@ -35,7 +35,8 @@ SlayBudget gives you the polish of a premium personal finance app as an **open-s
 - 💸 **Free forever**: MIT licensed, no trial, no paywall, nothing to cancel.
 - 🔒 **Private by design**: one SQLite file on your Mac. No account, no telemetry, no third-party data aggregator.
 - ⚡ **Fast and native**: a Rust core and a Tauri app (not Electron). Every screen answers in well under a second.
-- 🧠 **Learns how you categorize**: correct a transaction once and similar ones follow.
+- 🧠 **Learns how you categorize**: correct a transaction once and the rest of that merchant follows, history
+  included. A small classifier on your Mac learns from every choice and says why it picked a category.
 - 🔔 **Tells you what matters**: bills coming up or missed, price increases, double charges and budgets running over,
   in an in-app bell and Mac banners that open exactly what they're about.
 - 🎨 **Beautiful**: four themes, crisp charts, keyboard shortcuts and accessibility settings.
@@ -48,20 +49,20 @@ on your own computer, this is it.
 | Feature | What it does |
 |---|---|
 | 📥 **Statement import** | CSV, PDF and QFX/OFX. Built-in layouts for American Express, Citi credit cards and Citi checking, plus a generic CSV importer. Exact repeats are skipped. Drop files in, or let SlayBudget pick up statements from a watched folder or, if you like, your Downloads folder. |
-| 🧭 **Statements land in the right account** | SlayBudget works out which account a statement belongs to from the file itself (the account's last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once ("Which account is this?") with its best guess first, and remembers your answer. Two cards from the same bank never get mixed up. Each account can have a default tag (say "Business"), and an import that went to the wrong account can be moved. |
-| 🏷️ **Smart categorization** | Merchant learning from your corrections, explicit rules, and bank-provided categories. Clean up "Other" in bulk with suggestions. |
+| 🧭 **Statements land in the right account** | SlayBudget works out which account a statement belongs to from the file itself (the account's last 4 digits, the bank, its columns, or the account folder it's in). When it isn't sure, it asks once ("Which account is this?") with its best guess first, and remembers your answer. Drop in 50 statements and it asks once per card, not once per file ("Which account is Chase ending 7781?" for all 12 Chase statements), with **Import all** and **Skip all** for the lot. Two cards from the same bank never get mixed up. Each account can have a default tag (say "Business"), and an import that went to the wrong account can be moved. |
+| 🏷️ **Smart categorization** | Learns from every category you choose, on your Mac (nothing is sent anywhere). Change one transaction and the merchant's other ones move too, with **Undo** and **Only this one**. A built-in list of about 900 common merchants helps from day one; cryptic descriptions ("TST* JOES", "SQ *BLUE BTL") are matched by their letters and words. When it's sure it sets the category and says why ("Like 6 others you put in Coffee"); otherwise it suggests one for you to accept, reject or swap for another, alone or all at once. Select several transactions to give them one category together. Money moved between your own accounts (checking to savings, paying the card) is paired and counted as a transfer, not spending. Gas stations and payment apps (Wise, Zelle, PayPal) are only ever suggested, and changing one asks which others with the same name go there too. Your rules and bank categories still apply, and Clean up "Other" works in bulk. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories, upcoming bills, and tips with your savings rate against your goal. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
 | 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. |
-| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
+| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. Bills can repeat weekly up to every 4 years, for subscriptions bought 2, 3 or 4 years at a time. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
 | 🗺️ **Insights** | An interactive spending map for any time range: drill from category to merchant and see what grew. Below it, Your money habits looks at all your history (see the next row). |
 | 🔥 **Your money habits** | Pick a money style, **FIRE** (Financial Independence, Retire Early) or **Soft saving**, and see your savings rate, your FI number (25 times a year of spending) and roughly how many years to independence, worked out from all your history. A suggested budget, next to the budgets you have now (↓ lower, ↑ raise), trims flexible spending toward a savings target you choose (needs and bills stay as they are, and you can leave any category out, or all of them, with the header checkbox); apply it in one click and ⌘Z takes it back. Tips cover the 50/30/20 split, an emergency fund target, spending that grew faster than income, what subscriptions cost a year, small purchases that add up, no-spend days and paying yourself first. Hide any tip; it comes back if its numbers change a lot. Mark categories as Essential to tell needs from wants. Rules of thumb, not financial advice. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
 | 🔎 **Transactions** | Instant search, filters (category, tag, account, type, amount, date), splits, refunds, notes, tags, transfers and the original statement details. |
 | 👯 **Possible duplicates** | Overlapping statements (a mid-month download, then the full statement; or the CSV, then the PDF) can carry the same purchase in a slightly different form. SlayBudget flags those on import: the same charge worded differently, a tip added after the fact, a card hold replaced by the final charge, or a pending charge that posted days later. Each one gets an amber "Possible duplicate" tag and a plain explanation. Delete either one, or mark it "Not a duplicate" and it never comes back. Nothing is ever removed for you. |
 | 💱 **Your currency, offline** | Show every amount in your currency (30+ to choose from): transactions, totals, budgets, charts and bills, each converted at its own month's rate. The European Central Bank's rates are built into the app, so nothing goes online to convert, and your data keeps its original currency. Changing numbers roll like a ticker. |
-| ↩️ **Undo and redo** | ⌘Z takes back your last change and ⇧⌘Z puts it back, 15 steps deep, like any Mac app: a category, a bulk "apply to others", a delete (with its splits and tags), a budget, an import. The Edit menu names the step ("Undo Change Category"). |
+| ↩️ **Undo and redo** | ⌘Z takes back your last change and ⇧⌘Z puts it back, 15 steps deep, like any Mac app: a category (and the history that moved with it), a delete (with its splits and tags), a budget, an import. The Edit menu names the step ("Undo Change Category"). |
 | 🗑️ **Delete and undo imports** | Delete any transactions (one or many), or undo a whole import from Recent imports. Both ask first and back up your data before changing anything. |
 | 🔔 **Notifications** | A bell in every screen's top bar, plus Mac banners: upcoming and missed bills, subscription price changes, possible double charges, large transactions, budgets over or on pace to overspend, a monthly recap, a weekly review reminder, paychecks or refunds arriving, and new money tips. Click one to jump straight to it. Quiet hours, and every threshold is yours to tune. |
 | ⬆️ **Automatic updates** | Signed updates from GitHub. SlayBudget shows what's new since your version and installs only when you click. |
@@ -149,6 +150,9 @@ on your own computer, this is it.
 
 ### Your money habits: FIRE or Soft saving, a suggested budget and tips
 ![SlayBudget Insights showing Your money habits: the FIRE style with a 50% savings rate, an FI number and about 17 years to independence, a suggested budget trimming flexible categories toward a 60% target, and tips about an emergency fund, subscriptions, a coffee habit and no-spend days](docs/screenshots/money-habits.png)
+
+### Suggested categories: why, and one click to accept
+![SlayBudget Transactions filtered to Suggested category, with Accept all, and a Marinara Pizza charge that needs a category showing the suggestion Restaurants, "Like 40 others you put in Restaurants", with Reject and Accept](docs/screenshots/suggested-categories.png)
 
 ### Which account is this? Asked once, then remembered
 ![SlayBudget import page asking which account a Chase statement belongs to, showing its dates, first transactions and Chase ending 7781, with existing accounts or a new account with bank, type and default tag](docs/screenshots/which-account.png)
@@ -306,6 +310,15 @@ Recent imports, and have SlayBudget make a folder for each account in your watch
 </details>
 
 <details>
+<summary><b>I dropped in 50 statements. Do I have to answer 50 times?</b></summary>
+
+No. Statements from the same card (same bank and last 4 digits) are asked about together, once: "Which account is
+Chase ending 7781?" covers all of them, and a new account is made only once. **Import all** puts every group into its
+likely account (or a new one named after the card) and **Skip all** leaves them out. Statements without an account
+number are listed together with a checkbox each, so you can pick the ones that go into the same account.
+</details>
+
+<details>
 <summary><b>Can it import statements from my Downloads folder?</b></summary>
 
 Yes, if you turn it on in Settings > Import sources. Statements you download from then on are imported on their own
@@ -334,9 +347,31 @@ Recurrings and in the bell. If you end up with two bills for the same subscripti
 </details>
 
 <details>
+<summary><b>How does SlayBudget decide a category, and can I undo it?</b></summary>
+
+In this order: your rules, a merchant you've categorized before, then a small classifier that learns from every category
+you choose (and starts from a built-in list of common merchants), then your bank's own category, then keywords. It runs
+on your Mac; nothing about your transactions is sent anywhere. When the classifier is sure, it sets the category and the
+transaction says why ("Like 6 others you put in Coffee" or "Known merchant: Starbucks"). When it isn't, you get a
+suggestion to accept, reject or swap for another (Transactions > Filter > Review status > Suggested category, or **Check** on the
+Dashboard). A category you chose yourself is never changed. Changing one transaction moves that merchant's other ones
+with a note: **Undo** takes it all back (as does ⌘Z) and **Only this one** puts the others back. Turn off automatic
+categorizing, or reset what it learned, in Settings > Categorization.
+</details>
+
+<details>
+<summary><b>Why aren't transfers between my accounts counted as spending?</b></summary>
+
+When money leaves one of your accounts and the same amount arrives in another within a few days (4 by default, set in
+Settings > Categorization), that's money moving, not money spent. SlayBudget pairs the two sides and makes both a
+Transfer, or a Payment when one side is a credit card. Pairs whose descriptions say "transfer" or "payment" are applied;
+others are suggested for you to confirm. The transaction links to its other side.
+</details>
+
+<details>
 <summary><b>Can I undo a mistake?</b></summary>
 
-Yes. ⌘Z undoes your last change and ⇧⌘Z redoes it, up to 15 steps back: categories (including "apply to others"),
+Yes. ⌘Z undoes your last change and ⇧⌘Z redoes it, up to 15 steps back: categories (including the history that moved with them),
 reviews, notes, tags, splits, deletes, budgets, recurring bills, rules and imports. While you're typing in a field, ⌘Z
 undoes your typing instead. Settings aren't part of undo, and the steps are cleared when you quit.
 </details>

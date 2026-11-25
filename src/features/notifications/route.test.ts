@@ -47,4 +47,14 @@ describe('openTarget', () => {
     page.scrollTop = 100; // the page above grew or shrank as it re-read its data
     await vi.waitFor(() => expect(page.scrollTop).toBe(884), { timeout: 1500 });
   });
+
+  it('opens Transactions filtered to suggested categories', async () => {
+    const { setIpc, createMemoryIpc } = await import('@/lib/ipc');
+    const { useTransactionsStore } = await import('@/features/transactions/transactions-store');
+    setIpc(createMemoryIpc({}));
+    useNavStore.setState({ section: 'dashboard', settingsOpen: false });
+    await openTarget({ kind: 'transactions', filter: 'suggested' });
+    expect(useNavStore.getState().section).toBe('transactions');
+    expect(useTransactionsStore.getState().filter.suggested).toBe(true);
+  });
 });

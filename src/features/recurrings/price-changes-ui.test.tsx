@@ -27,7 +27,7 @@ function seed() {
 }
 
 async function renderDetail(id: number) {
-  useTransactionsStore.setState({ transactions: [], categoriesById: {}, sourcesById: {}, selected: new Set(), cursor: 0, offer: null, notice: null });
+  useTransactionsStore.setState({ transactions: [], categoriesById: {}, sourcesById: {}, selected: new Set(), cursor: 0, moveNote: null });
   await useTransactionsStore.getState().load(null);
   render(<DetailPane id={id} onClose={() => {}} onPickCategory={() => {}} />);
 }

@@ -238,7 +238,7 @@ function money(cents: number, currency: string): string {
   return new Intl.NumberFormat(localeFor(currency), { style: 'currency', currency, maximumFractionDigits: 0, minimumFractionDigits: 0 }).format(Math.abs(cents) / 100);
 }
 const growth = (now: number, before: number) => (before > 0 ? Math.round(((now - before) / before) * 100) : 0);
-const PER_YEAR: Record<Recurring['cadence'], number> = { weekly: 52, biweekly: 26, monthly: 12, quarterly: 4, yearly: 1 };
+const PER_YEAR: Record<Recurring['cadence'], number> = { weekly: 52, biweekly: 26, monthly: 12, quarterly: 4, yearly: 1, biennial: 1 / 2, triennial: 1 / 3, quadrennial: 1 / 4 };
 const RANK: Record<Tone, number> = { warn: 0, info: 1, good: 2 };
 
 export function buildTips(c: HabitsContext): Tip[] {

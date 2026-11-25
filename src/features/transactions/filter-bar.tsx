@@ -14,6 +14,8 @@ export function FilterChips() {
   const categoriesById = useTransactionsStore((s) => s.categoriesById);
   const removePill = useTransactionsStore((s) => s.removePill);
   const clearAllFilters = useTransactionsStore((s) => s.clearAllFilters);
+  const acceptAllSuggested = useTransactionsStore((s) => s.acceptAllSuggested);
+  const anyShown = useTransactionsStore((s) => s.transactions.length > 0);
   const recurringsById = useTransactionsStore((s) => s.recurringsById);
   const sourceColors = useMemo(() => sourceDotColors(Object.values(sourcesById)), [sourcesById]);
   const recurringNames = useMemo(() => Object.fromEntries(Object.entries(recurringsById).map(([id, r]) => [id, displayName(r)])), [recurringsById]);
@@ -40,6 +42,11 @@ export function FilterChips() {
       {pills.length >= 2 && (
         <button type="button" onClick={() => void clearAllFilters()} className="ml-1 text-[12px] font-semibold" style={{ color: 'var(--muted)' }}>
           Clear all
+        </button>
+      )}
+      {filter.suggested && anyShown && (
+        <button type="button" onClick={() => void acceptAllSuggested()} className="ml-auto h-[24px] rounded-md px-2.5 text-[12px] font-semibold" style={{ background: 'var(--accent)', color: 'var(--bg)' }}>
+          Accept all
         </button>
       )}
     </div>

@@ -7,6 +7,7 @@ import { CategoryPill } from '@/components/category-pill';
 import { Money } from '@/components/money';
 import { Switch } from '@/components/switch';
 import { shortDate } from '@/lib/format';
+import { DetailsButton, StatementBox, useOpenRows } from './statement-box';
 
 type Choice = 'one' | 'merchant' | 'contains';
 
@@ -33,6 +34,7 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
   const [unticked, setUnticked] = useState<Set<number>>(new Set());
   const [future, setFuture] = useState(true);
   const [busy, setBusy] = useState(false);
+  const details = useOpenRows();
 
   useEffect(() => {
     if (platform) return;
@@ -44,7 +46,8 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
         if (m.length === 0) onDone(null);
         else {
           setExact(m);
-          setUnticked(new Set(m.filter((x) => x.similar).map((x) => x.transaction.id)));
+          // Similar names, and categories you chose yourself, stay unless you tick them.
+          setUnticked(new Set(m.filter((x) => x.similar || x.transaction.categorySource === 'user').map((x) => x.transaction.id)));
         }
       });
     return () => {
@@ -66,11 +69,14 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
     };
   }, [platform, choice, text, categoryId]);
 
-  const shown = useMemo(() => {
-    const rows = choice === 'merchant' ? exact ?? [] : choice === 'contains' ? contains : [];
-    if (!onlyOther) return rows;
-    return rows.filter((m) => m.transaction.categoryId == null || categoriesById[m.transaction.categoryId]?.isOther);
-  }, [choice, exact, contains, onlyOther, categoriesById]);
+  const inScope = useMemo(
+    () => (rows: RecatMatch[]) => (onlyOther ? rows.filter((m) => m.transaction.categoryId == null || categoriesById[m.transaction.categoryId]?.isOther) : rows),
+    [onlyOther, categoriesById],
+  );
+  const named = useMemo(() => inScope(exact ?? []), [inScope, exact]);
+  const shown = useMemo(() => (choice === 'merchant' ? named : choice === 'contains' ? inScope(contains) : []), [choice, named, contains, inScope]);
+  // Clean up Other: nothing has moved yet, so "just this one" moves this name's rows that are in Other.
+  const own = onlyOther ? named.filter((m) => !m.similar && !m.locked) : [];
   const ticked = shown.filter((m) => !m.locked && !unticked.has(m.transaction.id));
   const title = `Apply “${category?.name ?? 'this category'}” to other transactions?`;
   const name = cleanMerchant(merchant);
@@ -84,6 +90,15 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
         await ipc().saveRule({ kind: choice, pattern, categoryId });
       }
       onDone(moved);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function applyOwn() {
+    setBusy(true);
+    try {
+      onDone(await ipc().applyRecategorize(own.map((m) => m.transaction.id), categoryId));
     } finally {
       setBusy(false);
     }
@@ -125,8 +140,8 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
   return shell(
     <>
       <div className="flex flex-col">
-        {option('one', 'Just this one')}
-        {option('merchant', `All named “${name}”`, choice === 'merchant' ? shown.length : exact.length)}
+        {option('one', own.length > 1 ? `Just these ${own.length}` : 'Just this one')}
+        {option('merchant', `All named “${name}”`, named.length)}
         <label className="flex min-h-8 items-center gap-2.5">
           <input type="radio" name="recat-choice" checked={choice === 'contains'} onChange={() => setChoice('contains')} aria-label="Names containing" />
           <span>Names containing</span>
@@ -152,7 +167,8 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
             const current = t.categoryId != null ? categoriesById[t.categoryId] : undefined;
             const checked = !m.locked && !unticked.has(t.id);
             return (
-              <li key={t.id} className="flex min-h-8 items-center gap-3" style={{ opacity: m.locked ? 0.5 : 1 }}>
+              <li key={t.id} style={{ opacity: m.locked ? 0.5 : 1 }}>
+                <div className="flex min-h-8 items-center gap-3">
                 <input
                   type="checkbox"
                   aria-label={`Include ${t.description} on ${t.postedOn}`}
@@ -175,6 +191,13 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
                 <span className="w-16 shrink-0 text-right">
                   <Money cents={t.amountCents} currency={t.currency} />
                 </span>
+                <DetailsButton tx={t} open={details.isOpen(t.id)} onToggle={() => details.toggle(t.id)} />
+                </div>
+                {details.isOpen(t.id) && (
+                  <div className="mb-2 ml-7">
+                    <StatementBox tx={t} named onClose={() => details.toggle(t.id)} />
+                  </div>
+                )}
               </li>
             );
           })}
@@ -188,7 +211,13 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
             Not now
           </button>
           {choice === 'one' ? (
-            <button type="button" onClick={() => onDone(null)} className="rounded-md px-3 py-1.5 text-[12px] font-semibold" style={{ background: 'var(--accent)', color: 'var(--bg)' }}>
+            <button
+              type="button"
+              disabled={busy || (onlyOther && own.length === 0)}
+              onClick={() => (onlyOther ? void applyOwn() : onDone(null))}
+              className="rounded-md px-3 py-1.5 text-[12px] font-semibold disabled:opacity-40"
+              style={{ background: 'var(--accent)', color: 'var(--bg)' }}
+            >
               Done
             </button>
           ) : (

@@ -43,7 +43,7 @@ export function SearchPage() {
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search transactions…"
           aria-label="Search query"
-          className="w-full bg-transparent text-lg outline-none"
+          className="field-bare w-full bg-transparent text-lg outline-none"
           style={{ color: 'var(--text)' }}
         />
       </div>

@@ -102,3 +102,16 @@ describe('tag filters', () => {
     expect(pills.map((p) => [p.label, p.dot])).toEqual([['Work', '#4a8ef0'], ['Tag', undefined]]);
   });
 });
+
+describe('suggested filter', () => {
+  it('toggles, counts as filtered, clears with all, and has a pill', () => {
+    expect(togglePatch({}, { kind: 'suggested', value: true })).toEqual({ suggested: true });
+    expect(togglePatch({ suggested: true }, { kind: 'suggested', value: true })).toEqual({ suggested: undefined });
+    expect(isFiltered({ suggested: true })).toBe(true);
+    expect(isFiltered({ suggested: true, ...clearAllPatch() })).toBe(false);
+    const ctx = { categoriesById, sourcesById, sourceColors: {} };
+    const [pill] = filterPills({ suggested: true }, ctx);
+    expect(pill.label).toBe('Suggested category');
+    expect(removePillPatch({ suggested: true }, pill)).toEqual({ suggested: undefined });
+  });
+});

@@ -150,6 +150,57 @@ describe('CategoriesPage', () => {
     expect(useNavStore.getState().cleanUpOther).toBe(false);
   });
 
+  it('opens Clean up Other when asked again after the screen was already open', async () => {
+    useNavStore.setState({ cleanUpOther: false });
+    setIpc(createMemoryIpc({
+      groups: [...groups, { id: 3, name: 'Other', emoji: null, color: '#888888', sortOrder: 2 }],
+      categories: [cat(10, 1, 'Rent', 220000), cat(30, 3, 'Other', null)],
+      transactions: [tx('2026-11-01', -4000, 30)],
+    }));
+    useProfileStore.setState({ activeProfileId: null });
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<CategoriesPage />);
+    await screen.findByRole('region', { name: 'Budget summary' });
+    expect(screen.queryByRole('region', { name: 'Clean up Other' })).not.toBeInTheDocument();
+    act(() => useNavStore.getState().openCleanUpOther());
+    expect(await screen.findByRole('region', { name: 'Clean up Other' })).toBeInTheDocument();
+    expect(useNavStore.getState().cleanUpOther).toBe(false);
+  });
+
+  it('opens Clean up Other when asked while Clean up was left on and another category is selected', async () => {
+    const user = userEvent.setup();
+    useNavStore.setState({ cleanUpOther: true });
+    setIpc(createMemoryIpc({
+      groups: [...groups, { id: 3, name: 'Other', emoji: null, color: '#888888', sortOrder: 2 }],
+      categories: [cat(10, 1, 'Rent', 220000), cat(30, 3, 'Other', null)],
+      transactions: [tx('2026-11-01', -4000, 30)],
+    }));
+    useProfileStore.setState({ activeProfileId: null });
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<CategoriesPage />);
+    await screen.findByRole('region', { name: 'Clean up Other' });
+    // Moved to another category (as after creating one) without turning Clean up off.
+    await user.click(within(tree()).getByRole('row', { name: /Rent/ }));
+    expect(screen.queryByRole('region', { name: 'Clean up Other' })).not.toBeInTheDocument();
+    act(() => useNavStore.getState().openCleanUpOther());
+    expect(await screen.findByRole('region', { name: 'Clean up Other' })).toBeInTheDocument();
+    expect(useNavStore.getState().cleanUpOther).toBe(false);
+  });
+
+  it('with no Other category, a later ask goes back to All to show Clean up', async () => {
+    const user = userEvent.setup();
+    useNavStore.setState({ cleanUpOther: true });
+    setIpc(createMemoryIpc({ groups, categories: [cat(10, 1, 'Rent', 220000)], transactions: [tx('2026-11-01', -4000, null as unknown as number)] }));
+    useProfileStore.setState({ activeProfileId: null });
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<CategoriesPage />);
+    await screen.findByRole('region', { name: 'Clean up Other' });
+    await user.click(within(tree()).getByRole('row', { name: /Rent/ }));
+    expect(screen.queryByRole('region', { name: 'Clean up Other' })).not.toBeInTheDocument();
+    act(() => useNavStore.getState().openCleanUpOther());
+    expect(await screen.findByRole('region', { name: 'Clean up Other' })).toBeInTheDocument();
+  });
+
   it('opens Clean up Other for uncategorized rows when there is no Other category', async () => {
     useNavStore.setState({ cleanUpOther: true });
     setIpc(createMemoryIpc({ groups, categories: [cat(10, 1, 'Rent', 220000)], transactions: [tx('2026-11-01', -4000, null as unknown as number)] }));

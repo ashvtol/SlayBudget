@@ -4,6 +4,31 @@ All notable changes to SlayBudget are listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and versions follow [Semantic Versioning](https://semver.org).
 
 ## [Unreleased]
+### Added
+- **Smart categorization.** Imports use what SlayBudget learned from your own choices and a built-in list of about 900
+  common merchants, all on your Mac. Money moved between your own accounts is paired as a transfer. Your history was
+  sorted once (with a backup and Undo), and when SlayBudget isn't sure it suggests a category for you to accept,
+  reject or change ("Choose another"). Settings → Categorization shows what it learned and can start over.
+- **Changing a category fixes the rest of history**, with Undo and "Only this one". For payment apps (Wise, Zelle,
+  PayPal) it asks which other payments go there too, since each can be for something different.
+- **Set category** for several selected transactions at once.
+- **Statement details behind an ⓘ** in lists you choose from and beside each name in Clean up Other, with a × to
+  close them.
+- **Bills every 2, 3 or 4 years**, for subscriptions bought several years at a time.
+- **Import several statements at once.** Statements waiting for an account are grouped by bank and last 4 digits, so
+  you answer once per account, with Import all and Skip all.
+### Changed
+- **Category menus are searchable everywhere.** Typing "S" used to jump to Restaurants because every option started
+  with an emoji.
+- **No focus ring around text fields and dropdowns.** They show the caret (or their normal look) when focused.
+- **"Where your money went"**: tile colours blend evenly with the card, and the hover card stands out on a lighter
+  surface.
+### Fixed
+- **Clean up Other**: "Just this one" now moves the transaction; the offer opens under the row you picked and counts
+  only what's left in Other; transfers are left out; it shows what is left when you come back; and the Dashboard's
+  Clean up always opens it.
+- **⌘K results show their categories** even before you've opened Transactions.
+- **The spending map's hover card and the emoji picker are never cut off** at the edge of their panel.
 
 ## [0.8.4] - 2026-11-23
 ### Fixed

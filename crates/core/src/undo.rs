@@ -15,7 +15,7 @@ pub const DEPTH: usize = 15;
 
 /// Tables that hold your edits. Left out: the search index (its triggers follow the transactions table on apply),
 /// settings, notifications and exchange rates.
-const TRACKED: [&str; 18] = [
+const TRACKED: [&str; 20] = [
     "profiles",
     "sources",
     "category_groups",
@@ -34,9 +34,13 @@ const TRACKED: [&str; 18] = [
     "price_checks",
     "recurring_prices",
     "recurring_apart",
+    "model_counts",
+    "model_totals",
 ];
 
 struct Step {
+    /// Never reused, so a caller can name exactly the step it made.
+    id: u64,
     label: String,
     changeset: Vec<u8>,
 }
@@ -51,6 +55,7 @@ pub struct UndoState {
 
 pub struct UndoStack {
     depth: usize,
+    next_id: u64,
     undo: VecDeque<Step>,
     redo: Vec<Step>,
 }
@@ -65,6 +70,7 @@ impl UndoStack {
     pub fn new() -> Self {
         UndoStack {
             depth: DEPTH,
+            next_id: 1,
             undo: VecDeque::new(),
             redo: Vec::new(),
         }
@@ -98,7 +104,9 @@ impl UndoStack {
         if changeset.is_empty() {
             return Ok(value);
         }
+        self.next_id += 1;
         self.undo.push_back(Step {
+            id: self.next_id - 1,
             label: label.to_string(),
             changeset,
         });
@@ -107,6 +115,21 @@ impl UndoStack {
         }
         self.redo.clear();
         Ok(value)
+    }
+
+    /// The id of the step Undo would take back next.
+    pub fn latest_id(&self) -> Option<u64> {
+        self.undo.back().map(|s| s.id)
+    }
+
+    /// Take back step `id` only while it is still the latest; otherwise change nothing and say why.
+    pub fn undo_step(&mut self, conn: &Connection, id: u64) -> Result<Option<String>> {
+        if self.latest_id() != Some(id) {
+            return Err(CoreError::Invalid(
+                "That change was already undone, or something else changed after it.".into(),
+            ));
+        }
+        self.undo(conn)
     }
 
     /// Take back the latest step; returns its label, or None when there's nothing to undo.

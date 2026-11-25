@@ -35,9 +35,14 @@ pub fn run() {
             let db_path = dir.join("slaybudget.db");
             let conn = slaybudget_core::db::open_db(&db_path)
                 .map_err(|e| std::io::Error::other(e.to_string()))?;
+            let mut undo = slaybudget_core::undo::UndoStack::new();
+            // Never stops the app from opening: a failed pass leaves history as it was (it runs atomically).
+            if let Err(e) = commands::sort_history_once(&conn, &mut undo) {
+                eprintln!("sorting history: {e}");
+            }
             app.manage(AppState {
                 db: Mutex::new(conn),
-                undo: Mutex::new(slaybudget_core::undo::UndoStack::new()),
+                undo: Mutex::new(undo),
                 // Mac apps have a menu bar; on Windows and Linux a menu would sit inside the window, so ⌘Z there is
                 // the keyboard shortcut alone.
                 edit_menu: if cfg!(target_os = "macos") {
@@ -112,6 +117,14 @@ pub fn run() {
             commands::category_usage,
             commands::delete_category,
             commands::set_transaction_category,
+            commands::keep_only_this_one,
+            commands::undo_step,
+            commands::set_categories,
+            commands::same_merchant,
+            commands::accept_suggestions,
+            commands::reject_suggestions,
+            commands::suggestion_count,
+            commands::reset_learning,
             commands::set_transaction_type,
             commands::preview_recategorize,
             commands::apply_recategorize,

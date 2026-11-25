@@ -167,6 +167,23 @@ export function sampleSeed(today: Date = new Date()): MemoryIpcSeed {
   const lastEquinox = txs.filter((t) => t.merchant === 'Equinox').at(-1);
   if (lastEquinox) lastEquinox.amountCents = -8900;
 
+  // Smart categorization: each uncategorized row has a suggestion from the merchant's usual category, and the latest
+  // Blue Bottle was categorized by the classifier, which says why.
+  const usual = new Map(DAILY.map((m) => [m[0], m[1]]));
+  const nameOf = (id: number) => CATEGORIES.find((c) => c.id === id)?.name ?? '';
+  const yours = (merchant: string, categoryId: number) => txs.filter((t) => t.merchant === merchant && t.categoryId === categoryId && t.reviewed).length;
+  for (const t of txs) {
+    const c = t.categoryId == null ? usual.get(t.merchant) : undefined;
+    if (c == null) continue;
+    t.suggestedCategoryId = c;
+    t.suggestedReason = `Like ${yours(t.merchant, c)} others you put in ${nameOf(c)} (${t.merchant})`;
+  }
+  const coffee = txs.filter((t) => t.merchant === 'Blue Bottle' && t.categoryId === 203).at(-1);
+  if (coffee) {
+    coffee.categorySource = 'model';
+    coffee.categoryReason = `Like ${yours('Blue Bottle', 203) - (coffee.reviewed ? 1 : 0)} others you put in Coffee (Blue Bottle)`;
+  }
+
   // Two slips from overlapping statements, flagged as possible duplicates: the PDF's wording, and a tip added later.
   const tag = { id: 1, name: DUPLICATE_TAG_NAME, color: DUPLICATE_TAG_COLOR };
   const duplicateFlags: NonNullable<MemoryIpcSeed['duplicateFlags']> = [];

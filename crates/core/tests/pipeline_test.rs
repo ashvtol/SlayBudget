@@ -67,11 +67,13 @@ fn csv_import_categorizes_and_is_idempotent() {
     );
     assert_eq!(
         category_of(&conn, p, "WHOLE FOODS MKT 10234"),
-        Some(legacy(&conn, "Groceries"))
+        Some(legacy(&conn, "Whole Foods Groceries")),
+        "a known merchant from the starter list"
     );
     assert_eq!(
         category_of(&conn, p, "NETFLIX.COM"),
-        Some(legacy(&conn, "Digital Entertainment"))
+        Some(legacy(&conn, "Subscriptions")),
+        "a known merchant from the starter list"
     );
     assert_eq!(
         category_of(&conn, p, "AUTOPAY PAYMENT - THANK YOU"),

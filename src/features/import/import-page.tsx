@@ -9,7 +9,8 @@ import type { AccountChoice, ImportReport, Source, Tag } from '@/lib/types';
 import { WhichAccount } from './which-account';
 import { FolderGuide } from './folder-guide';
 import { useBackgroundImports } from './background-imports';
-import { importOne, runImports, summarize, type FileResult, type ImportDeps } from './run-imports';
+import { answerGroup, importOne, runImports, summarize, type FileResult, type ImportDeps } from './run-imports';
+import { groupChoice, groupWaiting, type WaitingGroup } from './group-waiting';
 import { Button } from '@/components/button';
 
 /** "Amex Gold · 17 added · 298 already imported · 3 to check" */
@@ -27,6 +28,14 @@ function reportLine(r: ImportReport): string {
   const flags = r.flags?.length ?? 0;
   if (flags > 0) parts.push(`${flags} to check`);
   return parts.join(' · ');
+}
+
+/** "Which account is Chase ending 7781?"; one file keeps its name; a group without a number asks about "these". */
+function groupTitle(g: WaitingGroup): string {
+  if (g.items.length === 1) return `Which account is ${g.items[0].name}?`;
+  if (g.clueless) return 'Which account are these statements?';
+  const { bank, last4 } = g.needs.clues;
+  return `Which account is ${bank ? `${bank} ending` : 'the account ending'} ${last4}?`;
 }
 
 /** The heads-up list of rows that look like ones you already had. Nothing to do now: they're tagged for later. */
@@ -93,8 +102,8 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
   const [accounts, setAccounts] = useState<Source[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const found = useBackgroundImports((s) => s.waiting);
-  const answerFound = useBackgroundImports((s) => s.answer);
-  const skipFound = useBackgroundImports((s) => s.skip);
+  const answerFound = useBackgroundImports((s) => s.answerMany);
+  const skipFound = useBackgroundImports((s) => s.skipMany);
   const waiting = (summary?.waiting ?? 0) + found.length;
   useEffect(() => {
     if (!waiting) return;
@@ -108,16 +117,84 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
       .catch(() => setTags([]));
   }, [waiting, deps, targetProfileId]);
 
-  const replace = (index: number, result: FileResult) =>
-    setStatus((s) => (s.phase === 'done' ? { phase: 'done', results: s.results.map((r, i) => (i === index ? result : r)) } : s));
-  async function answer(index: number, choice: AccountChoice) {
-    if (status.phase !== 'done' || targetProfileId == null) return;
-    const file = status.results[index].file;
-    if (!file) return;
-    replace(index, await importOne(file, targetProfileId, deps, choice));
+  const results = status.phase === 'done' ? status.results : [];
+  const isWaiting = (r: FileResult) => !!r.report?.needsAccount && !r.skipped && !r.error;
+  const resultGroups = groupWaiting(
+    results.flatMap((r, i) => (isWaiting(r) ? [{ id: String(i), name: r.name, needs: r.report!.needsAccount! }] : [])),
+  );
+  const foundGroups = groupWaiting(found.map((f) => ({ id: f.path, name: f.name, needs: f.needs })));
+
+  /** Put new results in place, by index, on the latest list. */
+  const update = (changes: Map<number, FileResult>) =>
+    setStatus((s) => (s.phase === 'done' ? { phase: 'done', results: s.results.map((r, i) => changes.get(i) ?? r) } : s));
+
+  /** Import the chosen files of a group; when remembered, check the other waiting files again. */
+  async function answer(ids: string[], choice: AccountChoice, current: FileResult[]) {
+    if (targetProfileId == null) return current;
+    const files = ids.flatMap((id) => (current[Number(id)]?.file ? [{ id, file: current[Number(id)].file! }] : []));
+    const done = await answerGroup(files, targetProfileId, deps, choice);
+    const changes = new Map([...done].map(([id, r]) => [Number(id), r]));
+    if (choice.remember) {
+      for (const [i, r] of current.entries()) {
+        if (changes.has(i) || !isWaiting(r) || !r.file) continue;
+        const again = await importOne(r.file, targetProfileId, deps);
+        if (!again.error && !again.report?.needsAccount) changes.set(i, again);
+      }
+    }
+    update(changes);
     setImportsVersion((v) => v + 1);
     onImported?.();
+    return current.map((r, i) => changes.get(i) ?? r);
   }
+  const skip = (ids: string[]) => update(new Map(ids.map((id) => [Number(id), { ...results[Number(id)], skipped: true }])));
+
+  const [importingAll, setImportingAll] = useState(false);
+  async function importAll() {
+    setImportingAll(true);
+    try {
+      await importEach();
+    } finally {
+      setImportingAll(false);
+      setImportsVersion((v) => v + 1);
+    }
+  }
+  async function importEach() {
+    let current = results;
+    for (const g of resultGroups) {
+      const choice = groupChoice(g);
+      // A group the last answer already imported (it was recognized) is passed over.
+      const ids = g.items.map((i) => i.id).filter((id) => isWaiting(current[Number(id)]));
+      if (choice && ids.length) current = await answer(ids, choice, current);
+    }
+    for (const g of foundGroups) {
+      const choice = groupChoice(g);
+      if (choice) await answerFound(g.items.map((i) => i.id), choice);
+    }
+    onImported?.();
+  }
+  function skipAll() {
+    skip(resultGroups.flatMap((g) => g.items.map((i) => i.id)));
+    skipFound(foundGroups.flatMap((g) => g.items.map((i) => i.id)));
+  }
+  const waitingFiles = [...resultGroups, ...foundGroups].reduce((n, g) => n + g.items.length, 0);
+  const noGuess = [...resultGroups, ...foundGroups].find((g) => !groupChoice(g));
+
+  const card = (g: WaitingGroup, onAnswer: (choice: AccountChoice, ids: string[]) => void, onSkip: (ids: string[]) => void) => {
+    const idOf = new Map(g.items.map((i) => [i.name, i.id]));
+    return (
+      <WhichAccount
+        key={g.key + g.items.map((i) => i.id).join()}
+        title={groupTitle(g)}
+        fileNames={g.items.map((i) => i.name)}
+        selectable={g.clueless && g.items.length > 1}
+        needs={g.needs}
+        accounts={accounts}
+        tags={tags}
+        onAnswer={(choice, chosen) => onAnswer(choice, chosen.map((n) => idOf.get(n)!))}
+        onSkip={() => onSkip(g.items.map((i) => i.id))}
+      />
+    );
+  };
 
   return (
     <Page title="Import" subtitle={targetProfileId == null ? 'Create a profile first' : undefined}>
@@ -170,27 +247,38 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
       )}
 
       <FolderGuide />
+      {waitingFiles > 1 && (
+        <section aria-label={`${waitingFiles} statements need an account`} className="flex items-center justify-between gap-3 rounded-xl border px-4 py-3" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+          <span className="text-[13px] font-semibold">{`${waitingFiles} statements need an account`}</span>
+          <div className="flex gap-2">
+            <Button onClick={skipAll} disabled={importingAll}>Skip all</Button>
+            <Button
+              variant="primary"
+              disabled={!!noGuess || importingAll}
+              title={noGuess ? `Name an account for ${noGuess.label} first` : 'Import each into its likely account, or a new one'}
+              onClick={() => void importAll()}
+            >
+              {importingAll ? 'Importing…' : 'Import all'}
+            </Button>
+          </div>
+        </section>
+      )}
       {found.length > 0 && (
         <section aria-label="Found in your folders" className="flex flex-col gap-3 rounded-2xl border p-5" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
           <h2 className="m-0 text-base font-semibold">
             {found.length === 1 ? '1 statement found in your folders needs an account' : `${found.length} statements found in your folders need an account`}
           </h2>
-          {found.map((f) => (
-            <WhichAccount
-              key={f.path}
-              fileName={f.name}
-              needs={f.needs}
-              accounts={accounts}
-              tags={tags}
-              onAnswer={(choice) =>
-                void answerFound(f.path, choice).then(() => {
+          {foundGroups.map((g) =>
+            card(
+              g,
+              (choice, paths) =>
+                void answerFound(paths, choice).then(() => {
                   setImportsVersion((v) => v + 1);
                   onImported?.();
-                })
-              }
-              onSkip={() => skipFound(f.path)}
-            />
-          ))}
+                }),
+              (paths) => skipFound(paths),
+            ),
+          )}
         </section>
       )}
       {status.phase === 'done' && summary && (
@@ -201,18 +289,12 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
             {summary.failed > 0 && `, ${summary.failed} failed`}
             {summary.waiting > 0 && `, ${summary.waiting} ${summary.waiting === 1 ? 'needs an account' : 'need an account'}`}
           </h2>
-          {status.results.map((r, i) =>
-            r.report?.needsAccount && !r.skipped ? (
-              <WhichAccount
-                key={`${r.name}-${i}`}
-                fileName={r.name}
-                needs={r.report.needsAccount}
-                accounts={accounts}
-                tags={tags}
-                onAnswer={(choice) => void answer(i, choice)}
-                onSkip={() => replace(i, { ...r, skipped: true })}
-              />
-            ) : null,
+          {resultGroups.map((g) =>
+            card(
+              g,
+              (choice, ids) => void answer(ids, choice, results),
+              (ids) => skip(ids),
+            ),
           )}
           <ul className="flex flex-col gap-1 text-sm">
             {status.results.map((r) => (

@@ -7,6 +7,7 @@ import { useProfileStore } from '@/lib/stores/profile-store';
 import { useNavStore } from '@/lib/stores/nav-store';
 import { useAnalyticsStore } from './analytics-store';
 import { DashboardPage } from './dashboard-page';
+import { useTransactionsStore } from '@/features/transactions/transactions-store';
 
 afterEach(() => cleanup());
 
@@ -146,6 +147,23 @@ describe('DashboardPage', () => {
     await waitFor(() => expect(review).toHaveTextContent('4 in Other'));
     await user.click(within(review).getByRole('button', { name: 'Clean up Other' }));
     expect(useNavStore.getState()).toMatchObject({ section: 'categories', cleanUpOther: true });
+  });
+
+  it('has no suggestion row when nothing is suggested', async () => {
+    await setup();
+    expect(screen.queryByRole('button', { name: 'Check suggested categories' })).not.toBeInTheDocument();
+  });
+
+  it('says how many categories are suggested and opens them', async () => {
+    const user = userEvent.setup();
+    await setup(async () => {
+      setIpc(createMemoryIpc({ sources, transactions: [tx({ id: 9, postedOn: '2026-11-03', amountCents: -500, categoryId: 20, suggestedCategoryId: 10 })] }));
+    });
+    const review = await screen.findByRole('button', { name: 'Check suggested categories' });
+    expect(review.parentElement).toHaveTextContent('1 suggested category');
+    await user.click(review);
+    await waitFor(() => expect(useTransactionsStore.getState().filter.suggested).toBe(true));
+    expect(useNavStore.getState().section).toBe('transactions');
   });
 
   it('opens a transaction to review on the Transactions screen', async () => {

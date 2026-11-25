@@ -164,7 +164,9 @@ pub fn migrate_legacy(conn: &Connection, input: &LegacyInput) -> Result<LegacyRe
                     transactions::update(
                         conn,
                         id,
+                        // The category you chose in the old app: it's yours (a category patch marks it so).
                         &TransactionPatch {
+                            category_id: Some(Some(category_id)),
                             reviewed: Some(true),
                             category_locked: Some(tx.is_immutable_category),
                             ..Default::default()

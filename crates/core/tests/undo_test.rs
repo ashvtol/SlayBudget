@@ -318,3 +318,43 @@ fn a_step_whose_rows_changed_since_is_skipped_whole() {
         .unwrap();
     assert_eq!(fk, 1, "foreign keys are back on after a failed undo");
 }
+
+#[test]
+fn undoing_a_named_step_refuses_when_another_step_came_after_it() {
+    let (conn, _, mut stack) = setup();
+    let uber = by(&conn, "UBER TRIP 1");
+    let groceries = cat(&conn, "Groceries");
+    stack
+        .record(&conn, "Change Category", |c| {
+            recategorize::set_one(c, uber.id, groceries)
+        })
+        .unwrap();
+    let step = stack.latest_id().expect("a step");
+    stack
+        .record(&conn, "Edit Notes", |c| {
+            transactions::update(
+                c,
+                uber.id,
+                &transactions::TransactionPatch {
+                    notes: Some(Some("x".into())),
+                    ..Default::default()
+                },
+            )
+        })
+        .unwrap();
+    assert!(
+        stack.undo_step(&conn, step).is_err(),
+        "the notes edit is on top"
+    );
+    assert_eq!(
+        by(&conn, "UBER TRIP 1").notes.as_deref(),
+        Some("x"),
+        "nothing was undone"
+    );
+    stack.undo(&conn).unwrap();
+    assert_eq!(
+        stack.undo_step(&conn, step).unwrap().as_deref(),
+        Some("Change Category")
+    );
+    assert_ne!(by(&conn, "UBER TRIP 1").category_id, Some(groceries));
+}

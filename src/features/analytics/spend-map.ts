@@ -187,16 +187,18 @@ export interface MapTokens {
 }
 
 /** `#rrggbb` with an alpha byte. */
-const withAlpha = (hex: string, alpha: number) => `${hex.slice(0, 7)}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0')}`;
 
 /** Tile color: red when spending rose, green when it fell (stronger with the change, capped at
  *  ±100%), muted when about flat (±5%), accent for new spending; category color without comparison. */
 export function tileColor(tile: Pick<SpendTile, 'changePct' | 'color'>, tokens: MapTokens, compared: boolean): string {
-  if (!compared) return withAlpha(tile.color, 0.85);
-  if (tile.changePct == null) return withAlpha(tokens.accent, 0.8);
-  if (Math.abs(tile.changePct) <= 5) return withAlpha(tokens.muted, 0.55);
+  // Blended with the card in OKLab, not faded with transparency: equal steps look equal. OKLab, not OKLCH: the card
+  // colour is a bluish near-black, and mixing toward it in OKLCH swings red to magenta and green to teal.
+  const mix = (color: string, share: number) => `color-mix(in oklab, ${color.slice(0, 7)} ${Math.round(Math.max(0, Math.min(1, share)) * 100)}%, ${tokens.panel})`;
+  if (!compared) return mix(tile.color, 0.85);
+  if (tile.changePct == null) return mix(tokens.accent, 0.8);
+  if (Math.abs(tile.changePct) <= 5) return mix(tokens.muted, 0.55);
   const strength = 0.4 + 0.6 * Math.min(1, Math.abs(tile.changePct) / 100);
-  return withAlpha(tile.changePct > 0 ? tokens.neg : tokens.pos, strength);
+  return mix(tile.changePct > 0 ? tokens.neg : tokens.pos, strength);
 }
 
 export type LabelPlan = 'full' | 'inline' | 'name' | 'vertical' | 'verticalName' | 'squeezed';

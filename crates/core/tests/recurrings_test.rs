@@ -485,3 +485,44 @@ fn seeding_works_inside_a_caller_transaction() {
     assert_eq!(recurrings::seed_if_needed(&db.conn).unwrap(), 1);
     db.conn.execute_batch("COMMIT").unwrap();
 }
+
+#[test]
+fn a_bill_paid_every_few_years_is_next_due_that_many_years_on() {
+    let db = setup();
+    db.add("2025-03-18", "NORDVPN SUBSCRIPTION", -10430);
+    for (frequency, years, next) in [
+        (Cadence::Biennial, 2, "2027-03-18"),
+        (Cadence::Triennial, 3, "2028-03-18"),
+        (Cadence::Quadrennial, 4, "2029-03-18"),
+    ] {
+        let rule = NewRecurring {
+            name: "NordVPN".into(),
+            category_id: None,
+            match_kind: MatchKind::Contains,
+            pattern: "nordvpn".into(),
+            min_cents: 8344,
+            max_cents: 12516,
+            frequency,
+            day_of_month: Some(18),
+        };
+        let id = recurrings::create(&db.conn, &rule).unwrap();
+        assert_eq!(recurrings::get(&db.conn, id).unwrap().frequency, frequency);
+        // Stored as yearly with a count of years, so older versions' checks still hold.
+        let stored: (String, i64) = db
+            .conn
+            .query_row(
+                "SELECT frequency, every_years FROM recurrings WHERE id = ?1",
+                [id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .unwrap();
+        assert_eq!(stored, ("yearly".to_string(), years));
+        let view = recurrings::views(&db.conn, Some(db.p))
+            .unwrap()
+            .into_iter()
+            .find(|r| r.saved.as_ref().is_some_and(|s| s.id == id))
+            .unwrap();
+        assert_eq!(view.next_date, d(next));
+        recurrings::delete(&db.conn, id).unwrap();
+    }
+}

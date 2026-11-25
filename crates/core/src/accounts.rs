@@ -251,6 +251,24 @@ pub fn forget_clue(conn: &Connection, clue_id: i64) -> Result<()> {
     Ok(())
 }
 
+/// The account's type (card, checking, savings), when it has one.
+pub fn account_kind(conn: &Connection, source_id: SourceId) -> Result<Option<AccountType>> {
+    let t: Option<String> = conn
+        .query_row(
+            "SELECT account_type FROM sources WHERE id = ?1",
+            [source_id],
+            |r| r.get(0),
+        )
+        .optional()?
+        .flatten();
+    Ok(t.and_then(|t| match t.as_str() {
+        "card" => Some(AccountType::Card),
+        "checking" => Some(AccountType::Checking),
+        "savings" => Some(AccountType::Savings),
+        _ => None,
+    }))
+}
+
 /// Make the account you described (the name must be new in this profile).
 pub fn create(
     conn: &Connection,

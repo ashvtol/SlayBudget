@@ -39,6 +39,20 @@ describe('SearchPalette', () => {
     });
   });
 
+  it('shows the category of each result even before the Transactions screen was opened', async () => {
+    const user = userEvent.setup();
+    const coffee = { id: 5, groupId: 1, name: 'Coffee', emoji: null, color: '#884422', budgetCents: null, excluded: false, kind: 'expense' as const, sortOrder: 0, archived: false };
+    setIpc(createMemoryIpc({ sources, categories: [coffee], transactions: [{ ...transactions[0], categoryId: 5 }] }));
+    useProfileStore.setState({ activeProfileId: null });
+    useSearchStore.setState({ open: true, query: '', results: [], loading: false });
+    useTransactionsStore.setState({ categoriesById: {} });
+    render(<SearchPalette />);
+    await user.type(screen.getByLabelText('Search query'), 'starb');
+    await waitFor(() => expect(screen.getByText('STARBUCKS')).toBeInTheDocument());
+    expect(await screen.findByText('Coffee')).toBeInTheDocument();
+    expect(screen.queryByText('Needs category')).not.toBeInTheDocument();
+  });
+
   it('closes on Escape', async () => {
     const user = userEvent.setup();
     await setup();

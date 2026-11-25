@@ -49,6 +49,27 @@ export async function importOne(file: File, profileId: number, deps: ImportDeps,
   }
 }
 
+/** One answer for a group of statements from the same account: the first file imports with your choice (making the new
+ *  account if you chose one), the rest go into the account it landed in. A file that fails passes the choice on. */
+export async function answerGroup(
+  files: { id: string; file: File; path?: string }[],
+  profileId: number,
+  deps: ImportDeps,
+  choice: AccountChoice,
+): Promise<Map<string, FileResult>> {
+  const results = new Map<string, FileResult>();
+  let current = choice;
+  for (const f of files) {
+    const result = await importOne(f.file, profileId, deps, current, f.path ?? importPath(f.file));
+    results.set(f.id, result);
+    const sourceId = result.report?.sourceId;
+    if (!result.error && !result.report?.needsAccount && sourceId) {
+      current = { kind: 'existing', sourceId, remember: choice.remember };
+    }
+  }
+  return results;
+}
+
 /** Import a batch of files into one profile, reporting progress per file.
  *  Unsupported files and failures are collected, never thrown, so one bad file
  *  does not abort the batch. */

@@ -36,7 +36,19 @@ const MIGRATIONS: &[(i64, &str)] = &[
         15,
         include_str!("../../migrations/0015_essential_categories.sql"),
     ),
+    (
+        16,
+        include_str!("../../migrations/0016_smart_categorization.sql"),
+    ),
+    (
+        17,
+        include_str!("../../migrations/0017_every_few_years.sql"),
+    ),
 ];
+
+/// Migration 16 rewrites how every category is tracked, and 17 changes the recurrings table:
+/// the database is copied beside itself first.
+const BACKUP_BEFORE: i64 = 17;
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
 pub fn open_db(path: &Path) -> Result<Connection> {
@@ -45,7 +57,17 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     }
     let conn = Connection::open(path)?;
     configure(&conn)?;
-    migrate(&conn)?;
+    let current = schema_version(&conn)?;
+    if current > 0 && current < BACKUP_BEFORE {
+        let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
+        let label = if current < 16 {
+            "smart-categorization"
+        } else {
+            "every-few-years"
+        };
+        backup_before(&conn, label, &stamp)?;
+    }
+    migrate(&conn, i64::MAX)?;
     crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
@@ -60,7 +82,7 @@ pub fn open_db(path: &Path) -> Result<Connection> {
 pub fn open_in_memory() -> Result<Connection> {
     let conn = Connection::open_in_memory()?;
     configure(&conn)?;
-    migrate(&conn)?;
+    migrate(&conn, i64::MAX)?;
     crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
@@ -93,7 +115,16 @@ fn configure(conn: &Connection) -> Result<()> {
     Ok(())
 }
 
-fn migrate(conn: &Connection) -> Result<()> {
+/// A database file with migrations applied only up to `version` and nothing seeded, for migration tests.
+#[doc(hidden)]
+pub fn open_at_version(path: &Path, version: i64) -> Result<Connection> {
+    let conn = Connection::open(path)?;
+    configure(&conn)?;
+    migrate(&conn, version)?;
+    Ok(conn)
+}
+
+fn migrate(conn: &Connection, up_to: i64) -> Result<()> {
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             version INTEGER PRIMARY KEY,
@@ -102,7 +133,7 @@ fn migrate(conn: &Connection) -> Result<()> {
     )?;
     let current = schema_version(conn)?;
     for (version, sql) in MIGRATIONS {
-        if *version > current {
+        if *version > current && *version <= up_to {
             conn.execute_batch("BEGIN")?;
             if let Err(e) = conn.execute_batch(sql) {
                 conn.execute_batch("ROLLBACK")?;

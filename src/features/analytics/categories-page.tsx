@@ -75,7 +75,18 @@ export function CategoriesPage() {
   const [cleaning, setCleaning] = useState(() => useNavStore.getState().cleanUpOther);
   const [pendingOther, setPendingOther] = useState(cleaning);
   const clearCleanUp = useNavStore((s) => s.clearCleanUpOther);
-  useEffect(() => clearCleanUp(), [clearCleanUp]);
+  // The screen stays open in the background, so a later ask (the Dashboard's Clean up) must be noticed too.
+  // Each ask is handled once, even when Clean up was left on with another category selected.
+  const askedToClean = useNavStore((s) => s.cleanUpOther);
+  const [handledAsk, setHandledAsk] = useState(cleaning);
+  if (askedToClean && !handledAsk) {
+    setHandledAsk(true);
+    setCleaning(true);
+    setPendingOther(true);
+  } else if (!askedToClean && handledAsk) setHandledAsk(false);
+  useEffect(() => {
+    if (askedToClean) clearCleanUp();
+  }, [askedToClean, clearCleanUp]);
   const go = useNavStore((s) => s.go);
   const applyTxFilter = useTransactionsStore((s) => s.applyFilter);
   // A notification asked for a category (or All) in a month: show it once the data is in.
@@ -111,7 +122,8 @@ export function CategoriesPage() {
   if (pendingOther && src) {
     setPendingOther(false);
     const other = src.categories.find((c) => c.isOther);
-    if (other) setSelection({ kind: 'category', id: other.id });
+    // Without an Other category, Clean up shows on All.
+    setSelection(other ? { kind: 'category', id: other.id } : { kind: 'all' });
   }
   const [deleting, setDeleting] = useState<{ category: Category; count: number } | null>(null);
   const startDelete = async (category: Category) => {

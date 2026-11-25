@@ -149,7 +149,7 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
   background: linear-gradient(var(--control-fill-top), var(--control-fill));
   box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.1), 0 0 0 0.5px var(--control-ring), 0 1px 1.5px rgba(0, 0, 0, 0.25);
 }
-.popup:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.popup:focus-visible { outline: none; }
 .popup-badge {
   position: absolute; right: 3px; top: 50%; transform: translateY(-50%); pointer-events: none;
   width: 17px; height: 18px; border-radius: 4px; display: grid; place-content: center;
@@ -184,11 +184,13 @@ input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outlin
 }
 .segmented-option:focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 5px; }
 
-/* A field with no box of its own (.field-bare: a search row, an inline rename) shows its caret, not a ring. */
+/* Text fields show their caret when focused, never a ring (it read as a heavy box around every field).
+   .field-bare also drops the browser's own outline. */
 input:not([type="checkbox"]):not([type="radio"]):not([type="file"]):not([type="range"]):not(.field-bare):focus-visible,
 textarea:focus-visible {
-  outline: none; box-shadow: var(--focus-ring), inset 0 0 0 0.5px var(--accent);
+  outline: none;
 }
+.field-bare:focus { outline: none; }
 }
 
 /* Rolling numbers: a changed digit leaves upward while the new one comes up from below. */

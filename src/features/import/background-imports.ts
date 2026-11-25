@@ -7,7 +7,7 @@ import { loadConfig } from '@/lib/notification-config';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { AccountChoice, NeedsAccount, NewNotification } from '@/lib/types';
 import { createDefaultImportDeps } from './default-deps';
-import { classifyFile, importOne, type FileResult, type ImportDeps } from './run-imports';
+import { answerGroup, classifyFile, importOne, type FileResult, type ImportDeps } from './run-imports';
 
 /** How often to look for new files while the app is open. */
 export const SCAN_EVERY_MS = 2 * 60_000;
@@ -26,7 +26,10 @@ interface BackgroundImports {
   seen: Record<string, number>;
   scan(): Promise<void>;
   answer(path: string, choice: AccountChoice): Promise<FileResult | null>;
+  /** One answer for several files from the same account; when remembered, the rest still waiting are checked again. */
+  answerMany(paths: string[], choice: AccountChoice): Promise<void>;
   skip(path: string): void;
+  skipMany(paths: string[]): void;
   /** Called after anything was imported (the app reloads what it shows). */
   onImported?: () => void;
 }
@@ -63,6 +66,7 @@ export const useBackgroundImports = create<BackgroundImports>((set, get) => ({
       return; // no watched folder or Downloads to look in
     }
     let imported = false;
+    const newlyWaiting: { path: string; name: string; modifiedMs: number }[] = [];
     for (const c of found) {
       if (get().seen[c.path] === c.modifiedMs || classifyFile(c.name) === 'unsupported') continue;
       set((s) => ({ seen: { ...s.seen, [c.path]: c.modifiedMs } }));
@@ -77,12 +81,7 @@ export const useBackgroundImports = create<BackgroundImports>((set, get) => ({
       if (report.needsAccount) {
         const needs = report.needsAccount;
         set((s) => ({ waiting: [...s.waiting.filter((w) => w.path !== c.path), { path: c.path, name: c.name, modifiedMs: c.modifiedMs, needs }] }));
-        await notify({
-          key: `statement-waiting:${c.path}:${c.modifiedMs}`,
-          title: `${c.name} needs an account`,
-          body: 'Tell SlayBudget which account this statement is, and it imports it.',
-          target: { kind: 'import' },
-        });
+        newlyWaiting.push(c);
       } else if (!report.alreadyImported && report.inserted > 0) {
         imported = true;
         await notify({
@@ -92,6 +91,23 @@ export const useBackgroundImports = create<BackgroundImports>((set, get) => ({
           target: { kind: 'import' },
         });
       }
+    }
+    // One bell item for everything this look found waiting, however many statements.
+    if (newlyWaiting.length === 1) {
+      const [c] = newlyWaiting;
+      await notify({
+        key: `statement-waiting:${c.path}:${c.modifiedMs}`,
+        title: `${c.name} needs an account`,
+        body: 'Tell SlayBudget which account this statement is, and it imports it.',
+        target: { kind: 'import' },
+      });
+    } else if (newlyWaiting.length > 1) {
+      await notify({
+        key: `statements-waiting:${newlyWaiting.length}:${newlyWaiting[0].path}:${Math.max(...newlyWaiting.map((c) => c.modifiedMs))}`,
+        title: `${newlyWaiting.length} statements need an account`,
+        body: 'Statements from the same card are asked about together, once.',
+        target: { kind: 'import' },
+      });
     }
     if (imported) get().onImported?.();
   },
@@ -106,7 +122,32 @@ export const useBackgroundImports = create<BackgroundImports>((set, get) => ({
     return result;
   },
 
+  async answerMany(paths, choice) {
+    const profile = profileId();
+    const files = get().waiting.filter((w) => paths.includes(w.path));
+    if (profile == null || files.length === 0) return;
+    const results = await answerGroup(
+      await Promise.all(files.map(async (w) => ({ id: w.path, path: w.path, file: await readFile(w.path, w.name) }))),
+      profile,
+      deps(),
+      choice,
+    );
+    const done = (r: FileResult | undefined) => !!r && !r.error && !r.report?.needsAccount;
+    set((s) => ({ waiting: s.waiting.filter((w) => !done(results.get(w.path))) }));
+    if (choice.remember) {
+      for (const w of get().waiting) {
+        const r = await importOne(await readFile(w.path, w.name), profile, deps(), undefined, w.path).catch(() => undefined);
+        if (done(r)) set((s) => ({ waiting: s.waiting.filter((x) => x.path !== w.path) }));
+      }
+    }
+    get().onImported?.();
+  },
+
   skip(path) {
     set((s) => ({ waiting: s.waiting.filter((w) => w.path !== path) }));
+  },
+
+  skipMany(paths) {
+    set((s) => ({ waiting: s.waiting.filter((w) => !paths.includes(w.path)) }));
   },
 }));

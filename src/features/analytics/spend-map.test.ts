@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Category, CategoryGroup, Transaction } from '@/lib/types';
-import { buildSpendMap, labelPlan, previousWindow } from './spend-map';
+import { buildSpendMap, labelPlan, previousWindow, tileColor } from './spend-map';
 
 const groups: CategoryGroup[] = [
   { id: 1, name: 'Food & Drink', emoji: '🍔', color: '#e8743b', sortOrder: 0 },
@@ -138,5 +138,17 @@ describe('spend map labels', () => {
     expect(labelPlan(30, 30, '💅 Personal Care')).toBe('squeezed');
     // A short name still needs room for the drill-in arrow and a wide emoji: Phone in a 74px tile.
     expect(labelPlan(74, 264, '📱 Phone')).toBe('vertical');
+  });
+});
+
+describe('tileColor', () => {
+  const tokens = { pos: '#30a46c', neg: '#e5484d', accent: '#3e63dd', muted: '#8b8d98', panel: '#141416', text: '#ededef' };
+  it('blends with the card in OKLab, so each step of change looks evenly stronger with no hue shift (OKLCH swings red toward the bluish card colour)', () => {
+    expect(tileColor({ changePct: 100, color: '#000000' }, tokens, true)).toBe('color-mix(in oklab, #e5484d 100%, #141416)');
+    expect(tileColor({ changePct: 20, color: '#000000' }, tokens, true)).toBe('color-mix(in oklab, #e5484d 52%, #141416)');
+    expect(tileColor({ changePct: -50, color: '#000000' }, tokens, true)).toBe('color-mix(in oklab, #30a46c 70%, #141416)');
+    expect(tileColor({ changePct: 3, color: '#000000' }, tokens, true)).toBe('color-mix(in oklab, #8b8d98 55%, #141416)');
+    expect(tileColor({ changePct: null, color: '#000000' }, tokens, true)).toBe('color-mix(in oklab, #3e63dd 80%, #141416)');
+    expect(tileColor({ changePct: null, color: '#ff8800' }, tokens, false)).toBe('color-mix(in oklab, #ff8800 85%, #141416)');
   });
 });

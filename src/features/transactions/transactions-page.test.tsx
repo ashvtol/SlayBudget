@@ -96,6 +96,22 @@ describe('TransactionsPage', () => {
     expect(screen.getByRole('button', { name: 'Filter' })).toBeInTheDocument();
   });
 
+  it('filters to suggested categories and accepts them all', async () => {
+    const user = userEvent.setup();
+    await renderPage({
+      transactions: [
+        ...seed.transactions,
+        tx({ id: 3, postedOn: '2026-11-12', description: 'TRADER JOES', merchant: 'trader joes', amountCents: -900, suggestedCategoryId: 10, suggestedReason: 'Known merchant: Trader Joes' }),
+      ],
+    });
+    expect(screen.queryByRole('button', { name: 'Accept all' })).not.toBeInTheDocument();
+    await user.click(within(await openFilter(user, 'Review status')).getByRole('menuitemcheckbox', { name: 'Suggested category' }));
+    await waitFor(() => expect(within(list()).getAllByRole('row')).toHaveLength(1));
+    await user.click(screen.getByRole('button', { name: 'Accept all' }));
+    await waitFor(() => expect(screen.queryByRole('grid', { name: 'Transactions' })).not.toBeInTheDocument());
+    expect(useTransactionsStore.getState().filter.suggested).toBe(true);
+  });
+
   it('filters by a searched category', async () => {
     const user = userEvent.setup();
     await renderPage();
@@ -250,6 +266,17 @@ describe('TransactionsPage', () => {
     expect(screen.getByText('2 selected')).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Mark reviewed' }));
     await waitFor(() => expect(useTransactionsStore.getState().transactions.every((t) => t.reviewed)).toBe(true));
+  });
+
+  it('sets one category on the selected transactions', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    await user.click(screen.getByRole('checkbox', { name: 'Select all' }));
+    await user.click(screen.getByRole('button', { name: 'Set category' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'fue{Enter}');
+    await waitFor(() => expect(useTransactionsStore.getState().transactions.every((t) => t.categoryId === 20)).toBe(true));
+    expect(useTransactionsStore.getState().selected.size).toBe(0);
+    expect(screen.queryByRole('dialog', { name: 'Choose category' })).not.toBeInTheDocument();
   });
 
   it('keeps the bulk bar compact: review and clear are icon buttons with tooltips', async () => {
@@ -408,4 +435,5 @@ describe('TransactionsPage deleting', () => {
     await user.click(within(screen.getByRole('alertdialog', { name: 'Delete this transaction?' })).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(within(list()).getAllByRole('row')).toHaveLength(1));
   });
+
 });

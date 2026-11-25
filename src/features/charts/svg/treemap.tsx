@@ -3,7 +3,8 @@
 // absolutely positioned boxes so they glide to new places when the data changes (not with Reduce motion); hovering a
 // tile shows a dark card that follows the pointer at once.
 
-import { useEffect, useState, type PointerEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { hierarchy, treemap, treemapSquarify, type HierarchyRectangularNode } from 'd3-hierarchy';
 import { formatMoney } from '@/lib/format';
 import { displayCurrency } from '@/features/currency/currency-store';
@@ -114,8 +115,8 @@ export function SpendTreemap({
     }
   };
   const track = (t: MapTile) => (e: PointerEvent<HTMLElement>) => {
-    const box = (ref.current as HTMLElement).getBoundingClientRect();
-    setHover({ tile: t, x: e.clientX - box.left, y: e.clientY - box.top });
+    // Window coordinates: the card is drawn over the whole window.
+    setHover({ tile: t, x: e.clientX, y: e.clientY });
   };
 
   return (
@@ -185,7 +186,7 @@ export function SpendTreemap({
             </div>
           );
         })}
-        {hover && <MapCard tile={hover.tile} map={map} compared={compared} x={hover.x} y={hover.y} width={w} />}
+        {hover && <MapCard tile={hover.tile} map={map} compared={compared} x={hover.x} y={hover.y} />}
       </div>
     </div>
   );
@@ -236,8 +237,33 @@ function Row({ label, value, color }: { label: string; value: string; color?: st
   );
 }
 
-function MapCard({ tile, map, compared, x, y, width }: { tile: MapTile; map: SpendMap; compared: boolean; x: number; y: number; width: number }) {
-  const left = x + 14 + CARD_WIDTH <= width ? x + 14 : Math.max(0, x - 14 - CARD_WIDTH);
+const GAP = 14;
+const EDGE = 8;
+
+/** Where the hover card goes: below and right of the pointer, above or left of it when that side has no room,
+ *  and always inside the window. */
+export function cardPlacement(
+  pointer: { x: number; y: number },
+  card: { width: number; height: number },
+  view: { width: number; height: number },
+): { left: number; top: number } {
+  const place = (at: number, size: number, room: number) => {
+    const after = at + GAP;
+    const before = at - GAP - size;
+    const spot = after + size <= room - EDGE ? after : before >= EDGE ? before : after;
+    return Math.max(EDGE, Math.min(spot, room - EDGE - size));
+  };
+  return { left: place(pointer.x, card.width, view.width), top: place(pointer.y, card.height, view.height) };
+}
+
+function MapCard({ tile, map, compared, x, y }: { tile: MapTile; map: SpendMap; compared: boolean; x: number; y: number }) {
+  // Measured once drawn, so a tall card near the bottom opens above the pointer.
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [height, setHeight] = useState(0);
+  useLayoutEffect(() => {
+    if (cardRef.current) setHeight(cardRef.current.offsetHeight);
+  }, [tile]);
+  const { left, top } = cardPlacement({ x, y }, { width: CARD_WIDTH, height }, { width: window.innerWidth, height: window.innerHeight });
   const share = map.totalCents ? tile.valueCents / map.totalCents : 0;
   const t = tile.tile;
   const m = tile.merchant;
@@ -245,13 +271,24 @@ function MapCard({ tile, map, compared, x, y, width }: { tile: MapTile; map: Spe
   const title = m
     ? `${m.name} · ${tile.category?.name ?? ''}`
     : `${t?.emoji ? `${t.emoji} ` : ''}${tile.name}${t && t.groupName !== t.name ? ` · ${t.groupName}` : ''}`;
-  return (
+  // Over everything, in the window: the map clips what spills past its edge.
+  return createPortal(
     <div
+      ref={cardRef}
       data-testid="map-card"
       role="group"
       aria-label={title}
-      className="pointer-events-none absolute z-20 flex flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-[12px] shadow-2xl"
-      style={{ left, top: y + 14, width: CARD_WIDTH, background: 'var(--panel)', borderColor: 'var(--line-strong)' }}
+      className="pointer-events-none z-50 flex flex-col gap-1.5 rounded-lg border px-3 py-2.5 text-[12px] shadow-2xl"
+      // Depth in dark themes comes from a lighter surface (a shadow barely shows); the border is see-through so it
+      // blends with whatever is underneath.
+      style={{
+        position: 'fixed',
+        left,
+        top,
+        width: CARD_WIDTH,
+        background: 'color-mix(in oklab, var(--panel), var(--text) 7%)',
+        borderColor: 'color-mix(in oklab, var(--text) 14%, transparent)',
+      }}
     >
       <div className="mb-0.5 font-semibold">{title}</div>
       <Row label="Spent" value={money(tile.valueCents)} />
@@ -262,6 +299,7 @@ function MapCard({ tile, map, compared, x, y, width }: { tile: MapTile; map: Spe
       {m && <Row label="Visits" value={String(m.count)} />}
       {m && <Row label="Average" value={money(Math.round(m.cents / Math.max(1, m.count)))} />}
       {t?.topMerchants.filter((x) => x.cents > 0).map((x) => <Row key={x.name} label={x.name} value={money(x.cents)} color="var(--subtle)" />)}
-    </div>
+    </div>,
+    document.body,
   );
 }

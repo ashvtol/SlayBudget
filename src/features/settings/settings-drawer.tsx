@@ -17,12 +17,14 @@ import { BankConnectionsPane } from './bank-connections-pane';
 import { TagsPane } from './tags-pane';
 import { RolloversPane } from './rollovers-pane';
 import { AccessibilityPane } from './accessibility-pane';
+import { CategorizationPane } from './categorization-pane';
 
-type PaneId = 'accounts' | 'tags' | 'rollovers' | 'accessibility' | 'theme' | 'profiles' | 'currency' | 'sources' | 'bank' | 'notifications' | 'data' | 'updates' | 'about';
+type PaneId = 'accounts' | 'tags' | 'categorization' | 'rollovers' | 'accessibility' | 'theme' | 'profiles' | 'currency' | 'sources' | 'bank' | 'notifications' | 'data' | 'updates' | 'about';
 
 const PANES: Record<PaneId, { title: string; render: () => ReactNode }> = {
   accounts: { title: 'Accounts', render: () => <AccountsPane /> },
   tags: { title: 'Tags', render: () => <TagsPane /> },
+  categorization: { title: 'Categorization', render: () => <CategorizationPane /> },
   rollovers: { title: 'Rollovers', render: () => <RolloversPane /> },
   accessibility: { title: 'Accessibility', render: () => <AccessibilityPane /> },
   theme: { title: 'Theme', render: () => <AppearancePane /> },
@@ -72,6 +74,7 @@ function SettingsList({ onOpen }: { onOpen: (p: PaneId) => void }) {
     <div className="flex flex-col gap-6 py-5">
       <Group label="Features">
         <Row icon={IconTag} label="Tags" onClick={() => onOpen('tags')} />
+        <Row icon={IconCategories} label="Categorization" onClick={() => onOpen('categorization')} />
         <Row icon={IconRefresh} label="Rollovers" onClick={() => onOpen('rollovers')} />
       </Group>
       <Group label="Appearance">

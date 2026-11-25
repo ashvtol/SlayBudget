@@ -26,29 +26,32 @@ export function CategoryPill({
 }) {
   // Fixed heights so a pill always sits inside a 24px row with even space around it.
   const pad = size === 'md' ? 'h-[22px] px-2.5 text-[11px]' : 'h-[18px] px-2 text-[10px]';
+  // A button only when it does something: shown inside another button (a search result), it must not be one.
+  const Tag = onClick ? 'button' : 'span';
+  const kind = onClick ? ({ type: 'button' } as const) : {};
   const emojiSize = size === 'md' ? 'text-[11px]' : 'text-[9px]';
   if (!category) {
     return (
-      <button
-        type="button"
+      <Tag
+        {...kind}
         onClick={onClick}
         className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-dashed font-semibold uppercase leading-none tracking-[0.02em] ${pad}`}
         style={{ borderColor: 'var(--subtle)', color: 'var(--muted)' }}
       >
         Needs category
-      </button>
+      </Tag>
     );
   }
   const colors = pillColors(category.color ?? fallbackColor ?? 'var(--accent)');
   return (
-    <button
-      type="button"
+    <Tag
+      {...kind}
       onClick={onClick}
       className={`inline-flex max-w-full items-center gap-1 rounded-full font-semibold uppercase leading-none tracking-[0.02em] whitespace-nowrap ${pad}`}
       style={colors}
     >
       {category.emoji && <span aria-hidden="true" className={`normal-case leading-none ${emojiSize}`}>{category.emoji}</span>}
       <span className="truncate leading-none">{category.name}</span>
-    </button>
+    </Tag>
   );
 }

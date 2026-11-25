@@ -273,3 +273,23 @@ fn contains_skips_payment_platforms() {
         || !slaybudget_core::categorize::is_payment_platform(&x.transaction.merchant)));
     assert!(m.is_empty());
 }
+
+#[test]
+fn other_groups_leave_out_transfers() {
+    let db = setup();
+    let t = db.add(1, "CAPITAL ONE TRANSFER RT09", 15000, None);
+    db.add(2, "GEICO AUTO", -12000, Some(db.other()));
+    let moved = db.add(3, "ZELLE TO SAM", -5000, Some(db.other()));
+    db.conn
+        .execute(
+            "UPDATE transactions SET type = 'transfer' WHERE id IN (?1, ?2)",
+            [t, moved],
+        )
+        .unwrap();
+    let g = recategorize::other_groups(&db.conn).unwrap();
+    assert_eq!(
+        g.iter().map(|x| x.merchant.as_str()).collect::<Vec<_>>(),
+        ["geico auto"]
+    );
+    assert_eq!(recategorize::other_count(&db.conn).unwrap(), 1);
+}

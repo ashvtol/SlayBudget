@@ -6,10 +6,13 @@ use super::pdf::{parse_pdf, PdfStatementKind, PdfText};
 use super::{source_from_path, ParsedRow};
 use crate::analytics::refunds;
 use crate::categories;
-use crate::categorize::{extract_merchant, heuristics, learning, rules};
+use crate::categorize::model::{self, Band};
+use crate::categorize::recategorize::bank_category_suggestion;
+use crate::categorize::{extract_merchant, heuristics, learning, rules, transfers};
 use crate::error::Result;
 use crate::profiles::{self, ProfileId, SourceId, SourceKind};
-use crate::transactions::{self, InsertOutcome, NewTransaction};
+use crate::settings;
+use crate::transactions::{self, CategorySource, InsertOutcome, NewTransaction};
 use chrono::NaiveDate;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
@@ -49,15 +52,32 @@ pub fn content_hash(content: &[u8]) -> String {
     hex::encode(Sha256::digest(content))
 }
 
-/// Category for one row: explicit rules, then the learned model, then keyword heuristics.
+/// How one row was categorized: the category, where it came from and why, and a category to check if one fits better.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Choice {
+    pub category_id: Option<i64>,
+    pub source: CategorySource,
+    pub reason: Option<String>,
+    pub suggested: Option<(i64, String)>,
+}
+
+/// Category for one row: your rules, then a merchant you categorized, then the classifier when it is sure (and
+/// automatic categorizing is on), then the bank's own category, then keywords. A guess that is not sure enough, or a
+/// merchant that only resembles one you categorized, becomes a suggestion instead.
 pub fn categorize(
     conn: &Connection,
     profile_id: ProfileId,
     source_id: SourceId,
     kind: StatementKind,
     row: &ParsedRow,
-) -> Result<Option<i64>> {
+) -> Result<Choice> {
     let merchant = extract_merchant(&row.description);
+    let choice = |category_id: Option<i64>, source, reason: Option<String>| Choice {
+        category_id,
+        source,
+        reason,
+        suggested: None,
+    };
     if let Some(id) = rules::apply(
         conn,
         &rules::RuleInput {
@@ -67,11 +87,69 @@ pub fn categorize(
             source_id,
         },
     )? {
-        return Ok(Some(id));
+        return Ok(choice(
+            Some(id),
+            CategorySource::Rule,
+            Some("Matches one of your rules".into()),
+        ));
     }
-    if let Some(s) = learning::suggest(conn, &merchant, Some(profile_id))? {
-        return Ok(Some(s.category_id));
+    // Payment apps and gas stations differ payment to payment: no learned merchant, and the classifier only suggests.
+    let platform = crate::categorize::is_payment_platform(&merchant)
+        || crate::categorize::is_payment_platform(&row.description);
+    let learned = if platform {
+        None
+    } else {
+        learning::suggest(conn, &merchant, Some(profile_id))?
+    };
+    if let Some(s) = learned.as_ref().filter(|s| s.score >= 1.0) {
+        let name = categories::get(conn, s.category_id)?.name;
+        let reason = format!("You put {} in {name}", model::title(&merchant));
+        return Ok(choice(
+            Some(s.category_id),
+            CategorySource::Learned,
+            Some(reason),
+        ));
     }
+    let account = crate::accounts::account_kind(conn, source_id)?;
+    let features = model::features(&row.description, &merchant, row.amount_cents, account);
+    let prediction = model::classify(conn, &merchant, &features)?;
+    let auto = settings::get(conn, "auto_categorize")?.as_deref() != Some("0");
+    let mut chosen = match &prediction {
+        Some(p) if auto && !platform && model::band(p) == Band::Auto => {
+            let reason = model::explain(conn, &merchant, p.category_id)?;
+            choice(Some(p.category_id), CategorySource::Model, Some(reason))
+        }
+        _ => fallback(conn, kind, row)?,
+    };
+    // A guess that is not sure enough only helps where there is no category yet.
+    if chosen.source != CategorySource::Model
+        && crate::categorize::history::in_other(conn, chosen.category_id)?
+    {
+        if let Some(p) = prediction.filter(|p| model::band(p) != Band::None) {
+            if Some(p.category_id) != chosen.category_id {
+                chosen.suggested = Some((
+                    p.category_id,
+                    model::explain(conn, &merchant, p.category_id)?,
+                ));
+            }
+        }
+    }
+    if chosen.suggested.is_none() {
+        if let Some(s) = learned.filter(|s| Some(s.category_id) != chosen.category_id) {
+            let name = categories::get(conn, s.category_id)?.name;
+            let reason = format!(
+                "Similar to {}, which you put in {name}",
+                model::title(&s.matched)
+            );
+            chosen.suggested = Some((s.category_id, reason));
+        }
+    }
+    Ok(chosen)
+}
+
+/// Keywords, or the bank's own category when keywords find nothing for money going out. The keyword list is more
+/// specific than banks' categories (Digital Entertainment, not Entertainment), and money in on a card is a refund.
+fn fallback(conn: &Connection, kind: StatementKind, row: &ParsedRow) -> Result<Choice> {
     let legacy = if row.amount_cents > 0 {
         match kind {
             StatementKind::Card => heuristics::credit_category(&row.description),
@@ -84,7 +162,42 @@ pub fn categorize(
     } else {
         heuristics::spending_category(&row.description)
     };
-    Ok(categories::find_by_legacy_name(conn, legacy)?.map(|c| c.id))
+    let keyword = categories::find_by_legacy_name(conn, legacy)?;
+    let nothing = keyword
+        .as_ref()
+        .is_none_or(|c| c.legacy_name.as_deref() == Some("Other"));
+    if nothing && row.amount_cents < 0 {
+        let bank = row.raw_category.clone().or_else(|| {
+            row.details
+                .iter()
+                .find(|(label, _)| label == "Category")
+                .map(|(_, v)| v.clone())
+        });
+        if let Some(bank) = bank.filter(|b| !b.trim().is_empty()) {
+            if let Some(id) = bank_category_suggestion(conn, &bank)? {
+                return Ok(Choice {
+                    category_id: Some(id),
+                    source: CategorySource::Bank,
+                    reason: Some(format!("Your bank calls it {}", bank.trim())),
+                    suggested: None,
+                });
+            }
+        }
+    }
+    Ok(Choice {
+        category_id: keyword.map(|c| c.id),
+        source: CategorySource::Keyword,
+        reason: None,
+        suggested: None,
+    })
+}
+
+/// Days apart two sides of a transfer may be (setting `transfer_window_days`, 1 to 10, default 4).
+pub fn transfer_window(conn: &Connection) -> Result<i64> {
+    Ok(settings::get(conn, "transfer_window_days")?
+        .and_then(|v| v.parse::<i64>().ok())
+        .map(|d| d.clamp(1, 10))
+        .unwrap_or(4))
 }
 
 /// Store parsed rows for a source. Re-importing the same file content is a no-op.
@@ -132,7 +245,8 @@ pub fn import_rows(
     let mut new_ids = Vec::new();
     let mut accounted_ids = Vec::new();
     for row in &rows {
-        let category_id = categorize(conn, profile_id, source_id, kind, row)?;
+        let choice = categorize(conn, profile_id, source_id, kind, row)?;
+        let category_id = choice.category_id;
         let tx = NewTransaction {
             profile_id,
             source_id,
@@ -148,6 +262,12 @@ pub fn import_rows(
             InsertOutcome::Inserted(id) => {
                 inserted += 1;
                 new_ids.push(id);
+                let (suggested, why) = choice.suggested.unzip();
+                conn.execute(
+                    "UPDATE transactions SET category_source = ?1, category_reason = ?2, suggested_category_id = ?3,
+                        suggested_reason = ?4 WHERE id = ?5",
+                    params![choice.source.as_str(), choice.reason, suggested, why, id],
+                )?;
                 id
             }
             InsertOutcome::Duplicate(id) => {
@@ -165,6 +285,9 @@ pub fn import_rows(
     )?;
     let mut flags = Vec::new();
     if inserted > 0 {
+        let pairs =
+            transfers::find_pairs(conn, profile_id, Some(&new_ids), transfer_window(conn)?)?;
+        transfers::apply_pairs(conn, &pairs)?;
         refunds::rematch(conn, Some(profile_id))?;
         crate::recurrings::after_import(conn)?;
         flags = crate::duplicates::detect(conn, import_id, &new_ids, &accounted_ids)?;

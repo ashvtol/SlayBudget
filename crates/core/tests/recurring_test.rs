@@ -27,6 +27,7 @@ fn tx(id: i64, merchant: &str, date: &str, cents: i64) -> Transaction {
         parent_id: None,
         tx_type: Default::default(),
         recurring_id: None,
+        ..Default::default()
     }
 }
 

@@ -5,6 +5,45 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-25
+### Added
+- **Bills that are paid back.** When a card's statement credit refunds a subscription (a card's Walmart+ credit,
+  say), the bill shows each charge with its credit, "Fully credited" or "Partly credited", and what it cost you. It
+  stays in Recurrings with a Credited tag and doesn't count toward "left to pay". SlayBudget asks "Do they pay it
+  back?" when credits keep matching, and a credit can be linked from its own detail with **Pays back a bill**.
+- **Every ⓘ looks like macOS's info symbol**: a thin outlined circle, filled with the accent while its details show.
+- **An ⓘ on "Is this … at a new price?"** shows the charge as the statement has it, so you can see who it was to.
+- **Shared and partial credits.** One credit can pay back several bills (a card's monthly entertainment credit split
+  between two streaming services): each credit counts once, for the nearest charge. A credit that covers part of a
+  purchase on the same day (a store credit) shows as "Partly credited". "Do they pay it back?" asks about both, and its ⓘ
+  lists each charge beside the credit that matched it.
+- **A subscription whose statement name changed is suggested for merging** (HBO Max, then Max): one bill's charges
+  end as the other's start, with related names or the same price on the same day. Two bills running at once are
+  never suggested.
+- **A bill can match several names**, for subscriptions whose statement name changed. Merging bills keeps every name.
+- **Compare look-alike bills.** An ⓘ on "look like the same subscription" lays the bills side by side (what each
+  matches, amount, frequency, due day, category, charges), with the differences standing out.
+- **A bill's charges open in Transactions** when you click them, and show their full date (Sep 30, 2025) on one line.
+- **A warning before saving a second copy of a bill** that has the same rule as one you already have.
+### Fixed
+- **Payment apps match the person, not the app.** "Make recurring" on a Venmo, Zelle or PayPal payment matches who it
+  went to ("contains Sam Rivera"), and a payment to someone else is never asked about as the bill's new price.
+- **A bill charged off its usual day still gets its tick.** A charge with the bill's name and amount links even away
+  from the due day, when that billing period has no other charge (a coffee subscription billed on a different day each month).
+  Payment apps (Venmo, Zelle, PayPal) still need the due day, since a payment there can be to anyone.
+  Opening the app links charges older rules skipped.
+- **Merging a renamed bill no longer invents a price change.** It compared the old bill's last price with the newer
+  bill's latest one, so a later upgrade showed up as a change where the name changed; now it compares at the hand-over.
+- **A price drop or rise inside a bill's range shows its arrow.** When a bill's latest charge is 10% or more off the
+  one before (car insurance going from $120 to $96, say), Recurrings shows ↑ or ↓ and "Price went down" for 30 days.
+  A drop's arrow is red.
+- **A bill paid this month shows what you paid**, not its usual amount.
+- **Opening a transaction from another screen works on the first visit** to Transactions (it showed the newest row).
+- **A bill follows its charges' category.** Recategorizing a bill's latest charge moves the bill too, so it no longer
+  keeps the category it was first detected with.
+- **Copies of one bill make one merge suggestion**, not one for every pair. Merge joins them all; "Not the same"
+  stops asking about the whole group.
+
 ## [0.9.0] - 2026-11-24
 ### Added
 - **Smart categorization.** Imports use what SlayBudget learned from your own choices and a built-in list of about 900

@@ -1,4 +1,4 @@
-// Display names for merchants. Statement text is noisy ("SHELL OIL 58000012345",
+// Display names for merchants. Statement text is noisy ("SHELL OIL 12345678901",
 // "SQ *BLUE BOTTLE"); this cleans it for display only. The stored merchant is
 // untouched because recurring detection and learned categories are keyed on it.
 

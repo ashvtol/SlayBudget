@@ -208,6 +208,8 @@ export interface Ipc {
   /** Save new rules and re-match past charges. */
   updateRecurring(id: number, rule: NewRecurring): Promise<MatchReport>;
   setRecurringStatus(id: number, status: RecurringStatus): Promise<void>;
+  /** Which credits pay a bill back (null = undecided, [] = not paid back); its charges are left alone. */
+  setRecurringPaidBackBy(id: number, names: string[] | null): Promise<void>;
   /** Remove a bill; its charges keep everything but the link. */
   deleteRecurring(id: number): Promise<void>;
   /** "Not recurring": unlink a charge so no bill claims it again. */
@@ -556,13 +558,16 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     return dueIn(nextAfter(s.frequency, paid).slice(0, 7));
   };
   const isCandidate = (t: Transaction) => (t.txType ?? 'regular') === 'regular' && t.amountCents < 0 && !optedOut.has(t.id);
+  /** Mirrors `recurrings::join_names`: trimmed, lowercased, no blanks or repeats. */
+  const cleanNames = (names: string[]) => [...new Set(names.map((n) => n.trim().toLowerCase()).filter(Boolean))];
+  const oneNameFits = (kind: NewRecurring['matchKind'], pattern: string, t: Transaction) =>
+    kind === 'merchant'
+      ? t.merchant.trim().toLowerCase() === pattern.trim().toLowerCase()
+      : normalizeDescription(t.description).includes(normalizeDescription(pattern));
   const fitsRule = (r: NewRecurring, t: Transaction) => {
     const size = -t.amountCents;
     if (size < r.minCents || size > r.maxCents) return false;
-    const nameOk =
-      r.matchKind === 'merchant'
-        ? t.merchant.trim().toLowerCase() === r.pattern.trim().toLowerCase()
-        : normalizeDescription(t.description).includes(normalizeDescription(r.pattern));
+    const nameOk = [r.pattern, ...(r.alsoMatches ?? [])].some((p) => oneNameFits(r.matchKind, p, t));
     if (!nameOk) return false;
     if (r.dayOfMonth == null) return true;
     return daysFromDue(t.postedOn, r.dayOfMonth) <= 3;
@@ -580,10 +585,24 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     }
     return best;
   };
-  const nameFits = (s: NewRecurring, t: Transaction) =>
-    s.matchKind === 'merchant'
-      ? t.merchant.trim().toLowerCase() === s.pattern.trim().toLowerCase()
-      : normalizeDescription(t.description).includes(normalizeDescription(s.pattern));
+  /** Mirrors `recurrings::names_the_payee`: a payment app's charge is the bill's only when a name that fits it names the
+   *  person (a word other than the app's), since the app's name alone is on a payment to anyone. */
+  const payeeFits = (s: NewRecurring, t: Transaction) => {
+    if (!isPaymentPlatform(t.merchant) && !isPaymentPlatform(t.description)) return true;
+    return [s.pattern, ...(s.alsoMatches ?? [])].some(
+      (p) => oneNameFits(s.matchKind, p, t) && p.toLowerCase().split(/[^a-z]+/).some((w) => w.length >= 3 && !isPaymentPlatform(w) && !['debit', 'card', 'purchase'].includes(w)),
+    );
+  };
+  const nameFits = (s: NewRecurring, t: Transaction) => [s.pattern, ...(s.alsoMatches ?? [])].some((p) => oneNameFits(s.matchKind, p, t));
+  /** Mirrors `recurrings::follow_charges`: a recategorized charge's bill takes its latest charge's category. */
+  const followCharges = (ids: number[]) => {
+    for (const id of ids) {
+      const bill = saved.find((b) => b.id === transactions.find((t) => t.id === id)?.recurringId);
+      if (!bill) continue;
+      const latest = transactions.filter((t) => t.recurringId === bill.id).sort((a, b) => b.postedOn.localeCompare(a.postedOn) || b.id - a.id)[0];
+      if (latest?.categoryId != null) bill.categoryId = latest.categoryId;
+    }
+  };
   const lastPriceChange = (id: number) =>
     prices.filter((p) => p.recurringId === id).reduce<string | null>((m, p) => (m == null || p.changedOn > m ? p.changedOn : m), null);
   /** The amount range a bill at this price claims: about ±35%, at least $5 either way. */
@@ -610,13 +629,55 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         added++;
       }
     }
+    // Mirrors `recurrings::rematch`: a charge off its usual day still belongs when that period has no other charge.
+    if (r.dayOfMonth != null) {
+      const dates = transactions.filter((t) => t.recurringId === id).map((t) => t.postedOn);
+      const offDay = transactions
+        // Not for payment apps: a payment there can be to anyone, so only the due day says it's the bill.
+        .filter((t) => t.recurringId == null && isCandidate(t) && payeeFits(r, t) && fitsRule({ ...r, dayOfMonth: null }, t))
+        .sort((a, b) => a.postedOn.localeCompare(b.postedOn) || a.id - b.id);
+      for (const t of offDay) {
+        if (dates.some((d) => samePeriod(d, t.postedOn, r))) continue;
+        t.recurringId = id;
+        dates.push(t.postedOn);
+        added++;
+      }
+    }
     return { added, removed };
+  };
+  /** Mirrors `recurrings::due_paid`: the due date a charge pays, the nearest one (the earlier on a tie). */
+  const duePaid = (day: string, due: number) => {
+    const [y, m] = day.split('-').map(Number);
+    const at = Date.UTC(y, m - 1, Number(day.slice(8, 10)));
+    let best = { dist: Infinity, at: 0 };
+    for (const shift of [-1, 0, 1]) {
+      const month = new Date(Date.UTC(y, m - 1 + shift, 1));
+      const last = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 0)).getUTCDate();
+      const dueAt = Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), Math.min(due, last));
+      const dist = Math.abs(at - dueAt);
+      if (dist < best.dist || (dist === best.dist && dueAt < best.at)) best = { dist, at: dueAt };
+    }
+    return best.at;
+  };
+  /** Mirrors `recurrings::same_period`. */
+  const samePeriod = (a: string, b: string, r: SavedRecurring) => {
+    if (r.frequency === 'monthly' && r.dayOfMonth != null) return duePaid(a, r.dayOfMonth) === duePaid(b, r.dayOfMonth);
+    const half = (Date.parse(nextAfter(r.frequency, '2026-01-01')) - Date.parse('2026-01-01')) / 86_400_000 / 2;
+    return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000 < half;
   };
   const titleCase = (key: string) => key.split(/\s+/).filter(Boolean).map((w) => w[0].toUpperCase() + w.slice(1)).join(' ');
   const dayFor = (freq: SavedRecurring['frequency'], day: string) => (freq === 'weekly' || freq === 'biweekly' ? null : Number(day.slice(8, 10)));
   const createSaved = (rule: NewRecurring): number => {
     const id = nextRecurringId++;
-    saved.push({ ...rule, pattern: rule.pattern.trim().toLowerCase(), id, status: 'active', createdOn: '2026-01-01' });
+    saved.push({
+      ...rule,
+      pattern: rule.pattern.trim().toLowerCase(),
+      alsoMatches: cleanNames(rule.alsoMatches ?? []),
+      paidBackBy: rule.paidBackBy == null ? null : cleanNames(rule.paidBackBy),
+      id,
+      status: 'active',
+      createdOn: '2026-01-01',
+    });
     rematchRecurring(id);
     return id;
   };
@@ -654,7 +715,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     for (const t of transactions) {
       if (!isCandidate(t) || t.recurringId != null || checks.some((c) => c.txId === t.id)) continue;
       const size = -t.amountCents;
-      const bill = bills.find((b) => nameFits(b, t) && (size < b.minCents || size > b.maxCents));
+      const bill = bills.find((b) => nameFits(b, t) && payeeFits(b, t) && (size < b.minCents || size > b.maxCents));
       if (!bill) continue;
       const last = lastChargeOf(bill.id);
       if (t.postedOn < (last?.postedOn ?? bill.createdOn)) continue;
@@ -683,11 +744,24 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     if (!t) throw new Error('not_found');
     const size = Math.abs(t.amountCents);
     const frequency = detectRecurring(transactions.filter((x) => x.merchant === t.merchant))[0]?.cadence ?? 'monthly';
+    // Mirrors `recurrings::payee_of`: a payment app's charge can be to anyone, so the bill matches the person.
+    const lower = t.description.toLowerCase();
+    const at = ['venmo', 'zelle', 'paypal', 'cashapp', 'cash app', 'apple cash']
+      .map((p) => (lower.includes(p) ? lower.indexOf(p) + p.length : Infinity))
+      .reduce((a, b) => Math.min(a, b), Infinity);
+    const payeeWords: string[] = [];
+    if (at !== Infinity) {
+      for (const w of lower.slice(at).split(/[\s*]+/).filter((x) => x && !['to', 'from', 'payment', 'inst', 'xfer'].includes(x))) {
+        if (!/^[a-z.']+$/.test(w)) break;
+        payeeWords.push(w);
+      }
+    }
+    const payee = payeeWords.join(' ');
     return {
-      name: titleCase(t.merchant),
+      name: titleCase(payee || t.merchant),
       categoryId: t.categoryId,
-      matchKind: 'merchant',
-      pattern: t.merchant,
+      matchKind: payee ? 'contains' : 'merchant',
+      pattern: payee || t.merchant,
       minCents: Math.round(size * 0.8),
       maxCents: Math.round(size * 1.2),
       frequency,
@@ -737,6 +811,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     t.categoryReason = null;
     t.suggestedCategoryId = null;
     t.suggestedReason = null;
+    followCharges([t.id]);
   };
 /** Answer the suggestion on each row (and on the other side of a suggested transfer). Returns rows answered. */
   const answerSuggestions = (ids: number[], answer: (t: Transaction, paired: boolean) => void): number => {
@@ -808,6 +883,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         o.categoryReason = `Moved with your change to ${cleanMerchant(t.merchant)}`;
         change.moved++;
       }
+      followCharges([id]);
       return change;
     },
     async acceptSuggestions(ids) {
@@ -891,6 +967,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
           n++;
         }
       }
+      followCharges(ids);
       return n;
     },
     async saveRule(rule) {
@@ -1160,12 +1237,21 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async updateRecurring(id, rule) {
       const r = saved.find((x) => x.id === id);
       if (!r) throw new Error('not_found');
-      Object.assign(r, rule, { pattern: rule.pattern.trim().toLowerCase() });
+      Object.assign(r, rule, {
+        pattern: rule.pattern.trim().toLowerCase(),
+        alsoMatches: cleanNames(rule.alsoMatches ?? []),
+        paidBackBy: rule.paidBackBy == null ? null : cleanNames(rule.paidBackBy),
+      });
       return rematchRecurring(id);
     },
     async setRecurringStatus(id, status) {
       const r = saved.find((x) => x.id === id);
       if (r) r.status = status;
+    },
+    async setRecurringPaidBackBy(id, names) {
+      const r = saved.find((x) => x.id === id);
+      if (!r) throw new Error('not_found');
+      r.paidBackBy = names == null ? null : cleanNames(names);
     },
     async deleteRecurring(id) {
       for (const t of transactions) if (t.recurringId === id) t.recurringId = null;
@@ -1334,6 +1420,26 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       const bills = saved
         .filter((b) => b.status !== 'archived')
         .sort((a, b) => a.createdOn.localeCompare(b.createdOn) || a.id - b.id);
+      // Mirrors `price_changes::renamed`: one subscription whose statement name changed.
+      const GENERIC = new Set(['platinum', 'gold', 'amex', 'american', 'express', 'card', 'credit', 'statement', 'the', 'com', 'inc', 'www', 'pos', 'ach', 'llc', 'new']);
+      const words = (b: SavedRecurring) => `${b.name} ${b.pattern}`.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !GENERIC.has(w));
+      const related = (a: SavedRecurring, b: SavedRecurring) =>
+        words(a).some((x) => words(b).some((y) => x === y || (Math.min(x.length, y.length) >= 5 && (x.startsWith(y) || y.startsWith(x)))));
+      const renamed = (a: SavedRecurring, b: SavedRecurring) => {
+        if (a.frequency !== b.frequency) return false;
+        const of = (id: number) => transactions.filter((t) => t.recurringId === id && isCandidate(t)).sort((x, y) => x.postedOn.localeCompare(y.postedOn));
+        const [ca, cb] = [of(a.id), of(b.id)];
+        if (!ca.length || !cb.length) return false;
+        const [aFirst, aLast, bFirst, bLast] = [ca[0].postedOn, ca.at(-1)!.postedOn, cb[0].postedOn, cb.at(-1)!.postedOn];
+        const gap = aLast < bFirst ? [aLast, bFirst] : bLast < aFirst ? [bLast, aFirst] : null;
+        if (!gap || gap[1] > nextAfter(a.frequency, nextAfter(a.frequency, gap[0]))) return false;
+        const median = (cs: Transaction[]) => cs.map((t) => -t.amountCents).sort((x, y) => x - y)[Math.floor(cs.length / 2)];
+        const [ma, mb] = [median(ca), median(cb)];
+        const samePrice = Math.abs(ma - mb) * 20 <= Math.max(ma, mb);
+        const d = a.dayOfMonth != null && b.dayOfMonth != null ? Math.abs(a.dayOfMonth - b.dayOfMonth) : null;
+        const sameDay = d != null && Math.min(d, 31 - d) <= 3;
+        return related(a, b) || (samePrice && sameDay);
+      };
       const fitsChargesOf = (rule: SavedRecurring, other: SavedRecurring) =>
         transactions.some((t) => t.recurringId === other.id && isCandidate(t) && nameFits(rule, t));
       const out: [number, number][] = [];
@@ -1341,7 +1447,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         for (const b of bills.slice(i + 1)) {
           if (apart.includes(`${Math.min(a.id, b.id)}:${Math.max(a.id, b.id)}`)) continue;
           const sameMerchant = a.matchKind === 'merchant' && b.matchKind === 'merchant' && a.pattern === b.pattern;
-          if (sameMerchant || fitsChargesOf(a, b) || fitsChargesOf(b, a)) out.push([a.id, b.id]);
+          if (sameMerchant || renamed(a, b) || fitsChargesOf(a, b) || fitsChargesOf(b, a)) out.push([a.id, b.id]);
         }
       });
       return out;
@@ -1359,16 +1465,23 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       if (otherNewer) {
         const { minCents, maxCents } = keep;
         [keep.minCents, keep.maxCents, keep.dayOfMonth] = [other.minCents, other.maxCents, other.dayOfMonth];
-        const to = -otherLast.amountCents;
-        if (keepLast && (to < minCents || to > maxCents)) {
-          const changedOn = transactions
-            .filter((t) => t.recurringId === other.id && t.postedOn > keepLast.postedOn)
-            .map((t) => t.postedOn)
-            .sort()[0];
-          prices.push({ id: nextPriceId++, recurringId: keep.id, changedOn, fromCents: -keepLast.amountCents, toCents: to });
+        // Mirrors `price_changes::merge`: compare at the hand-over, the kept bill's last price against the other's
+        // first charge after it; later changes are the other bill's own history.
+        const seam = keepLast
+          ? transactions
+              .filter((t) => t.recurringId === other.id && t.postedOn > keepLast.postedOn)
+              .sort((a, b) => a.postedOn.localeCompare(b.postedOn) || a.id - b.id)[0]
+          : undefined;
+        if (keepLast && seam && (-seam.amountCents < minCents || -seam.amountCents > maxCents)) {
+          prices.push({ id: nextPriceId++, recurringId: keep.id, changedOn: seam.postedOn, fromCents: -keepLast.amountCents, toCents: -seam.amountCents });
         }
       }
       if (other.status === 'active') keep.status = 'active';
+      // The kept bill answers to every name either had, and keeps whichever credits pay it back.
+      const also = [...keep.alsoMatches, ...(other.matchKind === keep.matchKind ? [other.pattern, ...other.alsoMatches] : [])];
+      keep.alsoMatches = cleanNames(also).filter((n) => n !== keep.pattern.trim().toLowerCase());
+      keep.paidBackBy =
+        keep.paidBackBy && other.paidBackBy ? cleanNames([...keep.paidBackBy, ...other.paidBackBy]) : (keep.paidBackBy ?? other.paidBackBy);
       for (const t of transactions) if (t.recurringId === other.id) t.recurringId = keep.id;
       for (const c of checks) if (c.recurringId === other.id) c.recurringId = keep.id;
       for (const p of prices) if (p.recurringId === other.id) p.recurringId = keep.id;

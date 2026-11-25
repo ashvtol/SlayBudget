@@ -62,6 +62,8 @@ impl Db {
                 max_cents: 3000,
                 frequency: Cadence::Monthly,
                 day_of_month: Some(5),
+                also_matches: Vec::new(),
+                paid_back_by: None,
             },
         )
         .unwrap()

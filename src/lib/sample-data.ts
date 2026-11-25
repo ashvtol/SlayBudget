@@ -87,6 +87,11 @@ const MONTHLY: [string, number, number, number, number, number][] = [
   ['Netflix', 701, 15, -1799, 1, 0],
   ['Hulu', 701, 9, -1199, 1, 0],
   ['Spectrum', 104, 16, -6000, 3, 0],
+  // Paid back by the card two days later: Recurrings asks "Do they pay it back?".
+  ['Walmart+', 301, 22, -1295, 1, 0],
+  ['Amex Walmart+ Credit', 301, 24, 1295, 1, 0],
+  // Renamed on the statement halfway through (below): Recurrings suggests merging HBO Max and Max.
+  ['HBO Max', 701, 12, -1599, 1, 0],
   ['Paycheck', 901, 1, 395000, 3, 0],
   ['Paycheck', 901, 15, 395000, 3, 0],
   ['Interest Payment', 902, 28, 4200, 3, 600],
@@ -160,6 +165,15 @@ export function sampleSeed(today: Date = new Date()): MemoryIpcSeed {
       // A few recent ones arrive uncategorized so "needs category" shows up.
       const uncategorized = d >= reviewCutoff && rand() < 0.2;
       push(d, merchant, uncategorized ? null : categoryId, cents, source);
+    }
+  }
+
+  // HBO Max became Max six months ago: the same subscription under a new statement name.
+  const renamedOn = iso(new Date(end.getFullYear(), end.getMonth() - 5, 1));
+  for (const t of txs) {
+    if (t.merchant === 'HBO Max' && t.postedOn >= renamedOn) {
+      t.merchant = 'Max';
+      t.description = t.description.replace('HBO MAX', 'MAX');
     }
   }
 

@@ -44,11 +44,12 @@ const MIGRATIONS: &[(i64, &str)] = &[
         17,
         include_str!("../../migrations/0017_every_few_years.sql"),
     ),
+    (18, include_str!("../../migrations/0018_bill_credits.sql")),
 ];
 
-/// Migration 16 rewrites how every category is tracked, and 17 changes the recurrings table:
+/// Migration 16 rewrites how every category is tracked, and 17 and 18 change the recurrings table:
 /// the database is copied beside itself first.
-const BACKUP_BEFORE: i64 = 17;
+const BACKUP_BEFORE: i64 = 18;
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
 pub fn open_db(path: &Path) -> Result<Connection> {
@@ -62,8 +63,10 @@ pub fn open_db(path: &Path) -> Result<Connection> {
         let stamp = chrono::Utc::now().format("%Y%m%d-%H%M%S").to_string();
         let label = if current < 16 {
             "smart-categorization"
-        } else {
+        } else if current < 17 {
             "every-few-years"
+        } else {
+            "bill-credits"
         };
         backup_before(&conn, label, &stamp)?;
     }
@@ -75,6 +78,8 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     crate::profiles::backfill_institutions(&conn)?;
     crate::categories::fill_missing_emojis(&conn)?;
     crate::recurrings::seed_if_needed(&conn)?;
+    // Charges an earlier version's rules skipped join their bills now.
+    crate::recurrings::link_unlinked(&conn)?;
     Ok(conn)
 }
 

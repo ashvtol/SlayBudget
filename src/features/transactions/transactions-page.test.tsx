@@ -60,6 +60,16 @@ describe('TransactionsPage', () => {
     expect(within(details()).getByRole('button', { name: 'Review' })).toBeInTheDocument();
   });
 
+  it('opens the transaction another screen asked for on the first visit, while the page loads too', async () => {
+    setIpc(createMemoryIpc(seed));
+    useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0, focused: null });
+    useProfileStore.setState({ profiles: [], activeProfileId: null });
+    const asked = useTransactionsStore.getState().focusById(2);
+    render(<TransactionsPage />);
+    await asked;
+    expect(await within(details()).findByRole('heading', { name: 'Shell' })).toBeInTheDocument();
+  });
+
   it('opens the transaction a notification points at, even after you clicked another row', async () => {
     const user = userEvent.setup();
     await renderPage();

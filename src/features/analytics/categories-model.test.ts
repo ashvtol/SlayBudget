@@ -138,7 +138,7 @@ describe('buildCategories top-level categories', () => {
 describe('expected bills this month', () => {
   const bill = (categoryId: number, nextDate: string, status: 'active' | 'paused', typicalAmountCents = 5000): Recurring => ({
     merchant: 'bill', categoryId, typicalAmountCents, cadence: 'monthly', lastDate: '2026-10-25', nextDate, occurrences: 3,
-    saved: { id: categoryId, name: 'Bill', categoryId, matchKind: 'merchant', pattern: 'bill', minCents: 0, maxCents: 9999, frequency: 'monthly', dayOfMonth: 25, status, createdOn: '2026-01-01' },
+    saved: { id: categoryId, name: 'Bill', categoryId, matchKind: 'merchant', pattern: 'bill', minCents: 0, maxCents: 9999, frequency: 'monthly', dayOfMonth: 25, status, createdOn: '2026-01-01', alsoMatches: [], paidBackBy: null },
   });
 
   it('counts active unpaid bills due this month as expected, and subtracts them from what is left', () => {

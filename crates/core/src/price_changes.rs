@@ -77,10 +77,11 @@ pub fn detect(conn: &Connection) -> Result<usize> {
         .filter(|c| c.recurring_id.is_none())
     {
         let size = -c.amount_cents;
-        let Some(bill) = bills
-            .iter()
-            .find(|b| recurrings::name_fits(b, &c) && (size < b.min_cents || size > b.max_cents))
-        else {
+        let Some(bill) = bills.iter().find(|b| {
+            recurrings::name_fits(b, &c)
+                && recurrings::payee_fits(b, &c)
+                && (size < b.min_cents || size > b.max_cents)
+        }) else {
             continue;
         };
         let last = last_charge(conn, bill.id)?;
@@ -305,12 +306,102 @@ pub fn look_alikes(conn: &Connection) -> Result<Vec<(i64, i64)>> {
             let same_merchant = a.match_kind == MatchKind::Merchant
                 && b.match_kind == MatchKind::Merchant
                 && a.pattern == b.pattern;
-            if same_merchant || fits_charges_of(a, b) || fits_charges_of(b, a) {
+            let renamed = renamed(a, b, &charges);
+            if same_merchant || renamed || fits_charges_of(a, b) || fits_charges_of(b, a) {
                 out.push((a.id, b.id));
             }
         }
     }
     Ok(out)
+}
+
+/// Words that say nothing about which subscription it is.
+const GENERIC_WORDS: [&str; 16] = [
+    "platinum",
+    "gold",
+    "amex",
+    "american",
+    "express",
+    "card",
+    "credit",
+    "statement",
+    "the",
+    "com",
+    "inc",
+    "www",
+    "pos",
+    "ach",
+    "llc",
+    "new",
+];
+
+fn name_words(s: &SavedRecurring) -> Vec<String> {
+    format!("{} {}", s.name, s.pattern)
+        .to_lowercase()
+        .split(|c: char| !c.is_ascii_alphabetic())
+        .filter(|w| w.len() >= 3 && !GENERIC_WORDS.contains(w))
+        .map(str::to_string)
+        .collect()
+}
+
+/// "Claude" in both, or "youtube" and "youtubepremi" (a statement cut short).
+fn names_related(a: &SavedRecurring, b: &SavedRecurring) -> bool {
+    let (wa, wb) = (name_words(a), name_words(b));
+    wa.iter().any(|x| {
+        wb.iter().any(|y| {
+            x == y
+                || (x.len().min(y.len()) >= 5
+                    && (x.starts_with(y.as_str()) || y.starts_with(x.as_str())))
+        })
+    })
+}
+
+/// One subscription whose statement name changed: the same frequency, one bill's charges ending before the other's
+/// start (within two billing periods), and either related names or the same price (within 5%) on the same day.
+fn renamed(
+    a: &SavedRecurring,
+    b: &SavedRecurring,
+    charges: &HashMap<i64, Vec<recurrings::Candidate>>,
+) -> bool {
+    if a.frequency != b.frequency {
+        return false;
+    }
+    let (Some(ca), Some(cb)) = (charges.get(&a.id), charges.get(&b.id)) else {
+        return false;
+    };
+    let span = |cs: &[recurrings::Candidate]| {
+        let first = cs.iter().map(|c| c.posted_on).min();
+        let last = cs.iter().map(|c| c.posted_on).max();
+        first.zip(last)
+    };
+    let (Some((a_first, a_last)), Some((b_first, b_last))) = (span(ca), span(cb)) else {
+        return false;
+    };
+    let (earlier_last, later_first) = if a_last < b_first {
+        (a_last, b_first)
+    } else if b_last < a_first {
+        (b_last, a_first)
+    } else {
+        return false; // both running at once: two subscriptions
+    };
+    if later_first > a.frequency.next_after(a.frequency.next_after(earlier_last)) {
+        return false;
+    }
+    let median = |cs: &[recurrings::Candidate]| {
+        let mut xs: Vec<i64> = cs.iter().map(|c| -c.amount_cents).collect();
+        xs.sort_unstable();
+        xs[xs.len() / 2]
+    };
+    let (ma, mb) = (median(ca), median(cb));
+    let same_price = (ma - mb).abs() * 20 <= ma.max(mb);
+    let same_day = match (a.day_of_month, b.day_of_month) {
+        (Some(x), Some(y)) => {
+            let d = (x as i64 - y as i64).abs();
+            d.min(31 - d) <= 3
+        }
+        _ => false,
+    };
+    names_related(a, b) || (same_price && same_day)
 }
 
 /// "Not the same subscription": never suggest merging these two.
@@ -343,17 +434,24 @@ pub fn merge(conn: &Connection, a: i64, b: i64) -> Result<i64> {
                 "UPDATE recurrings SET min_cents = ?1, max_cents = ?2, day_of_month = ?3 WHERE id = ?4",
                 params![other.min_cents, other.max_cents, other.day_of_month, keep.id],
             )?;
-            if let (Some((since, from)), Some((_, to))) = (&keep_last, &other_last) {
-                if *to < keep.min_cents || *to > keep.max_cents {
-                    let changed_on: String = c.query_row(
-                        "SELECT MIN(posted_on) FROM transactions WHERE recurring_id = ?1 AND posted_on > ?2",
+            // Where one bill hands over to the other: the kept bill's last price against the other's first charge
+            // after it. Later changes are the other bill's own history, which moves over below.
+            if let Some((since, from)) = &keep_last {
+                let seam: Option<(String, i64)> = c
+                    .query_row(
+                        "SELECT posted_on, -amount_cents FROM transactions WHERE recurring_id = ?1 AND posted_on > ?2
+                         ORDER BY posted_on, id LIMIT 1",
                         params![other.id, since],
-                        |r| r.get(0),
-                    )?;
-                    c.execute(
-                        "INSERT INTO recurring_prices (recurring_id, changed_on, from_cents, to_cents) VALUES (?1, ?2, ?3, ?4)",
-                        params![keep.id, changed_on, from, to],
-                    )?;
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )
+                    .optional()?;
+                if let Some((changed_on, to)) = seam {
+                    if to < keep.min_cents || to > keep.max_cents {
+                        c.execute(
+                            "INSERT INTO recurring_prices (recurring_id, changed_on, from_cents, to_cents) VALUES (?1, ?2, ?3, ?4)",
+                            params![keep.id, changed_on, from, to],
+                        )?;
+                    }
                 }
             }
         }
@@ -363,6 +461,26 @@ pub fn merge(conn: &Connection, a: i64, b: i64) -> Result<i64> {
                 [keep.id],
             )?;
         }
+        // The kept bill answers to every name either had, and keeps whichever credits pay it back.
+        let mut also = keep.also_matches.clone();
+        if other.match_kind == keep.match_kind {
+            also.push(other.pattern.clone());
+            also.extend(other.also_matches.iter().cloned());
+        }
+        also.retain(|n| n.trim().to_lowercase() != keep.pattern.trim().to_lowercase());
+        let credits = match (&keep.paid_back_by, &other.paid_back_by) {
+            (Some(k), Some(o)) => Some(k.iter().chain(o).cloned().collect::<Vec<_>>()),
+            (Some(k), None) => Some(k.clone()),
+            (None, o) => o.clone(),
+        };
+        c.execute(
+            "UPDATE recurrings SET also_names = ?1, credit_names = ?2 WHERE id = ?3",
+            params![
+                recurrings::join_names(&also),
+                credits.as_deref().map(recurrings::join_names),
+                keep.id
+            ],
+        )?;
         for table in ["transactions", "price_checks", "recurring_prices"] {
             c.execute(
                 &format!("UPDATE {table} SET recurring_id = ?1 WHERE recurring_id = ?2"),

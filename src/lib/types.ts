@@ -311,12 +311,18 @@ export interface NewRecurring {
   frequency: Cadence;
   /** Expected day of the month (±3 days); null = any day. */
   dayOfMonth: number | null;
+  /** Other names it matches the same way (its statement name changed over time). */
+  alsoMatches?: string[];
+  /** Names of credits that pay it back; null = never decided, [] = not paid back. */
+  paidBackBy?: string[] | null;
 }
 
 export interface SavedRecurring extends NewRecurring {
   id: number;
   status: RecurringStatus;
   createdOn: string;
+  alsoMatches: string[];
+  paidBackBy: string[] | null;
 }
 
 export interface MatchReport {

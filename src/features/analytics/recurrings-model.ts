@@ -3,6 +3,7 @@
 
 import type { Recurring, Transaction } from '@/lib/types';
 import { cleanMerchant } from '@/lib/merchant';
+import { pairAcrossBills } from '@/features/recurrings/bill-credits';
 
 export type MonthState = 'paid' | 'missed' | 'upcoming' | 'none';
 
@@ -16,8 +17,12 @@ export interface RecurringItem {
   charges: Transaction[];
   rules: { name: string; minCents: number; maxCents: number; cadence: string; day: number | null };
   timeline: { month: string; state: MonthState }[];
-  years: { year: number; spendCents: number; avgChargeCents: number }[];
+  years: { year: number; spendCents: number; avgChargeCents: number; creditedCents: number }[];
   lastSourceId: number | null;
+  /** Credits that paid charges back: charge id to credit (bills "paid back by" a credit). */
+  credits: Map<number, Transaction>;
+  /** Whether its latest charge came back in full, in part, or not at all (null: not paid back). */
+  credited: 'full' | 'partial' | null;
 }
 
 export interface RecurringsModel {
@@ -73,11 +78,24 @@ export function buildRecurrings(input: {
   const thisMonthKey = `${y}-${pad(m)}`;
   const frequent = (r: Recurring) => r.cadence === 'weekly' || r.cadence === 'biweekly' || r.cadence === 'monthly';
 
-  const allItems: RecurringItem[] = recurring.map((r) => {
-    const charges = transactions
+  const chargesOf = (r: Recurring) =>
+    transactions
       .filter((t) => (r.saved ? t.recurringId === r.saved.id : t.merchant === r.merchant) && t.amountCents < 0 && t.postedOn <= today)
       .sort((a, b) => b.postedOn.localeCompare(a.postedOn) || b.id - a.id);
+  // Credits are paired across every bill at once, so one shared by several bills counts for one charge only.
+  const paidBack = pairAcrossBills(
+    recurring.flatMap((r) => (r.saved?.paidBackBy?.length ? [{ id: r.saved.id, names: r.saved.paidBackBy, charges: chargesOf(r) }] : [])),
+    transactions.filter((t) => t.amountCents > 0 && t.postedOn <= today),
+  );
+
+  const allItems: RecurringItem[] = recurring.map((r) => {
+    const charges = chargesOf(r);
     const paidThisMonth = charges.find((t) => t.postedOn.startsWith(thisMonthKey));
+    const credits = new Map(charges.flatMap((c) => (paidBack.has(c.id) ? [[c.id, paidBack.get(c.id)!] as const] : [])));
+    const backOn = (t: Transaction) => credits.get(t.id)?.amountCents ?? 0;
+    const latestBack = charges[0] ? backOn(charges[0]) : 0;
+    const credited: RecurringItem['credited'] =
+      credits.size === 0 ? null : latestBack >= -(charges[0]?.amountCents ?? 0) ? 'full' : latestBack > 0 ? 'partial' : null;
     const months = new Set(charges.map((t) => t.postedOn.slice(0, 7)));
     const firstMonth = charges.length ? charges[charges.length - 1].postedOn.slice(0, 7) : null;
     const lastMonth = charges.length ? charges[0].postedOn.slice(0, 7) : null;
@@ -100,7 +118,8 @@ export function buildRecurrings(input: {
     const years = [y, y - 1].map((year) => {
       const inYear = charges.filter((t) => t.postedOn.startsWith(String(year)));
       const spendCents = inYear.reduce((s, t) => s - t.amountCents, 0);
-      return { year, spendCents, avgChargeCents: inYear.length ? Math.round(spendCents / inYear.length) : 0 };
+      const creditedCents = inYear.reduce((s, t) => s + backOn(t), 0);
+      return { year, spendCents, avgChargeCents: inYear.length ? Math.round(spendCents / inYear.length) : 0, creditedCents };
     });
 
     return {
@@ -121,6 +140,8 @@ export function buildRecurrings(input: {
       timeline,
       years,
       lastSourceId: charges[0]?.sourceId ?? null,
+      credits,
+      credited,
     };
   });
 
@@ -137,8 +158,11 @@ export function buildRecurrings(input: {
 
   return {
     summary: {
-      leftToPayCents: thisMonth.filter((i) => !i.paid).reduce((s, i) => s + i.recurring.typicalAmountCents, 0),
-      paidCents: thisMonth.filter((i) => i.paid).reduce((s, i) => s - (i.charges[0]?.amountCents ?? 0), 0),
+      // A bill that comes back in full costs nothing; what came back comes off what you paid.
+      leftToPayCents: thisMonth.filter((i) => !i.paid && i.credited !== 'full').reduce((s, i) => s + i.recurring.typicalAmountCents, 0),
+      paidCents: thisMonth
+        .filter((i) => i.paid)
+        .reduce((s, i) => s - (i.charges[0]?.amountCents ?? 0) - (i.charges[0] ? (i.credits.get(i.charges[0].id)?.amountCents ?? 0) : 0), 0),
     },
     thisMonth,
     future,

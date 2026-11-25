@@ -129,6 +129,7 @@ pub fn apply(conn: &Connection, ids: &[TransactionId], category_id: i64) -> Resu
         ),
         params_from_iter(args),
     )?;
+    crate::recurrings::follow_charges(&tx, ids)?;
     tx.commit()?;
     Ok(n)
 }
@@ -214,6 +215,8 @@ pub fn change_category(conn: &Connection, id: TransactionId, category_id: i64) -
         )?;
     }
     change.suggested = similar.len();
+    // The merchant's other rows moved: the bill follows its (possibly moved) latest charge.
+    crate::recurrings::follow_charges(conn, &[id])?;
     Ok(change)
 }
 
@@ -268,6 +271,7 @@ pub fn set_only(conn: &Connection, id: TransactionId, category_id: i64) -> Resul
     let account = crate::accounts::account_kind(conn, t.source_id)?;
     let f = super::model::features(&t.description, &t.merchant, t.amount_cents, account);
     super::model::train(conn, &f, category_id, 3.0)?;
+    crate::recurrings::follow_charges(conn, &[id])?;
     Ok(())
 }
 

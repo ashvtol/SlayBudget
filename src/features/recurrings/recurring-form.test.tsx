@@ -2,6 +2,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RecurringForm } from './recurring-form';
+import { createMemoryIpc, ipc, setIpc } from '@/lib/ipc';
 
 afterEach(() => cleanup());
 
@@ -66,5 +67,27 @@ describe('RecurringForm frequency', () => {
     await user.selectOptions(frequency, 'Every 3 years');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ frequency: 'triennial' }));
+  });
+});
+
+describe('RecurringForm duplicates', () => {
+  it('warns before saving a new bill with the same rule as one you already have', async () => {
+    const user = userEvent.setup();
+    setIpc(createMemoryIpc({}));
+    await ipc().createRecurring({ ...initial, name: 'Netflix Premium', pattern: 'NETFLIX' });
+    render(<RecurringForm initial={initial} categories={[]} preview onSave={async () => {}} onCancel={() => {}} />);
+    expect(await screen.findByText('You already have Netflix Premium with this rule. Saving makes a second bill.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled();
+    await user.clear(screen.getByLabelText('Match text'));
+    await user.type(screen.getByLabelText('Match text'), 'hulu');
+    expect(screen.queryByText(/You already have/)).not.toBeInTheDocument();
+  });
+
+  it('does not warn when editing a bill', async () => {
+    setIpc(createMemoryIpc({}));
+    await ipc().createRecurring(initial);
+    render(<RecurringForm initial={initial} categories={[]} onSave={async () => {}} onCancel={() => {}} />);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.queryByText(/You already have/)).not.toBeInTheDocument();
   });
 });

@@ -20,6 +20,7 @@ import { displayMerchant, TransactionRow, TransferPill } from './transaction-row
 import { similarTransactions } from './similar';
 import { Modal, RecurringForm } from '@/features/recurrings/recurring-form';
 import { displayName } from '@/features/analytics/recurrings-model';
+import { creditsFrom } from '@/features/recurrings/bill-credits';
 import { txTypeOf } from '@/lib/tx-type';
 import type { TxType } from '@/lib/types';
 
@@ -497,12 +498,70 @@ function PriceCheckFor({ tx }: { tx: Transaction }) {
   );
 }
 
+/** Money in: which bill this credit pays back (a card's statement credit for a subscription), or link it to one. */
+function PaysBackField({ tx }: { tx: Transaction }) {
+  const recurringsById = useTransactionsStore((s) => s.recurringsById);
+  const applyFilter = useTransactionsStore((s) => s.applyFilter);
+  const [picking, setPicking] = useState(false);
+  const bills = Object.values(recurringsById).filter((r) => r.saved && r.saved.status !== 'archived');
+  const paysBack = bills.filter((r) => creditsFrom([tx], r.saved!.paidBackBy ?? []).length > 0);
+  const name = tx.merchant.trim().toLowerCase();
+  const setNames = async (id: number, names: string[]) => {
+    await ipc().setRecurringPaidBackBy(id, names);
+    await applyFilter({});
+  };
+  return (
+    <div>
+      <FieldLabel>Recurring</FieldLabel>
+      {paysBack.length > 0 ? (
+        <div className="flex items-center gap-3 text-[13px]">
+          <span className="font-semibold">Pays back {paysBack.map(displayName).join(', ')}</span>
+          <Button
+            onClick={() =>
+              void Promise.all(paysBack.map((r) => setNames(r.saved!.id, (r.saved!.paidBackBy ?? []).filter((n) => creditsFrom([tx], [n]).length === 0))))
+            }
+          >
+            Not a payback
+          </Button>
+        </div>
+      ) : (
+        bills.length > 0 && <Button onClick={() => setPicking(true)}>Pays back a bill</Button>
+      )}
+      {picking && (
+        <Modal label="Pays back a bill" onClose={() => setPicking(false)}>
+          <div className="flex flex-col gap-1">
+            <p className="m-0 mb-2 text-[12px]" style={{ color: 'var(--muted)' }}>
+              Credits named {displayMerchant(tx)} will be shown with this bill's charges.
+            </p>
+            {bills
+              .sort((a, b) => displayName(a).localeCompare(displayName(b)))
+              .map((r) => (
+                <button
+                  key={r.saved!.id}
+                  type="button"
+                  onClick={() => {
+                    setPicking(false);
+                    void setNames(r.saved!.id, [...(r.saved!.paidBackBy ?? []), name]);
+                  }}
+                  className="rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-[var(--hover)]"
+                >
+                  {displayName(r)}
+                </button>
+              ))}
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 /** Which recurring bill this charge belongs to, with "Not recurring"; or "Make recurring". */
 function RecurringField({ tx }: { tx: Transaction }) {
   const recurring = useTransactionsStore((s) => (tx.recurringId != null ? s.recurringsById[tx.recurringId] : undefined));
   const categoriesById = useTransactionsStore((s) => s.categoriesById);
   const applyFilter = useTransactionsStore((s) => s.applyFilter);
   const [draft, setDraft] = useState<NewRecurring | null>(null);
+  if (tx.amountCents > 0 && txTypeOf(tx) !== 'transfer') return <PaysBackField tx={tx} />;
   return (
     <div>
       <FieldLabel>Recurring</FieldLabel>

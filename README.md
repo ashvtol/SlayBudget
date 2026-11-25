@@ -55,7 +55,7 @@ on your own computer, this is it.
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories, upcoming bills, and tips with your savings rate against your goal. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
 | 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. |
-| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. Bills can repeat weekly up to every 4 years, for subscriptions bought 2, 3 or 4 years at a time. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription can be merged. |
+| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. Bills can repeat weekly up to every 4 years, for subscriptions bought 2, 3 or 4 years at a time. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription are suggested for merging, including one whose statement name changed (HBO Max, then Max), with an ⓘ to compare them side by side. A bill that's paid back by a card's statement credit (Walmart+ refunded by Amex, say) shows each charge with its credit, "Fully credited" or "Partly credited", and what it actually cost you; SlayBudget finds those credits and asks "Do they pay it back?", even when one credit is shared by several bills. Charges join their bill even off the usual day, a price drop or rise shows an arrow, payment apps (Venmo, Zelle) match the person paid, and a bill follows its charges' category. |
 | 🗺️ **Insights** | An interactive spending map for any time range: drill from category to merchant and see what grew. Below it, Your money habits looks at all your history (see the next row). |
 | 🔥 **Your money habits** | Pick a money style, **FIRE** (Financial Independence, Retire Early) or **Soft saving**, and see your savings rate, your FI number (25 times a year of spending) and roughly how many years to independence, worked out from all your history. A suggested budget, next to the budgets you have now (↓ lower, ↑ raise), trims flexible spending toward a savings target you choose (needs and bills stay as they are, and you can leave any category out, or all of them, with the header checkbox); apply it in one click and ⌘Z takes it back. Tips cover the 50/30/20 split, an emergency fund target, spending that grew faster than income, what subscriptions cost a year, small purchases that add up, no-spend days and paying yourself first. Hide any tip; it comes back if its numbers change a lot. Mark categories as Essential to tell needs from wants. Rules of thumb, not financial advice. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
@@ -147,6 +147,15 @@ on your own computer, this is it.
 
 ### A subscription changed price? Asked once
 ![SlayBudget Recurrings page with Equinox selected, asking "Is this Equinox at a new price? It was $55.00, this is $89.00 (+62%)" with Yes, new price, No, a one-off and A separate subscription](docs/screenshots/price-change.png)
+
+### Subscriptions paid back by a card credit
+![SlayBudget Recurrings page with Walmart+ selected: Fully credited, a Paid back by Amex Walmart+ Credit rule, Key metrics with Credited and Cost you columns at $0.00, and each charge followed by its credit two days later](docs/screenshots/paid-back.png)
+
+**SlayBudget finds the credits and asks first; the ⓘ shows each charge beside its credit**
+![SlayBudget asking "Credits from Amex Walmart+ Credit match 14 Walmart+ charges. Do they pay it back?" with the matching charges and credits listed by date, each marked Full](docs/screenshots/paid-back-ask.png)
+
+### A subscription renamed on your statement? Suggested for merging
+![SlayBudget suggesting "HBO Max and Max look like the same subscription. Merge them?" with the two bills compared side by side: the same amount, frequency, due day and category, one ending in May and the other starting after](docs/screenshots/renamed-merge.png)
 
 ### Your money habits: FIRE or Soft saving, a suggested budget and tips
 ![SlayBudget Insights showing Your money habits: the FIRE style with a 50% savings rate, an FI number and about 17 years to independence, a suggested budget trimming flexible categories toward a 60% target, and tips about an emergency fund, subscriptions, a coffee habit and no-spend days](docs/screenshots/money-habits.png)
@@ -342,8 +351,20 @@ Yes. A saved bill claims charges near its usual amount. When a charge from the s
 below that (an upgrade, a downgrade, a new plan), SlayBudget asks once: "Is this Netflix at a new price?" Say **Yes,
 new price** and the bill follows the new amount and due day, keeping a price history; **No, a one-off** leaves the
 bill alone; **A separate subscription** makes it its own bill. The question shows on the charge, on the bill in
-Recurrings and in the bell. If you end up with two bills for the same subscription, Recurrings offers to merge them
-(⌘Z undoes it).
+Recurrings and in the bell. If you end up with two bills for the same subscription, including one whose name changed
+on your statement, Recurrings offers to merge them (⌘Z undoes it); the merged bill keeps every name.
+</details>
+
+<details>
+<summary><b>A card pays back one of my subscriptions. Can SlayBudget show that?</b></summary>
+
+Yes. When credits from one name keep matching a bill's charges (the same amount within 10 days, or part of a
+purchase on the same day, like a store credit with each order), Recurrings asks "Do they pay it back?" The ⓘ beside it lists
+each charge with the credit that matched it. Say **Link**, or set **Paid back by** in the bill's rules, or open the
+credit and choose **Pays back a bill**. The bill stays in your list with a **Credited** tag, each charge shows its
+credit even when it lands on another day, and Key metrics show what was credited and what it cost you. One credit can
+pay back several bills (a monthly entertainment credit split between two streaming services): each piece counts once, for
+the nearest charge. A bill that comes back in full doesn't count toward "left to pay".
 </details>
 
 <details>
@@ -432,13 +453,14 @@ src-tauri     The Tauri app shell and commands
 src           The React UI
 ```
 
-Money is stored as integer cents, never as floating point. Design decisions live in `SPEC.md`, `CONSTRAINTS.md` and
-`docs/adr/`.
+Money is stored as integer cents, never as floating point. [ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces
+fit and when each rule runs; design decisions live in `SPEC.md`, `CONSTRAINTS.md` and `docs/adr/`.
 
 ## Contributing
 
 Contributions are welcome: new bank importers, features and fixes. Start with
-[CONTRIBUTING.md](CONTRIBUTING.md), and run `npm run check` before opening a pull request.
+[CONTRIBUTING.md](CONTRIBUTING.md) and [ARCHITECTURE.md](ARCHITECTURE.md), and run `npm run check` before opening a pull
+request.
 
 If SlayBudget helps you, **please ⭐ star the repo**. It helps other people find a private, free budgeting app.
 

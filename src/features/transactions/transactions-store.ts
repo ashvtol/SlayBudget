@@ -179,6 +179,8 @@ export const useTransactionsStore = create<TransactionsState>((set, get) => ({
   },
 
   async focusById(id) {
+    // Asked for now: on a first visit the page's own load can land after ours, and the row still shows.
+    set({ focused: id });
     const locate = () => get().orderedTransactions().findIndex((t) => t.id === id);
     if (locate() === -1) {
       // The row may be filtered out; drop filters so it can be shown.

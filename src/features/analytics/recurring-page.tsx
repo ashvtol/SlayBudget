@@ -17,6 +17,9 @@ import { withGroupColors } from '@/lib/category-colors';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { BillPriceChange, Category, NewRecurring, PriceChange, PriceCheck, Recurring, Source, Transaction } from '@/lib/types';
 import { PriceCheckBox } from '@/features/recurrings/price-check-box';
+import { InfoButton } from '@/features/transactions/statement-box';
+import { openTarget } from '@/features/notifications/route';
+import { suggestPayback, type PaybackSuggestion } from '@/features/recurrings/bill-credits';
 import { formatMoney } from '@/lib/format';
 import { useCurrencyStore } from '@/features/currency/currency-store';
 import { useAnalyticsStore } from './analytics-store';
@@ -50,9 +53,20 @@ interface Source_ {
 /** A price change is highlighted on its bill for this long. */
 const HIGHLIGHT_DAYS = 30;
 const dayNumber = (d: string) => Date.UTC(Number(d.slice(0, 4)), Number(d.slice(5, 7)) - 1, Number(d.slice(8, 10))) / 86_400_000;
-const recentChange = (src: Source_, id: number | undefined, today: string) => {
-  const c = id == null ? undefined : src.changes.find((x) => x.recurringId === id);
-  return c && dayNumber(today) - dayNumber(c.changedOn) <= HIGHLIGHT_DAYS && c.toCents !== c.fromCents ? c : undefined;
+/** A charge this far off the one before shows as a price change, even inside the bill's range. */
+const NOTABLE_CHANGE = 0.1;
+/** The bill's recent price change: one you confirmed, or else its latest charge 10% or more off the one before. */
+const recentChange = (src: Source_, id: number | undefined, today: string): PriceChange | undefined => {
+  if (id == null) return undefined;
+  const recent = (c: PriceChange) => dayNumber(today) - dayNumber(c.changedOn) <= HIGHLIGHT_DAYS && c.toCents !== c.fromCents;
+  const saved = src.changes.find((x) => x.recurringId === id);
+  if (saved && recent(saved)) return saved;
+  const [latest, before] = src.transactions
+    .filter((t) => t.recurringId === id && t.amountCents < 0 && t.postedOn <= today)
+    .sort((a, b) => b.postedOn.localeCompare(a.postedOn) || b.id - a.id);
+  if (!latest || !before) return undefined;
+  const c = { changedOn: latest.postedOn, fromCents: -before.amountCents, toCents: -latest.amountCents };
+  return recent(c) && Math.abs(c.toCents - c.fromCents) >= c.fromCents * NOTABLE_CHANGE ? c : undefined;
 };
 
 function useRecurringSource() {
@@ -160,6 +174,15 @@ export function RecurringPage() {
   useEffect(() => {
     if (intent?.target.kind === 'recurring' && intent.seq === handledIntent) clearIntent();
   }, [intent, handledIntent, clearIntent]);
+  // Bills nobody has said are or aren't paid back, whose charges keep getting matching credits.
+  const paybacks = src
+    ? all.flatMap((i) => {
+        const s = i.recurring.saved;
+        if (!s || s.paidBackBy != null || s.status === 'archived') return [];
+        const hit = suggestPayback(i.charges, src.transactions);
+        return hit ? [{ item: i, id: s.id, ...hit }] : [];
+      })
+    : [];
   const current = all.find((i) => i.key === selected) ?? all[0];
   const saved = current?.recurring.saved ?? null;
 
@@ -223,9 +246,26 @@ export function RecurringPage() {
                 {src.lookAlikes.length > 0 && (
                   <LookAlikes
                     pairs={src.lookAlikes}
-                    names={Object.fromEntries(src.recurring.flatMap((r) => (r.saved ? [[r.saved.id, r.saved.name]] : [])))}
-                    onMerge={(a, b, name) => void act(() => ipc().mergeRecurrings(a, b), `Merged into ${name}.`)}
-                    onKeepApart={(a, b) => void act(() => ipc().keepRecurringsApart(a, b))}
+                    bills={Object.fromEntries(src.recurring.flatMap((r) => (r.saved ? [[r.saved.id, r]] : [])))}
+                    categoriesById={src.categoriesById}
+                    onMerge={(ids, name) =>
+                      void act(async () => {
+                        let kept = ids[0];
+                        for (const other of ids.slice(1)) kept = await ipc().mergeRecurrings(kept, other);
+                      }, `Merged into ${name}.`)
+                    }
+                    onKeepApart={(pairs) =>
+                      void act(async () => {
+                        for (const [a, b] of pairs) await ipc().keepRecurringsApart(a, b);
+                      })
+                    }
+                  />
+                )}
+                {paybacks.length > 0 && (
+                  <PaybackAsk
+                    items={paybacks}
+                    onLink={(id, name) => void act(() => ipc().setRecurringPaidBackBy(id, [name]))}
+                    onDecline={(id) => void act(() => ipc().setRecurringPaidBackBy(id, []))}
                   />
                 )}
                 <BillList title="This month" items={model.thisMonth} src={src} today={today} selected={current} onSelect={setSelected} emptyText="Nothing due this month." />
@@ -342,30 +382,243 @@ function Suggestions({ items, onAdd, onDismiss }: { items: Recurring[]; onAdd: (
   );
 }
 
-/** "These look like the same subscription. Merge them?", for bills that share a name (Recurrings page only). */
+/** Look-alike pairs joined into groups: three copies of one bill are one suggestion, not three. Each group lists its
+ *  bills oldest first (pairs come older first), with the pairs that made it. */
+export function groupLookAlikes(pairs: [number, number][]): { ids: number[]; pairs: [number, number][] }[] {
+  const groupOf = new Map<number, { ids: number[]; pairs: [number, number][] }>();
+  const groups: { ids: number[]; pairs: [number, number][] }[] = [];
+  for (const [a, b] of pairs) {
+    let g = groupOf.get(a) ?? groupOf.get(b);
+    const h = groupOf.get(b);
+    if (!g) {
+      g = { ids: [], pairs: [] };
+      groups.push(g);
+    } else if (h && h !== g) {
+      for (const id of h.ids) {
+        g.ids.push(id);
+        groupOf.set(id, g);
+      }
+      g.pairs.push(...h.pairs);
+      groups.splice(groups.indexOf(h), 1);
+    }
+    for (const id of [a, b]) {
+      if (!groupOf.has(id) || groupOf.get(id) !== g) {
+        if (!g.ids.includes(id)) g.ids.push(id);
+        groupOf.set(id, g);
+      }
+    }
+    g.pairs.push([a, b]);
+  }
+  return groups;
+}
+
+/** "A, B and C". */
+const listNames = (names: string[]) => (names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`);
+
+/** "These look like the same subscription. Merge them?", for bills that share a name (Recurrings page only).
+ *  Look-alikes are grouped, so copies of one bill make one suggestion. An ⓘ lays the bills side by side. */
 function LookAlikes({
   pairs,
-  names,
+  bills,
+  categoriesById,
   onMerge,
   onKeepApart,
 }: {
   pairs: [number, number][];
-  names: Record<number, string>;
-  onMerge: (a: number, b: number, kept: string) => void;
-  onKeepApart: (a: number, b: number) => void;
+  bills: Record<number, Recurring>;
+  categoriesById: Record<number, Category>;
+  onMerge: (ids: number[], kept: string) => void;
+  onKeepApart: (pairs: [number, number][]) => void;
 }) {
+  const [open, setOpen] = useState<string | null>(null);
+  const name = (id: number) => bills[id]?.saved?.name ?? '';
+  const groups = groupLookAlikes(pairs).filter((g) => g.ids.every((id) => bills[id]?.saved));
+  if (groups.length === 0) return null;
   return (
     <section aria-label="Same subscription?" className="flex flex-col gap-2 rounded-[10px] border px-5 py-4" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
-      {pairs.map(([a, b]) => (
-        <div key={`${a}:${b}`} className="flex flex-wrap items-center gap-3 text-[13px]">
-          <span className="min-w-0 flex-1">
-            <b>{names[a]}</b> and <b>{names[b]}</b> look like the same subscription. Merge them?
-          </span>
-          <Button variant="primary" onClick={() => onMerge(a, b, names[a])}>Merge</Button>
-          <Button onClick={() => onKeepApart(a, b)}>Not the same</Button>
+      {groups.map((g) => {
+        const key = g.ids.join(':');
+        const isOpen = open === key;
+        const names = g.ids.map(name);
+        const oneName = new Set(names).size === 1;
+        const message =
+          oneName ? (
+            <>
+              {g.ids.length} bills look like the same subscription: <b>{names[0]}</b>. Merge them?
+            </>
+          ) : (
+            <>
+              {names.map((n, i) => (
+                <span key={g.ids[i]}>
+                  {i > 0 && (i === names.length - 1 ? ' and ' : ', ')}
+                  <b>{n}</b>
+                </span>
+              ))}{' '}
+              look like the same subscription. Merge them?
+            </>
+          );
+        const compareLabel = oneName ? `Compare the ${g.ids.length} ${names[0]} bills` : `Compare ${listNames(names)}`;
+        return (
+          <div key={key} className="flex flex-col gap-2">
+            <div className="flex flex-wrap items-center gap-3 text-[13px]">
+              <span className="min-w-0 flex-1">{message}</span>
+              <InfoButton label={compareLabel} title="Compare the bills" open={isOpen} onToggle={() => setOpen(isOpen ? null : key)} />
+              <Button variant="primary" onClick={() => onMerge(g.ids, names[0])}>Merge</Button>
+              <Button onClick={() => onKeepApart(g.pairs)}>Not the same</Button>
+            </div>
+            {isOpen && (
+              <BillComparison
+                bills={g.ids.map((id) => bills[id])}
+                title={oneName ? `The ${g.ids.length} ${names[0]} bills side by side` : `${listNames(names)} side by side`}
+                categoriesById={categoriesById}
+                onClose={() => setOpen(null)}
+              />
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+/** Bills' rules and history, row by row; rows where every bill agrees are muted, rows that differ stand out. */
+function BillComparison({ bills, title, categoriesById, onClose }: { bills: Recurring[]; title: string; categoriesById: Record<number, Category>; onClose: () => void }) {
+  const currency = useCurrencyStore((s) => s.displayCurrency);
+  const facts = (r: Recurring): [string, string][] => {
+    const s = r.saved!;
+    return [
+      ['Matches', s.matchKind === 'contains' ? `Contains "${s.pattern}"` : `Merchant is "${s.pattern}"`],
+      ['Amount', s.minCents === s.maxCents ? formatMoney(s.minCents, currency) : `${formatMoney(s.minCents, currency)} to ${formatMoney(s.maxCents, currency)}`],
+      ['Frequency', CADENCE_LABEL[s.frequency]],
+      ['Due', s.dayOfMonth == null ? 'Any day' : `The ${ordinalDay(`2000-01-${String(s.dayOfMonth).padStart(2, '0')}`).slice(4)}`],
+      ['Category', s.categoryId == null ? 'None' : (categoriesById[s.categoryId]?.name ?? 'None')],
+      ['Charges', String(r.occurrences)],
+      ['Last charge', r.occurrences > 0 && r.lastDate ? `${longDay(r.lastDate)}, ${formatMoney(r.typicalAmountCents, currency)}` : 'None yet'],
+      ['Status', s.status[0].toUpperCase() + s.status.slice(1)],
+      ['Added', longDay(s.createdOn.slice(0, 10))],
+    ];
+  };
+  const columns = bills.map(facts);
+  return (
+    <div className="relative overflow-x-auto rounded-md border px-3 py-2.5 pr-9" style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}>
+      <button
+        type="button"
+        aria-label="Close comparison"
+        title="Close"
+        onClick={onClose}
+        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"
+        style={{ color: 'var(--subtle)' }}
+      >
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M2 2l6 6M8 2l-6 6" />
+        </svg>
+      </button>
+      <table aria-label={title} className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr>
+            <th className="w-[96px]" />
+            {bills.map((b) => (
+              <th key={b.saved!.id} className="pb-1.5 pr-4 text-left font-semibold">{b.saved!.name}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {columns[0].map(([label], i) => {
+            const same = columns.every((c) => c[i][1] === columns[0][i][1]);
+            return (
+              <tr key={label}>
+                <th scope="row" className="py-0.5 pr-4 text-left font-normal" style={{ color: 'var(--muted)' }}>{label}</th>
+                {columns.map((c, j) => (
+                  <td key={bills[j].saved!.id} className="select-text py-0.5 pr-4" style={{ color: same ? 'var(--muted)' : 'var(--text)' }}>{c[i][1]}</td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** "Paid back?": credits from one name keep matching a bill's charges (a card's statement credit, say). */
+function PaybackAsk({
+  items,
+  onLink,
+  onDecline,
+}: {
+  items: ({ item: RecurringItem; id: number } & PaybackSuggestion)[];
+  onLink: (id: number, name: string) => void;
+  onDecline: (id: number) => void;
+}) {
+  const [open, setOpen] = useState<number | null>(null);
+  return (
+    <section aria-label="Paid back?" className="flex flex-col gap-2 rounded-[10px] border px-5 py-4" style={{ borderColor: 'var(--line)', background: 'var(--panel)' }}>
+      {items.map((p) => (
+        <div key={p.id} className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-3 text-[13px]">
+            <span className="min-w-0 flex-1">
+              Credits from <b>{cleanMerchant(p.name)}</b> match {p.matched} <b>{p.item.rules.name}</b> charges. Do they pay it back?
+            </span>
+            <InfoButton
+              label={`Show the charges and credits for ${p.item.rules.name}`}
+              title="Show the charges and credits"
+              open={open === p.id}
+              onToggle={() => setOpen(open === p.id ? null : p.id)}
+            />
+            <Button variant="primary" onClick={() => onLink(p.id, p.name)}>Link</Button>
+            <Button onClick={() => onDecline(p.id)}>No</Button>
+          </div>
+          {open === p.id && <PaybackPairs suggestion={p} billName={p.item.rules.name} onClose={() => setOpen(null)} />}
         </div>
       ))}
     </section>
+  );
+}
+
+/** What a "Paid back?" suggestion is based on: each charge beside the credit that matched it. */
+function PaybackPairs({ suggestion, billName, onClose }: { suggestion: PaybackSuggestion; billName: string; onClose: () => void }) {
+  const currency = useCurrencyStore((s) => s.displayCurrency);
+  const creditName = cleanMerchant(suggestion.name);
+  return (
+    <div className="relative max-h-[260px] overflow-y-auto rounded-md border px-3 py-2.5 pr-9" style={{ borderColor: 'var(--line)', background: 'var(--bg)' }}>
+      <button
+        type="button"
+        aria-label="Close"
+        title="Close"
+        onClick={onClose}
+        className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-md hover:bg-[color-mix(in_srgb,var(--text)_8%,transparent)]"
+        style={{ color: 'var(--subtle)' }}
+      >
+        <svg aria-hidden="true" width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <path d="M2 2l6 6M8 2l-6 6" />
+        </svg>
+      </button>
+      <table aria-label={`${billName} charges and ${creditName} credits`} className="w-full border-collapse text-[12px]">
+        <thead>
+          <tr style={{ color: 'var(--muted)' }}>
+            <th className="pb-1.5 text-left font-medium">Charged</th>
+            <th className="pb-1.5 pr-6 text-right font-medium" />
+            <th className="pb-1.5 text-left font-medium">Credited</th>
+            <th className="pb-1.5 pr-6 text-right font-medium" />
+            <th className="pb-1.5 text-left font-medium" />
+          </tr>
+        </thead>
+        <tbody>
+          {suggestion.pairs.map(({ charge, credit }) => {
+            const full = credit.amountCents >= -charge.amountCents;
+            return (
+              <tr key={charge.id}>
+                <td className="py-0.5" style={{ color: 'var(--muted)' }}>{longDay(charge.postedOn)}</td>
+                <td className="py-0.5 pr-6 text-right font-semibold tabular-nums">{formatMoney(-charge.amountCents, currency)}</td>
+                <td className="py-0.5" style={{ color: 'var(--muted)' }}>{longDay(credit.postedOn)}</td>
+                <td className="py-0.5 pr-6 text-right font-semibold tabular-nums" style={{ color: 'var(--pos)' }}>{formatMoney(credit.amountCents, currency)}</td>
+                <td className="py-0.5" style={{ color: full ? 'var(--pos)' : 'var(--muted)' }}>{full ? 'Full' : 'Partial'}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -441,6 +694,11 @@ function BillList({
               <CategoryIcon emoji={cat?.emoji} color={cat?.color} className="w-4" />
               <span className="truncate">{i.rules.name}</span>
               <span className="truncate text-[12px]" style={{ color: 'var(--muted)' }}>{CADENCE_LABEL[i.recurring.cadence]}</span>
+              {i.credited && (
+                <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--pos)' }} title={i.credited === 'full' ? 'Paid back in full' : 'Partly paid back'}>
+                  Credited
+                </span>
+              )}
 
               <span className="relative ml-auto shrink-0">
                 {cat && <CategoryPill category={cat} />}
@@ -450,13 +708,20 @@ function BillList({
                   if (!c) return null;
                   const label = c.toCents > c.fromCents ? 'Price went up' : 'Price went down';
                   return (
-                    <span role="img" aria-label={label} title={label} className="absolute -right-[18px] top-1/2 -translate-y-1/2 text-[13px] font-bold" style={{ color: 'var(--pos)' }}>
+                    <span
+                      role="img"
+                      aria-label={label}
+                      title={label}
+                      className="absolute -right-[18px] top-1/2 -translate-y-1/2 text-[13px] font-bold"
+                      style={{ color: c.toCents > c.fromCents ? 'var(--pos)' : 'var(--neg)' }}
+                    >
                       {c.toCents > c.fromCents ? '↑' : '↓'}
                     </span>
                   );
                 })()}
               </span>
-              <Money cents={i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
+              {/* Paid this month: what it actually cost; else what it usually costs. */}
+              <Money cents={i.paid && i.charges[0] ? -i.charges[0].amountCents : i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
               <span className="flex w-3 shrink-0 justify-center" style={{ color: 'var(--text)' }}>
                 {i.paid && <span role="img" aria-label="Paid" className="flex"><IconCheck size={13} /></span>}
               </span>
@@ -505,6 +770,9 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
           <div className="label-caps" style={{ color: 'var(--muted)' }}>Next payment</div>
           <div className="text-[20px] font-semibold"><Money cents={r.typicalAmountCents} /></div>
           <div className="text-[12px]" style={{ color: 'var(--muted)' }}>around <span className="font-semibold" style={{ color: 'var(--text)' }}>{ordinalDay(r.nextDate)}</span></div>
+          {item.credited && (
+            <div className="mt-1 text-[12px] font-semibold" style={{ color: 'var(--pos)' }}>{item.credited === 'full' ? 'Fully credited' : 'Partly credited'}</div>
+          )}
         </div>
       </header>
 
@@ -520,6 +788,7 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
           billName={item.rules.name}
           categories={src.categories}
           date={src.transactions.find((t) => t.id === c.txId)?.postedOn}
+          tx={src.transactions.find((t) => t.id === c.txId)}
           onDone={onChanged}
         />
       ))}
@@ -531,6 +800,8 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
           <Chip>from <b><Money cents={item.rules.minCents} decimals={false} /></b> to <b><Money cents={item.rules.maxCents} decimals={false} /></b></Chip>
           <Chip><b>{item.rules.cadence}</b></Chip>
           {item.rules.day != null && <Chip>on the <b>{ordinal(item.rules.day)}</b></Chip>}
+          {(r.saved?.alsoMatches.length ?? 0) > 0 && <Chip>also <b>{r.saved!.alsoMatches.map(cleanMerchant).join(', ')}</b></Chip>}
+          {(r.saved?.paidBackBy?.length ?? 0) > 0 && <Chip>Paid back by <b>{r.saved!.paidBackBy!.map(cleanMerchant).join(', ')}</b></Chip>}
         </ul>
       </div>
 
@@ -549,6 +820,8 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
             <th className="pb-2 pt-5 text-left font-semibold" style={{ color: 'var(--text)' }}>Key metrics</th>
             <th className="pb-2 pt-5 text-right font-medium">Spent per year</th>
             <th className="pb-2 pt-5 text-right font-medium">Avg transaction</th>
+            {item.credits.size > 0 && <th className="pb-2 pt-5 text-right font-medium">Credited</th>}
+            {item.credits.size > 0 && <th className="pb-2 pt-5 text-right font-medium">Cost you</th>}
           </tr>
         </thead>
         <tbody>
@@ -557,6 +830,8 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
               <td className="py-1.5" style={{ color: 'var(--accent)' }}>{y.year}</td>
               <td className="py-1.5 text-right font-semibold"><Money cents={y.spendCents} /></td>
               <td className="py-1.5 text-right font-semibold"><Money cents={y.avgChargeCents} /></td>
+              {item.credits.size > 0 && <td className="py-1.5 text-right font-semibold" style={{ color: 'var(--pos)' }}><Money cents={y.creditedCents} /></td>}
+              {item.credits.size > 0 && <td className="py-1.5 text-right font-semibold"><Money cents={y.spendCents - y.creditedCents} /></td>}
             </tr>
           ))}
         </tbody>
@@ -590,21 +865,58 @@ function BillDetail({ item, src, today, onChanged }: { item: RecurringItem; src:
         <div className="mb-2 px-8 text-[14px] font-semibold">Transactions</div>
         <ul aria-label="Charges" className="m-0 list-none p-0">
           {item.charges.map((t) => (
-            <li key={t.id} className="flex items-center">
-              <span className="w-[64px] shrink-0 pl-8 text-[12px]" style={{ color: 'var(--muted)' }}>{ordinalDay(t.postedOn).replace(/(st|nd|rd|th)$/, '')}</span>
-              <div className="min-w-0 flex-1">
-                <TransactionRow
-                  tx={t}
-                  category={t.categoryId != null ? src.categoriesById[t.categoryId] : undefined}
-                  source={src.sourcesById[t.sourceId]}
-                  selected={false}
-                  active={false}
-                  selectable={false}
-                  onToggleSelect={() => {}}
-                  onOpen={() => {}}
-                  onPickCategory={() => {}}
-                />
+            <li key={t.id}>
+              <div
+                role="button"
+                tabIndex={0}
+                aria-label={`Open ${t.description} on ${longDay(t.postedOn)}`}
+                title="Open in Transactions"
+                onClick={() => void openTarget({ kind: 'transaction', id: t.id })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    void openTarget({ kind: 'transaction', id: t.id });
+                  }
+                }}
+                className="group flex cursor-pointer items-center rounded-md hover:bg-[var(--hover)]"
+              >
+                <span className="w-[112px] shrink-0 whitespace-nowrap pl-8 text-[12px]" style={{ color: 'var(--muted)' }}>{longDay(t.postedOn)}</span>
+                <div className="min-w-0 flex-1">
+                  <TransactionRow
+                    tx={t}
+                    category={t.categoryId != null ? src.categoriesById[t.categoryId] : undefined}
+                    source={src.sourcesById[t.sourceId]}
+                    selected={false}
+                    active={false}
+                    selectable={false}
+                    onToggleSelect={() => {}}
+                    onOpen={() => {}}
+                    onPickCategory={() => {}}
+                  />
+                </div>
               </div>
+              {item.credits.get(t.id) && (() => {
+                const k = item.credits.get(t.id)!;
+                return (
+                  <div
+                    role="button"
+                    tabIndex={0}
+                    aria-label={`Open the credit for ${longDay(t.postedOn)}: ${longDay(k.postedOn)}`}
+                    title="Open the credit in Transactions"
+                    onClick={() => void openTarget({ kind: 'transaction', id: k.id })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        void openTarget({ kind: 'transaction', id: k.id });
+                      }
+                    }}
+                    className="flex h-[22px] cursor-pointer items-center rounded-md pl-[148px] text-[12px] hover:bg-[var(--hover)]"
+                    style={{ color: 'var(--pos)' }}
+                  >
+                    ↳ Credited {formatMoney(k.amountCents, currency)} on {longDay(k.postedOn)}
+                  </div>
+                );
+              })()}
             </li>
           ))}
         </ul>

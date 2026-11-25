@@ -3,8 +3,8 @@ import { cleanMerchant } from './merchant';
 
 describe('cleanMerchant', () => {
   it('drops store and reference numbers', () => {
-    expect(cleanMerchant('shell oil 58000012345')).toBe('Shell');
-    expect(cleanMerchant('walmart+ member 06/58000012345')).toBe('Walmart+ Member');
+    expect(cleanMerchant('shell oil 12345678901')).toBe('Shell');
+    expect(cleanMerchant('walmart+ member 06/12345678901')).toBe('Walmart+ Member');
     expect(cleanMerchant('target #1234')).toBe('Target');
   });
 

@@ -82,8 +82,8 @@ describe('buildRecurrings detail', () => {
 
   it('reports yearly spend, average charge and the account last used', () => {
     expect(rent.years).toEqual([
-      { year: 2026, spendCents: 660000, avgChargeCents: 220000 },
-      { year: 2025, spendCents: 0, avgChargeCents: 0 },
+      { year: 2026, spendCents: 660000, avgChargeCents: 220000, creditedCents: 0 },
+      { year: 2025, spendCents: 0, avgChargeCents: 0, creditedCents: 0 },
     ]);
     expect(rent.lastSourceId).toBe(3);
   });
@@ -159,7 +159,7 @@ describe('buildRecurrings stopped bills', () => {
 describe('buildRecurrings with saved bills', () => {
   const saved = (id: number, status: 'active' | 'paused' | 'archived', over: Partial<Recurring> = {}): Recurring => ({
     ...rec('netflix', 1799, '2026-10-28', '2026-11-28'),
-    saved: { id, status, name: 'Netflix', categoryId: null, matchKind: 'merchant', pattern: 'netflix', minCents: 1500, maxCents: 2200, frequency: 'monthly', dayOfMonth: 28, createdOn: '2026-01-01' },
+    saved: { id, status, name: 'Netflix', categoryId: null, matchKind: 'merchant', pattern: 'netflix', minCents: 1500, maxCents: 2200, frequency: 'monthly', dayOfMonth: 28, createdOn: '2026-01-01', alsoMatches: [], paidBackBy: null },
     ...over,
   });
 
@@ -181,5 +181,86 @@ describe('buildRecurrings with saved bills', () => {
     expect(m.paused.map((i) => i.key)).toEqual(['2']);
     expect(m.archived.map((i) => i.key)).toEqual(['3']);
     expect(m.summary.leftToPayCents).toBe(1799);
+  });
+});
+
+describe('buildRecurrings with bills that are paid back', () => {
+  const walmart = (paidBackBy: string[] | null): Recurring => ({
+    ...rec('walmart+ member', 1428, '2026-10-22', '2026-11-22'),
+    saved: {
+      id: 9, status: 'active', name: 'Walmart+', categoryId: null, matchKind: 'merchant', pattern: 'walmart+ member', minCents: 900,
+      maxCents: 1900, frequency: 'monthly', dayOfMonth: 22, createdOn: '2026-01-01', alsoMatches: [], paidBackBy,
+    },
+  });
+  const charge = (d: string) => ({ ...tx('walmart+ member', d, -1428), recurringId: 9 });
+  const credit = (d: string, cents = 1428) => tx('platinum walmart+', d, cents);
+
+  it('pairs each charge with its credit, says how much came back, and leaves it out of left to pay', () => {
+    const [sep, oct] = [charge('2026-09-22'), charge('2026-10-22')];
+    const [k1, k2] = [credit('2026-09-24'), credit('2026-10-22')];
+    const m = buildRecurrings({ recurring: [walmart(['platinum walmart+'])], transactions: [sep, oct, k1, k2], today: TODAY });
+    const item = [...m.thisMonth, ...m.future, ...m.stale][0];
+    expect(item.credits.get(sep.id)?.id).toBe(k1.id);
+    expect(item.credits.get(oct.id)?.id).toBe(k2.id);
+    expect(item.credited).toBe('full');
+    expect(item.years[0]).toMatchObject({ spendCents: 2856, creditedCents: 2856 });
+    expect(m.summary.leftToPayCents).toBe(0);
+  });
+
+  it('says partly credited when less came back, and ignores credits a bill is not paid back by', () => {
+    const oct = charge('2026-10-22');
+    const partly = buildRecurrings({ recurring: [walmart(['platinum walmart+'])], transactions: [oct, credit('2026-10-22', 500)], today: TODAY });
+    expect([...partly.thisMonth, ...partly.future][0].credited).toBe('partial');
+    expect(partly.summary.leftToPayCents).toBe(1428);
+    const none = buildRecurrings({ recurring: [walmart(null)], transactions: [oct, credit('2026-10-22')], today: TODAY });
+    const item = [...none.thisMonth, ...none.future][0];
+    expect(item.credits.size).toBe(0);
+    expect(item.credited).toBeNull();
+  });
+
+  it('takes credits off paid so far', () => {
+    const nov = charge(`${TODAY.slice(0, 7)}-02`);
+    const m = buildRecurrings({ recurring: [walmart(['platinum walmart+'])], transactions: [nov, credit(`${TODAY.slice(0, 7)}-03`)], today: TODAY });
+    expect(m.summary.paidCents).toBe(0);
+  });
+});
+
+describe('buildRecurrings with a credit shared by several bills', () => {
+  const bill = (id: number, merchant: string, cents: number, day: number): Recurring => ({
+    ...rec(merchant, cents, '2026-09-13', '2026-10-13'),
+    saved: {
+      id, status: 'active', name: merchant, categoryId: null, matchKind: 'merchant', pattern: merchant, minCents: 0, maxCents: 5000,
+      frequency: 'monthly', dayOfMonth: day, createdOn: '2026-01-01', alsoMatches: [], paidBackBy: ['platinum digital'],
+    },
+  });
+
+  it('counts each credit once, for the nearest charge', () => {
+    const youtube = { ...tx('youtube', '2026-09-13', -899), recurringId: 1 };
+    const peacock = { ...tx('peacock', '2026-09-09', -1657), recurringId: 2 };
+    const credit = tx('platinum digital', '2026-09-13', 899);
+    const m = buildRecurrings({ recurring: [bill(1, 'youtube', 899, 13), bill(2, 'peacock', 1657, 9)], transactions: [youtube, peacock, credit], today: TODAY });
+    const all = [...m.thisMonth, ...m.future, ...m.stale];
+    const of = (id: number) => all.find((i) => i.recurring.saved?.id === id)!;
+    expect(of(1).credits.get(youtube.id)?.id).toBe(credit.id);
+    expect(of(2).credits.size).toBe(0);
+    expect(of(2).credited).toBeNull();
+  });
+});
+
+describe('buildRecurrings credits by year', () => {
+  it('counts each credit in the year of the charge it paid back', () => {
+    const bill: Recurring = {
+      ...rec('walmart+ member', 1428, '2026-01-22', '2026-02-22'),
+      saved: {
+        id: 9, status: 'active', name: 'Walmart+', categoryId: null, matchKind: 'merchant', pattern: 'walmart+ member', minCents: 900,
+        maxCents: 1900, frequency: 'monthly', dayOfMonth: 22, createdOn: '2025-01-01', alsoMatches: [], paidBackBy: ['platinum walmart+'],
+      },
+    };
+    const dec = { ...tx('walmart+ member', '2025-12-30', -1428), recurringId: 9 };
+    const creditInJanuary = tx('platinum walmart+', '2026-01-02', 1428);
+    const m = buildRecurrings({ recurring: [bill], transactions: [dec, creditInJanuary], today: TODAY });
+    const item = [...m.thisMonth, ...m.future, ...m.stale][0];
+    expect(item.years.find((y) => y.year === 2025)).toMatchObject({ spendCents: 1428, creditedCents: 1428 });
+    expect(item.years.find((y) => y.year === 2026)).toMatchObject({ spendCents: 0, creditedCents: 0 });
   });
 });

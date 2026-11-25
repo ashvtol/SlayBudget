@@ -62,19 +62,26 @@ export function StatementBox({ tx, named = false, onClose }: { tx: Transaction; 
   );
 }
 
-/** An ⓘ that opens and closes statement details. */
-export function InfoButton({ label, open, onToggle }: { label: string; open: boolean; onToggle: () => void }) {
+/** An ⓘ that opens and closes details, drawn like macOS's info symbol (SF Symbols info.circle): a thin outlined circle
+ *  with a serif "i" in the secondary text colour, brighter on hover, and filled with the accent while its details show. */
+export function InfoButton({ label, title = 'Statement details', open, onToggle }: { label: string; title?: string; open: boolean; onToggle: () => void }) {
   return (
     <button
       type="button"
       aria-label={label}
       aria-expanded={open}
-      title="Statement details"
+      title={title}
       onClick={onToggle}
-      className="flex h-[20px] w-[20px] shrink-0 items-center justify-center rounded-full text-[12px] font-semibold"
-      style={{ color: open ? 'var(--accent)' : 'var(--muted)', border: '1px solid currentColor' }}
+      className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full transition-colors duration-100 ${open ? '' : 'hover:text-[var(--text)]'}`.trim()}
+      style={{ color: open ? 'var(--accent)' : 'var(--muted)' }}
     >
-      i
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16">
+        <circle cx="8" cy="8" r="7" fill={open ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.2" />
+        <g data-glyph="i" fill={open ? 'var(--bg)' : 'currentColor'}>
+          <circle cx="8" cy="4.9" r="0.95" />
+          <path d="M6.6 7h2.15v4.2h0.85v0.95H6.4v-0.95h0.85V7.95H6.6z" />
+        </g>
+      </svg>
     </button>
   );
 }

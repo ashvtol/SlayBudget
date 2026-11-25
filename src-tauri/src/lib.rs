@@ -80,6 +80,7 @@ pub fn run() {
             commands::create_recurring,
             commands::update_recurring,
             commands::set_recurring_status,
+            commands::set_recurring_paid_back_by,
             commands::delete_recurring,
             commands::unlink_recurring,
             commands::draft_recurring,

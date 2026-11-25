@@ -23,7 +23,7 @@ describe('displayMerchant', () => {
     expect(displayMerchant({ ...tx, merchant: 'whole foods' })).toBe('Whole Foods');
   });
   it('falls back to the description when there is no merchant', () => {
-    expect(displayMerchant({ ...tx, merchant: '', description: 'SHELL OIL 58000012345' })).toBe('Shell');
+    expect(displayMerchant({ ...tx, merchant: '', description: 'SHELL OIL 12345678901' })).toBe('Shell');
   });
 });
 

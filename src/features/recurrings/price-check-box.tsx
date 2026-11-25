@@ -3,7 +3,8 @@ import { Button } from '@/components/button';
 import { ipc } from '@/lib/ipc';
 import { formatMoney, shortDate } from '@/lib/format';
 import { useCurrencyStore } from '@/features/currency/currency-store';
-import type { Category, NewRecurring, PriceCheck } from '@/lib/types';
+import type { Category, NewRecurring, PriceCheck, Transaction } from '@/lib/types';
+import { DetailsButton, StatementBox } from '@/features/transactions/statement-box';
 import { Modal, RecurringForm } from './recurring-form';
 
 /** "+353%" or "-55%". */
@@ -22,6 +23,7 @@ export function PriceCheckBox({
   billName,
   categories,
   date,
+  tx,
   onDone,
 }: {
   check: PriceCheck;
@@ -29,8 +31,11 @@ export function PriceCheckBox({
   categories: Category[];
   /** The charge's day, shown when the box is away from the charge (on the bill). */
   date?: string;
+  /** The charge, when the box is away from it: an ⓘ shows it as the statement has it (who it was paid to). */
+  tx?: Transaction;
   onDone: () => void;
 }) {
+  const [details, setDetails] = useState(false);
   const currency = useCurrencyStore((s) => s.displayCurrency);
   const [draft, setDraft] = useState<NewRecurring | null>(null);
   const [busy, setBusy] = useState(false);
@@ -51,10 +56,14 @@ export function PriceCheckBox({
         <span className="h-2 w-2 rounded-full" style={{ background: color }} />
         Is this {billName} at a new price?
       </div>
-      <p className="m-0 text-[12px]">
-        {date && <span style={{ color: 'var(--muted)' }}>{shortDate(date)} · </span>}
-        It was {formatMoney(check.oldCents, currency)}, this is {formatMoney(check.newCents, currency)} ({percentChange(check.oldCents, check.newCents)}).
-      </p>
+      <div className="flex items-center gap-2">
+        <p className="m-0 flex-1 text-[12px]">
+          {date && <span style={{ color: 'var(--muted)' }}>{shortDate(date)} · </span>}
+          It was {formatMoney(check.oldCents, currency)}, this is {formatMoney(check.newCents, currency)} ({percentChange(check.oldCents, check.newCents)}).
+        </p>
+        {tx && <DetailsButton tx={tx} open={details} onToggle={() => setDetails(!details)} />}
+      </div>
+      {tx && details && <StatementBox tx={tx} onClose={() => setDetails(false)} />}
       <div className="flex flex-wrap gap-2">
         <Button variant="primary" disabled={busy} onClick={() => void answer('new_price')}>Yes, new price</Button>
         <Button disabled={busy} onClick={() => void answer('one_off')}>No, a one-off</Button>

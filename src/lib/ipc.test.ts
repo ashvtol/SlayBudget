@@ -594,3 +594,71 @@ describe('memory ipc budget plan (mirror budgets.rs)', () => {
     expect((await ipc.listCategories()).map((c) => c.budgetCents)).toEqual([42000, 8000]);
   });
 });
+
+describe('a bill charged off its usual day', () => {
+  it('links the charge when that month has no other, and not a second one in the same month', async () => {
+    const tx = (id: number, postedOn: string, cents: number): Transaction => ({
+      id, profileId: 1, sourceId: 1, postedOn, description: 'NESPRESSO (888)637-7737 NY', merchant: 'nespresso (888)637', amountCents: -cents,
+      currency: 'USD', categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+    });
+    const ipc = createMemoryIpc({
+      sources: [{ id: 1, profileId: 1, name: 'Amex', kind: 'csv', institution: null, currency: 'USD' }],
+      transactions: [tx(1, '2026-08-01', 7560), tx(2, '2026-09-01', 7560), tx(3, '2026-10-08', 7140), tx(4, '2026-10-20', 7140), tx(5, '2026-11-23', 7140)],
+    });
+    for (const r of await ipc.listRecurring(null)) await ipc.deleteRecurring(r.saved!.id);
+    const id = await ipc.createRecurring({
+      name: 'Nespresso', categoryId: null, matchKind: 'merchant', pattern: 'nespresso (888)637', minCents: 4665, maxCents: 9635, frequency: 'monthly', dayOfMonth: 8,
+    });
+    const linked = (await ipc.listTransactions({})).filter((t) => t.recurringId === id).map((t) => t.id).sort();
+    expect(linked).toEqual([1, 2, 3, 5]);
+  });
+
+  it('never takes a payment app charge off the usual day for the bill', async () => {
+    const tx = (id: number, postedOn: string, cents: number): Transaction => ({
+      id, profileId: 1, sourceId: 1, postedOn, description: 'VENMO 8555550100', merchant: 'venmo 8555550100', amountCents: -cents,
+      currency: 'USD', categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+    });
+    const ipc = createMemoryIpc({
+      sources: [{ id: 1, profileId: 1, name: 'Citi', kind: 'csv', institution: null, currency: 'USD' }],
+      transactions: [tx(1, '2026-10-28', 4768), tx(2, '2026-12-22', 4250)],
+    });
+    for (const r of await ipc.listRecurring(null)) await ipc.deleteRecurring(r.saved!.id);
+    const id = await ipc.createRecurring({
+      name: 'Venmo', categoryId: null, matchKind: 'merchant', pattern: 'venmo 8555550100', minCents: 3000, maxCents: 6500, frequency: 'monthly', dayOfMonth: 28,
+    });
+    expect((await ipc.listTransactions({})).filter((t) => t.recurringId === id).map((t) => t.id)).toEqual([1]);
+  });
+
+  it('asks no new-price question about a payment app charge to someone else', async () => {
+    const tx = (id: number, postedOn: string, description: string, cents: number): Transaction => ({
+      id, profileId: 1, sourceId: 1, postedOn, description, merchant: 'venmo 8555550100', amountCents: -cents,
+      currency: 'USD', categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+    });
+    const ipc = createMemoryIpc({
+      sources: [{ id: 1, profileId: 1, name: 'Citi', kind: 'csv', institution: null, currency: 'USD' }],
+      transactions: [
+        tx(1, '2026-09-28', 'VENMO *SAM RIVERA 8555550100 NY', 4768),
+        tx(2, '2026-10-28', 'VENMO *SAM RIVERA 8555550100 NY', 4768),
+        tx(3, '2026-11-18', 'VENMO *JORDAN LEE 8555550100 NY', 10000),
+      ],
+    });
+    for (const r of await ipc.listRecurring(null)) await ipc.deleteRecurring(r.saved!.id);
+    await ipc.createRecurring({
+      name: 'Venmo', categoryId: null, matchKind: 'merchant', pattern: 'venmo 8555550100', minCents: 3800, maxCents: 5700, frequency: 'monthly', dayOfMonth: 28,
+    });
+    expect(await ipc.priceChecks()).toEqual([]);
+  });
+
+  it('makes a payment app charge recurring by the person it went to', async () => {
+    const tx = (id: number, description: string, merchant: string): Transaction => ({
+      id, profileId: 1, sourceId: 1, postedOn: '2026-10-28', description, merchant, amountCents: -4768,
+      currency: 'USD', categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+    });
+    const ipc = createMemoryIpc({
+      sources: [{ id: 1, profileId: 1, name: 'Citi', kind: 'csv', institution: null, currency: 'USD' }],
+      transactions: [tx(1, 'Debit Card Purchase 10/26 #1234 VENMO *SAM RIVERA 8555550100 NY 26300', 'venmo 8555550100'), tx(2, 'SHELL OIL 12345678901', 'shell oil')],
+    });
+    expect(await ipc.draftRecurring(1)).toMatchObject({ name: 'Sam Rivera', matchKind: 'contains', pattern: 'sam rivera' });
+    expect(await ipc.draftRecurring(2)).toMatchObject({ matchKind: 'merchant', pattern: 'shell oil' });
+  });
+});

@@ -89,6 +89,7 @@ export function createTauriIpc(): Ipc {
     createRecurring: (rule) => invoke('create_recurring', { rule }),
     updateRecurring: (id, rule) => invoke('update_recurring', { id, rule }),
     setRecurringStatus: (id, status) => invoke('set_recurring_status', { id, status }),
+    setRecurringPaidBackBy: (id, names) => invoke('set_recurring_paid_back_by', { id, names }),
     deleteRecurring: (id) => invoke('delete_recurring', { id }),
     unlinkRecurring: (transactionId) => invoke('unlink_recurring', { transactionId }),
     draftRecurring: (transactionId) => invoke('draft_recurring', { transactionId }),

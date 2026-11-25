@@ -58,6 +58,8 @@ impl Db {
                 max_cents: 2981,
                 frequency: Cadence::Monthly,
                 day_of_month: Some(5),
+                also_matches: Vec::new(),
+                paid_back_by: None,
             },
         )
         .unwrap()
@@ -79,6 +81,8 @@ impl Db {
                 max_cents: 12022,
                 frequency: Cadence::Monthly,
                 day_of_month: None,
+                also_matches: Vec::new(),
+                paid_back_by: None,
             },
         )
         .unwrap();
@@ -228,6 +232,8 @@ fn editing_a_bill_after_a_price_change_keeps_its_older_charges() {
         max_cents: s.max_cents,
         frequency: s.frequency,
         day_of_month: s.day_of_month,
+        also_matches: Vec::new(),
+        paid_back_by: None,
     };
     recurrings::update(&db.conn, bill, &edit).unwrap();
     assert_eq!(db.count(bill), 7);
@@ -318,6 +324,8 @@ fn bills_that_share_a_name_are_suggested_for_merging() {
             max_cents: 2000,
             frequency: Cadence::Monthly,
             day_of_month: None,
+            also_matches: Vec::new(),
+            paid_back_by: None,
         },
     )
     .unwrap();
@@ -480,5 +488,213 @@ fn a_charge_that_joins_a_bill_another_way_is_no_longer_asked() {
     assert_eq!(
         price_changes::for_transaction(&db.conn, upgrade).unwrap(),
         None
+    );
+}
+
+fn monthly(db: &Db, name: &str, pattern: &str, cents: i64, day: Option<u32>) -> i64 {
+    recurrings::create(
+        &db.conn,
+        &NewRecurring {
+            name: name.into(),
+            category_id: None,
+            match_kind: MatchKind::Merchant,
+            pattern: pattern.into(),
+            min_cents: cents - 300,
+            max_cents: cents + 300,
+            frequency: Cadence::Monthly,
+            day_of_month: day,
+            also_matches: Vec::new(),
+            paid_back_by: None,
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn a_subscription_whose_statement_name_changed_is_suggested_for_merging() {
+    let db = Db::setup();
+    // Walmart+ renamed on the statement: the same price on the same day, one name after the other.
+    for m in 1..=5 {
+        db.charge(&format!("2025-{m:02}-22"), "WMT PLUS", 1427);
+    }
+    for m in 6..=10 {
+        db.charge(&format!("2025-{m:02}-22"), "WALMART+ MEMBER", 1428);
+    }
+    let wmt = monthly(&db, "Wmt Plus", "wmt plus", 1427, Some(22));
+    let member = monthly(&db, "Walmart+ Member", "walmart+ member", 1428, Some(22));
+    // YouTube renamed with a new price: the names share a word.
+    for m in 1..=6 {
+        db.charge(&format!("2026-{m:02}-08"), "GOOGLE YOUTUBEPREMI", 1399);
+    }
+    for m in 7..=11 {
+        db.charge(&format!("2026-{m:02}-13"), "GOOGLE YOUTUBE", 899);
+    }
+    let old_yt = monthly(
+        &db,
+        "Google Youtubepremi",
+        "google youtubepremi",
+        1399,
+        Some(8),
+    );
+    let new_yt = monthly(&db, "YouTube Premium", "google youtube", 899, Some(13));
+    assert_eq!(
+        price_changes::look_alikes(&db.conn).unwrap(),
+        vec![(wmt, member), (old_yt, new_yt)]
+    );
+}
+
+#[test]
+fn different_subscriptions_one_after_another_are_not_suggested() {
+    let db = Db::setup();
+    // Hulu stopped and Paramount started: different names, prices and days.
+    for m in 1..=5 {
+        db.charge(&format!("2026-{m:02}-09"), "HULU", 1199);
+    }
+    for m in 6..=10 {
+        db.charge(&format!("2026-{m:02}-20"), "PARAMOUNT PLUS", 799);
+    }
+    monthly(&db, "Hulu", "hulu", 1199, Some(9));
+    monthly(&db, "Paramount", "paramount plus", 799, Some(20));
+    // Same price and day, but both running at once: two subscriptions.
+    for m in 1..=10 {
+        db.charge(&format!("2026-{m:02}-15"), "NETFLIX", 1799);
+        db.charge(&format!("2026-{m:02}-15"), "MAX STREAMING", 1799);
+    }
+    monthly(&db, "Netflix", "netflix", 1799, Some(15));
+    monthly(&db, "Max", "max streaming", 1799, Some(15));
+    // Same price and day, one after the other, but a year apart: not a rename.
+    for m in 1..=3 {
+        db.charge(&format!("2024-{m:02}-03"), "OLD GYM", 4000);
+        db.charge(&format!("2026-{m:02}-03"), "NEW GYM CLUB", 4000);
+    }
+    monthly(&db, "Old Gym", "old gym", 4000, Some(3));
+    monthly(&db, "Club", "new gym club", 4000, Some(3));
+    assert!(price_changes::look_alikes(&db.conn).unwrap().is_empty());
+}
+
+#[test]
+fn merging_a_renamed_bill_records_no_price_change_where_the_name_changed() {
+    let db = Db::setup();
+    for m in 1..=5 {
+        db.charge(&format!("2026-{m:02}-05"), "CLAUDE.AI SUBSCRIPTISAN", 2207);
+    }
+    let old = monthly(&db, "Claude.ai", "claude.ai subscriptisan", 2207, Some(5));
+    let new = db.anthropic(); // $22.11 from June, then $100.18 on Nov 21 (answered: new price)
+    db.charge("2026-11-21", CLAUDE, 10018);
+    db.import_done();
+    let check = db.open()[0].id;
+    price_changes::answer(&db.conn, check, Answer::NewPrice).unwrap();
+    price_changes::merge(&db.conn, old, new).unwrap();
+    assert_eq!(
+        price_changes::history(&db.conn, old).unwrap(),
+        vec![PriceChange {
+            changed_on: "2026-11-21".into(),
+            from_cents: 2211,
+            to_cents: 10018
+        }],
+        "only the real change; $22.07 to $22.11 in June is the same price"
+    );
+}
+
+#[test]
+fn a_payment_app_charge_to_someone_else_is_not_asked_about_as_a_new_price() {
+    let db = Db::setup();
+    for m in 8..=10 {
+        db.charge(
+            &format!("2026-{m:02}-28"),
+            "VENMO *SAM RIVERA 8555550100 NY",
+            4768,
+        );
+    }
+    let id = recurrings::create(
+        &db.conn,
+        &NewRecurring {
+            name: "Venmo".into(),
+            category_id: None,
+            match_kind: MatchKind::Contains,
+            pattern: "venmo".into(),
+            min_cents: 3800,
+            max_cents: 5700,
+            frequency: Cadence::Monthly,
+            day_of_month: Some(28),
+            also_matches: Vec::new(),
+            paid_back_by: None,
+        },
+    )
+    .unwrap();
+    assert_eq!(db.count(id), 3);
+    db.charge("2026-11-18", "VENMO *JORDAN LEE 8555550100 NY", 10000);
+    db.import_done();
+    assert!(
+        db.open().is_empty(),
+        "a payment to anyone: no price question"
+    );
+}
+
+#[test]
+fn renamed_bills_with_different_frequencies_are_not_suggested() {
+    let db = Db::setup();
+    for m in 1..=5 {
+        db.charge(&format!("2026-{m:02}-08"), "GOOGLE YOUTUBEPREMI", 1399);
+    }
+    db.charge("2026-07-13", "GOOGLE YOUTUBE", 8999);
+    monthly(
+        &db,
+        "Google Youtubepremi",
+        "google youtubepremi",
+        1399,
+        Some(8),
+    );
+    recurrings::create(
+        &db.conn,
+        &NewRecurring {
+            name: "YouTube yearly".into(),
+            category_id: None,
+            match_kind: MatchKind::Merchant,
+            pattern: "google youtube".into(),
+            min_cents: 8000,
+            max_cents: 10000,
+            frequency: Cadence::Yearly,
+            day_of_month: Some(13),
+            also_matches: Vec::new(),
+            paid_back_by: None,
+        },
+    )
+    .unwrap();
+    assert!(price_changes::look_alikes(&db.conn).unwrap().is_empty());
+}
+
+#[test]
+fn a_big_payment_to_the_person_a_bill_names_is_asked_about() {
+    let db = Db::setup();
+    for m in 8..=10 {
+        db.charge(
+            &format!("2026-{m:02}-28"),
+            "VENMO *SAM RIVERA 8555550100 NY",
+            4768,
+        );
+    }
+    recurrings::create(
+        &db.conn,
+        &NewRecurring {
+            name: "Sam".into(),
+            category_id: None,
+            match_kind: MatchKind::Contains,
+            pattern: "sam rivera".into(),
+            min_cents: 3800,
+            max_cents: 5700,
+            frequency: Cadence::Monthly,
+            day_of_month: Some(28),
+            also_matches: Vec::new(),
+            paid_back_by: None,
+        },
+    )
+    .unwrap();
+    db.charge("2026-11-28", "VENMO *SAM RIVERA 8555550100 NY", 9500);
+    db.import_done();
+    assert_eq!(
+        db.open().len(),
+        1,
+        "the person the bill names: a new price is a fair question"
     );
 }

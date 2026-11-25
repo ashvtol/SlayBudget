@@ -59,6 +59,12 @@ pub struct NewRecurring {
     pub frequency: Cadence,
     /// Expected day of the month (±3 days); `None` = any day.
     pub day_of_month: Option<u32>,
+    /// Other names it matches the same way (its statement name changed over time).
+    #[serde(default)]
+    pub also_matches: Vec<String>,
+    /// Names of credits that pay it back; `None` = never decided, empty = not paid back.
+    #[serde(default)]
+    pub paid_back_by: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -76,6 +82,8 @@ pub struct SavedRecurring {
     pub status: Status,
     /// "YYYY-MM-DD".
     pub created_on: String,
+    pub also_matches: Vec<String>,
+    pub paid_back_by: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -114,6 +122,8 @@ fn row_to_saved(r: &rusqlite::Row<'_>) -> rusqlite::Result<SavedRecurring> {
     let status: String = r.get(9)?;
     let created: String = r.get(10)?;
     let years: u32 = r.get(11)?;
+    let also: String = r.get(12)?;
+    let credits: Option<String> = r.get(13)?;
     Ok(SavedRecurring {
         id: r.get(0)?,
         name: r.get(1)?,
@@ -130,10 +140,36 @@ fn row_to_saved(r: &rusqlite::Row<'_>) -> rusqlite::Result<SavedRecurring> {
         day_of_month: r.get(8)?,
         status: Status::parse(&status),
         created_on: created.get(..10).unwrap_or(&created).to_string(),
+        also_matches: split_names(&also),
+        paid_back_by: credits.as_deref().map(split_names),
     })
 }
 
-const COLS: &str = "id, name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, status, created_at, every_years";
+/// Names stored one per line.
+fn split_names(s: &str) -> Vec<String> {
+    s.lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Names cleaned for storing: trimmed, lowercased, no blanks or repeats, one per line.
+pub(crate) fn join_names(names: &[String]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for n in names
+        .iter()
+        .map(|n| n.trim().to_lowercase())
+        .filter(|n| !n.is_empty())
+    {
+        if !out.contains(&n) {
+            out.push(n);
+        }
+    }
+    out.join("\n")
+}
+
+const COLS: &str = "id, name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, status, created_at, every_years, also_names, credit_names";
 
 pub fn list(conn: &Connection) -> Result<Vec<SavedRecurring>> {
     let mut stmt = conn.prepare(&format!("SELECT {COLS} FROM recurrings ORDER BY id"))?;
@@ -198,10 +234,16 @@ pub(crate) fn candidates(
 
 /// A charge whose name fits a bill's rule (merchant, or "contains"), whatever its amount and day.
 pub(crate) fn name_fits(s: &SavedRecurring, c: &Candidate) -> bool {
-    match s.match_kind {
-        MatchKind::Merchant => c.merchant.trim().to_lowercase() == s.pattern.trim().to_lowercase(),
+    std::iter::once(&s.pattern)
+        .chain(&s.also_matches)
+        .any(|p| one_name_fits(s.match_kind, p, c))
+}
+
+fn one_name_fits(kind: MatchKind, pattern: &str, c: &Candidate) -> bool {
+    match kind {
+        MatchKind::Merchant => c.merchant.trim().to_lowercase() == pattern.trim().to_lowercase(),
         MatchKind::Contains => {
-            normalize_description(&c.description).contains(&normalize_description(&s.pattern))
+            normalize_description(&c.description).contains(&normalize_description(pattern))
         }
     }
 }
@@ -211,11 +253,9 @@ fn fits(r: &NewRecurring, c: &Candidate) -> bool {
     if size < r.min_cents || size > r.max_cents {
         return false;
     }
-    let pattern = normalize_description(&r.pattern);
-    let name_ok = match r.match_kind {
-        MatchKind::Merchant => c.merchant.trim().to_lowercase() == r.pattern.trim().to_lowercase(),
-        MatchKind::Contains => normalize_description(&c.description).contains(&pattern),
-    };
+    let name_ok = std::iter::once(&r.pattern)
+        .chain(&r.also_matches)
+        .any(|p| one_name_fits(r.match_kind, p, c));
     if !name_ok {
         return false;
     }
@@ -223,6 +263,73 @@ fn fits(r: &NewRecurring, c: &Candidate) -> bool {
         None => true,
         Some(day) => days_from_due(c.posted_on, day) <= DAY_WINDOW,
     }
+}
+
+/// Whether the charge is the bill's by who it's to. Always, except a payment app's charge (Venmo, Zelle, PayPal): one
+/// of the bill's names that fits it has to name the person (a word other than the app's, like "sam"), because the
+/// app's name alone is on a payment to anyone.
+pub(crate) fn names_the_payee(
+    names: impl IntoIterator<Item = (MatchKind, String)>,
+    c: &Candidate,
+) -> bool {
+    use crate::categorize::merchant::is_payment_platform;
+    if !is_payment_platform(&c.merchant) && !is_payment_platform(&c.description) {
+        return true;
+    }
+    names.into_iter().any(|(kind, name)| {
+        one_name_fits(kind, &name, c)
+            && name.split(|ch: char| !ch.is_ascii_alphabetic()).any(|w| {
+                w.len() >= 3
+                    && !is_payment_platform(w)
+                    && !["debit", "card", "purchase"].contains(&w)
+            })
+    })
+}
+
+fn rule_names(r: &NewRecurring) -> Vec<(MatchKind, String)> {
+    std::iter::once(&r.pattern)
+        .chain(&r.also_matches)
+        .map(|n| (r.match_kind, n.to_lowercase()))
+        .collect()
+}
+
+/// The rule but any day: a charge with the right name and amount, wherever it falls in the month. A payment app's charge
+/// only when the bill names the person.
+fn fits_any_day(r: &NewRecurring, c: &Candidate) -> bool {
+    r.day_of_month.is_some()
+        && names_the_payee(rule_names(r), c)
+        && fits(
+            &NewRecurring {
+                day_of_month: None,
+                ..r.clone()
+            },
+            c,
+        )
+}
+
+/// The due date a charge pays: the nearest one (last, this or next month; the earlier on a tie).
+fn due_paid(date: NaiveDate, day: u32) -> NaiveDate {
+    use crate::analytics::aggregate::{add_months, sub_months};
+    let first = date.with_day(1).unwrap_or(date);
+    [sub_months(first, 1), first, add_months(first, 1)]
+        .iter()
+        .filter_map(|m| {
+            let last = add_months(*m, 1).pred_opt()?.day();
+            m.with_day(day.min(last))
+        })
+        .min_by_key(|due| ((date - *due).num_days().abs(), *due))
+        .unwrap_or(date)
+}
+
+/// Whether two charges fall in the same billing period, so the bill already has its charge for `date`. A monthly bill
+/// with a due day: they pay the same due date. Otherwise: within half a period of each other.
+fn same_period(date: NaiveDate, other: NaiveDate, frequency: Cadence, day: Option<u32>) -> bool {
+    if let (Cadence::Monthly, Some(d)) = (frequency, day) {
+        return due_paid(date, d) == due_paid(other, d);
+    }
+    let start = NaiveDate::from_ymd_opt(2026, 1, 1).unwrap_or_default();
+    let half = (frequency.next_after(start) - start).num_days() / 2;
+    (date - other).num_days().abs() < half
 }
 
 /// Days between `date` and the nearest due date (this, last or next month), with the due day
@@ -279,6 +386,8 @@ fn rule_of(s: &SavedRecurring) -> NewRecurring {
         max_cents: s.max_cents,
         frequency: s.frequency,
         day_of_month: s.day_of_month,
+        also_matches: s.also_matches.clone(),
+        paid_back_by: s.paid_back_by.clone(),
     }
 }
 
@@ -302,7 +411,7 @@ pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
         .filter(|c| c.recurring_id == Some(id))
         .map(|c| c.id)
         .collect();
-    let after: BTreeSet<TransactionId> = all
+    let mut after: BTreeSet<TransactionId> = all
         .iter()
         .filter(|c| {
             let old_price = c.recurring_id == Some(id)
@@ -315,6 +424,30 @@ pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
         })
         .map(|c| c.id)
         .collect();
+    // A charge off its usual day still belongs to the bill when that period has no other charge.
+    let mut dates: Vec<NaiveDate> = all
+        .iter()
+        .filter(|c| after.contains(&c.id))
+        .map(|c| c.posted_on)
+        .collect();
+    let mut off_day: Vec<&Candidate> = all
+        .iter()
+        .filter(|c| {
+            !after.contains(&c.id)
+                && (c.recurring_id.is_none() || c.recurring_id == Some(id))
+                && fits_any_day(&rule, c)
+        })
+        .collect();
+    off_day.sort_by_key(|c| (c.posted_on, c.id));
+    for c in off_day {
+        if !dates
+            .iter()
+            .any(|d| same_period(*d, c.posted_on, rule.frequency, rule.day_of_month))
+        {
+            after.insert(c.id);
+            dates.push(c.posted_on);
+        }
+    }
     crate::db::atomically(conn, |tx| {
         for gone in before.difference(&after) {
             tx.execute(
@@ -339,8 +472,9 @@ pub fn rematch(conn: &Connection, id: i64) -> Result<MatchReport> {
 pub fn create(conn: &Connection, r: &NewRecurring) -> Result<i64> {
     validate(r)?;
     conn.execute(
-        "INSERT INTO recurrings (name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, every_years)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        "INSERT INTO recurrings (name, category_id, match_kind, pattern, min_cents, max_cents, frequency, day_of_month, every_years,
+            also_names, credit_names)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
         params![
             r.name.trim(),
             r.category_id,
@@ -350,7 +484,9 @@ pub fn create(conn: &Connection, r: &NewRecurring) -> Result<i64> {
             r.max_cents,
             r.frequency.stored().0,
             r.day_of_month,
-            r.frequency.stored().1
+            r.frequency.stored().1,
+            join_names(&r.also_matches),
+            r.paid_back_by.as_deref().map(join_names)
         ],
     )?;
     let id = conn.last_insert_rowid();
@@ -362,7 +498,8 @@ pub fn update(conn: &Connection, id: i64, r: &NewRecurring) -> Result<MatchRepor
     validate(r)?;
     let n = conn.execute(
         "UPDATE recurrings SET name = ?1, category_id = ?2, match_kind = ?3, pattern = ?4, min_cents = ?5,
-            max_cents = ?6, frequency = ?7, day_of_month = ?8, every_years = ?10 WHERE id = ?9",
+            max_cents = ?6, frequency = ?7, day_of_month = ?8, every_years = ?10, also_names = ?11,
+            credit_names = ?12 WHERE id = ?9",
         params![
             r.name.trim(),
             r.category_id,
@@ -373,13 +510,48 @@ pub fn update(conn: &Connection, id: i64, r: &NewRecurring) -> Result<MatchRepor
             r.frequency.stored().0,
             r.day_of_month,
             id,
-            r.frequency.stored().1
+            r.frequency.stored().1,
+            join_names(&r.also_matches),
+            r.paid_back_by.as_deref().map(join_names)
         ],
     )?;
     if n == 0 {
         return Err(CoreError::NotFound(format!("recurring {id}")));
     }
     rematch(conn, id)
+}
+
+/// After you recategorize charges: each of their bills takes its latest charge's category.
+pub fn follow_charges(conn: &Connection, ids: &[TransactionId]) -> Result<()> {
+    for id in ids {
+        conn.execute(
+            "UPDATE recurrings SET category_id = latest.category_id
+             FROM (SELECT t.category_id FROM transactions t
+                   WHERE t.recurring_id = (SELECT recurring_id FROM transactions WHERE id = ?1)
+                   ORDER BY t.posted_on DESC, t.id DESC LIMIT 1) AS latest
+             WHERE recurrings.id = (SELECT recurring_id FROM transactions WHERE id = ?1)
+               AND latest.category_id IS NOT NULL",
+            [id],
+        )?;
+    }
+    Ok(())
+}
+
+/// Whether a charge is the bill's by who it's to (see `names_the_payee`).
+pub(crate) fn payee_fits(s: &SavedRecurring, c: &Candidate) -> bool {
+    names_the_payee(rule_names(&rule_of(s)), c)
+}
+
+/// Which credits pay a bill back (`None` = undecided, empty = not paid back). Its charges are left alone.
+pub fn set_paid_back_by(conn: &Connection, id: i64, names: Option<Vec<String>>) -> Result<()> {
+    let n = conn.execute(
+        "UPDATE recurrings SET credit_names = ?1 WHERE id = ?2",
+        params![names.as_deref().map(join_names), id],
+    )?;
+    if n == 0 {
+        return Err(CoreError::NotFound(format!("recurring {id}")));
+    }
+    Ok(())
 }
 
 pub fn set_status(conn: &Connection, id: i64, status: Status) -> Result<()> {
@@ -418,12 +590,22 @@ pub fn match_new(conn: &Connection, tx_ids: &[TransactionId]) -> Result<usize> {
         .into_iter()
         .filter(|s| s.status != Status::Archived)
         .collect();
-    let mut linked = 0;
-    for c in candidates(conn, Some(tx_ids))?
+    let mut fresh: Vec<Candidate> = candidates(conn, Some(tx_ids))?
         .into_iter()
         .filter(|c| c.recurring_id.is_none())
-    {
-        if let Some(s) = saved.iter().find(|s| fits(&rule_of(s), &c)) {
+        .collect();
+    fresh.sort_by_key(|c| (c.posted_on, c.id));
+    // Each bill's charges so far, to tell whether a period already has one.
+    let mut dates: std::collections::HashMap<i64, Vec<NaiveDate>> =
+        std::collections::HashMap::new();
+    for c in candidates(conn, None)? {
+        if let Some(bill) = c.recurring_id {
+            dates.entry(bill).or_default().push(c.posted_on);
+        }
+    }
+    let mut linked = 0;
+    let link =
+        |conn: &Connection, s: &SavedRecurring, c: &Candidate, linked: &mut usize| -> Result<()> {
             conn.execute(
                 "UPDATE transactions SET recurring_id = ?1 WHERE id = ?2",
                 params![s.id, c.id],
@@ -431,10 +613,42 @@ pub fn match_new(conn: &Connection, tx_ids: &[TransactionId]) -> Result<usize> {
             if s.status == Status::Paused {
                 set_status(conn, s.id, Status::Active)?;
             }
-            linked += 1;
+            *linked += 1;
+            Ok(())
+        };
+    // Charges on the usual day first, so a one-off earlier in the month can't take the period.
+    let mut taken: HashSet<TransactionId> = HashSet::new();
+    for c in &fresh {
+        if let Some(s) = saved.iter().find(|s| fits(&rule_of(s), c)) {
+            link(conn, s, c, &mut linked)?;
+            dates.entry(s.id).or_default().push(c.posted_on);
+            taken.insert(c.id);
+        }
+    }
+    for c in fresh.iter().filter(|c| !taken.contains(&c.id)) {
+        let fits_off_day = |s: &&SavedRecurring| {
+            fits_any_day(&rule_of(s), c)
+                && !dates.get(&s.id).is_some_and(|ds| {
+                    ds.iter()
+                        .any(|d| same_period(*d, c.posted_on, s.frequency, s.day_of_month))
+                })
+        };
+        if let Some(s) = saved.iter().find(fits_off_day) {
+            link(conn, s, c, &mut linked)?;
+            dates.entry(s.id).or_default().push(c.posted_on);
         }
     }
     Ok(linked)
+}
+
+/// Link every charge no bill has yet (after an import, and when the app opens, so better rules reach old charges).
+pub fn link_unlinked(conn: &Connection) -> Result<usize> {
+    let ids: Vec<TransactionId> = candidates(conn, None)?
+        .into_iter()
+        .filter(|c| c.recurring_id.is_none())
+        .map(|c| c.id)
+        .collect();
+    match_new(conn, &ids)
 }
 
 fn title_case(key: &str) -> String {
@@ -482,6 +696,8 @@ fn from_detected(r: &Recurring) -> NewRecurring {
         max_cents,
         frequency: r.cadence,
         day_of_month: day_for(r.cadence, r.last_date),
+        also_matches: Vec::new(),
+        paid_back_by: None,
     }
 }
 
@@ -512,13 +728,24 @@ fn seed_all(conn: &Connection) -> Result<usize> {
             continue; // a merchant key that can't make a valid rule is left to Suggestions
         };
         saved += 1;
-        // A bill whose charges wander around the month keeps "any day", or it would claim too few.
-        let linked: usize = conn.query_row(
-            "SELECT count(*) FROM transactions WHERE recurring_id = ?1",
-            [id],
-            |row| row.get::<_, i64>(0),
-        )? as usize;
-        if rule.day_of_month.is_some() && (linked as f64) < (r.occurrences as f64) * 0.8 {
+        // A bill whose charges wander around the month keeps "any day": most charges should be near its due day.
+        let on_day = match rule.day_of_month {
+            None => r.occurrences,
+            Some(day) => {
+                let mut stmt =
+                    conn.prepare("SELECT posted_on FROM transactions WHERE recurring_id = ?1")?;
+                let dates = stmt.query_map([id], |row| row.get::<_, String>(0))?;
+                let mut n = 0;
+                for d in dates {
+                    let d = NaiveDate::parse_from_str(&d?, "%Y-%m-%d").unwrap_or_default();
+                    if days_from_due(d, day) <= DAY_WINDOW {
+                        n += 1;
+                    }
+                }
+                n
+            }
+        };
+        if rule.day_of_month.is_some() && (on_day as f64) < (r.occurrences as f64) * 0.8 {
             update(
                 conn,
                 id,
@@ -538,12 +765,7 @@ pub fn after_import(conn: &Connection) -> Result<()> {
     if seed_if_needed(conn)? > 0 {
         return Ok(());
     }
-    let ids: Vec<TransactionId> = candidates(conn, None)?
-        .into_iter()
-        .filter(|c| c.recurring_id.is_none())
-        .map(|c| c.id)
-        .collect();
-    match_new(conn, &ids)?;
+    link_unlinked(conn)?;
     crate::price_changes::detect(conn)?;
     Ok(())
 }
@@ -649,6 +871,34 @@ pub fn views(conn: &Connection, profile_id: Option<ProfileId>) -> Result<Vec<Rec
     Ok(out)
 }
 
+/// Who a payment app's charge went to: the words after the app's name ("VENMO *SAM RIVERA 8555550100" gives "sam
+/// rivera"), or None when the statement doesn't say or it isn't a payment app.
+pub(crate) fn payee_of(description: &str) -> Option<String> {
+    // Apps that pay people (not gas stations or wires, which the payment-app list also holds).
+    const PERSON_APPS: [&str; 6] = [
+        "venmo",
+        "zelle",
+        "paypal",
+        "cashapp",
+        "cash app",
+        "apple cash",
+    ];
+    let lower = description.to_lowercase();
+    let at = PERSON_APPS
+        .iter()
+        .filter_map(|p| lower.find(p).map(|i| i + p.len()))
+        .min()?;
+    let words: Vec<&str> = lower[at..]
+        .split(|c: char| c.is_whitespace() || c == '*')
+        .filter(|w| !w.is_empty() && !["to", "from", "payment", "inst", "xfer"].contains(w))
+        .take_while(|w| {
+            w.chars()
+                .all(|c| c.is_ascii_alphabetic() || c == '.' || c == '\'')
+        })
+        .collect();
+    (!words.is_empty()).then(|| words.join(" "))
+}
+
 /// A prefilled form for "Make recurring" on a transaction.
 pub fn draft_from_transaction(conn: &Connection, tx_id: TransactionId) -> Result<NewRecurring> {
     let t = transactions::get(conn, tx_id)?;
@@ -661,14 +911,25 @@ pub fn draft_from_transaction(conn: &Connection, tx_id: TransactionId) -> Result
         .first()
         .map(|r| r.cadence)
         .unwrap_or(Cadence::Monthly);
+    // A payment app's charge can be to anyone: the bill matches the person it went to.
+    let (name, match_kind, pattern) = match payee_of(&t.description) {
+        Some(payee) => (title_case(&payee), MatchKind::Contains, payee),
+        None => (
+            title_case(&t.merchant),
+            MatchKind::Merchant,
+            t.merchant.clone(),
+        ),
+    };
     Ok(NewRecurring {
-        name: title_case(&t.merchant),
+        name,
         category_id: t.category_id,
-        match_kind: MatchKind::Merchant,
-        pattern: t.merchant.clone(),
+        match_kind,
+        pattern,
         min_cents: (size as f64 * 0.8).round() as i64,
         max_cents: (size as f64 * 1.2).round() as i64,
         frequency,
         day_of_month: day_for(frequency, t.posted_on),
+        also_matches: Vec::new(),
+        paid_back_by: None,
     })
 }

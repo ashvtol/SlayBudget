@@ -382,3 +382,30 @@ describe('DetailPane in another display currency', () => {
     expect(onOpen).toHaveBeenCalledWith(9);
   });
 });
+
+describe('a credit that pays back a bill', () => {
+  it('links to a bill from the credit, then shows which bill it pays back and can be unlinked', async () => {
+    const user = userEvent.setup();
+    setIpc(createMemoryIpc({
+      sources,
+      transactions: [
+        tx({ id: 1, postedOn: '2026-10-22', description: 'WALMART+ MEMBER', merchant: 'walmart+ member', amountCents: -1428 }),
+        tx({ id: 2, postedOn: '2026-10-22', description: 'PLATINUM WALMART+ CREDIT', merchant: 'platinum walmart+', amountCents: 1428 }),
+      ],
+    }));
+    const id = await ipc().createRecurring({ name: 'Walmart+', categoryId: null, matchKind: 'merchant', pattern: 'walmart+ member', minCents: 900, maxCents: 1900, frequency: 'monthly', dayOfMonth: null });
+    useTransactionsStore.setState({ transactions: [], categoriesById: {}, sourcesById: {}, selected: new Set(), cursor: 0, moveNote: null });
+    await useTransactionsStore.getState().load(null);
+    render(<DetailPane id={2} onClose={() => {}} onPickCategory={() => {}} />);
+    const pane = () => screen.getByLabelText('Transaction detail');
+    expect(within(pane()).queryByRole('button', { name: 'Make recurring' })).not.toBeInTheDocument();
+    await user.click(within(pane()).getByRole('button', { name: 'Pays back a bill' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Pays back a bill' })).getByRole('button', { name: 'Walmart+' }));
+    expect(await within(pane()).findByText('Pays back Walmart+')).toBeInTheDocument();
+    const bill = async () => (await ipc().listRecurring(null)).find((b) => b.saved?.id === id)!.saved!;
+    expect((await bill()).paidBackBy).toEqual(['platinum walmart+']);
+    await user.click(within(pane()).getByRole('button', { name: 'Not a payback' }));
+    await waitFor(() => expect(within(pane()).getByRole('button', { name: 'Pays back a bill' })).toBeInTheDocument());
+    expect((await bill()).paidBackBy).toEqual([]);
+  });
+});

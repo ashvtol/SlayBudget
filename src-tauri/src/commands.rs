@@ -1549,6 +1549,18 @@ pub fn set_recurring_status(
     })
 }
 
+/// Which credits pay a bill back: `None` = undecided, empty = "not paid back".
+#[tauri::command]
+pub fn set_recurring_paid_back_by(
+    state: State<'_, AppState>,
+    id: i64,
+    names: Option<Vec<String>>,
+) -> IpcResult<()> {
+    recorded(&state, "Change Paid Back By".to_string(), |c| {
+        recurrings::set_paid_back_by(c, id, names)
+    })
+}
+
 #[tauri::command]
 pub fn delete_recurring(state: State<'_, AppState>, id: i64) -> IpcResult<()> {
     recorded(&state, "Delete Recurring".to_string(), |c| {

@@ -2,7 +2,7 @@ import { CategoryPopup } from '@/components/category-popup';
 import { useEffect, useMemo, useState } from 'react';
 import { ipc } from '@/lib/ipc';
 import { cleanMerchant } from '@/lib/merchant';
-import type { Cadence, Category, NewRecurring, Transaction } from '@/lib/types';
+import type { Cadence, Category, NewRecurring, SavedRecurring, Transaction } from '@/lib/types';
 import { Select } from '@/components/select';
 
 const FREQUENCIES: [Cadence, string][] = [
@@ -60,9 +60,24 @@ export function RecurringForm({
   const [frequency, setFrequency] = useState<Cadence>(initial.frequency);
   const [day, setDay] = useState(initial.dayOfMonth == null ? '' : String(initial.dayOfMonth));
   const [categoryId, setCategoryId] = useState<number | null>(initial.categoryId);
+  const [also, setAlso] = useState((initial.alsoMatches ?? []).join(', '));
+  const [paidBack, setPaidBack] = useState((initial.paidBackBy ?? []).join(', '));
   const [matches, setMatches] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** A new bill: the bills you already have, to warn before saving a second copy of one. */
+  const [existing, setExisting] = useState<SavedRecurring[]>([]);
+  useEffect(() => {
+    if (!preview) return;
+    let live = true;
+    void ipc()
+      .listRecurring(null)
+      .then((rs) => live && setExisting(rs.flatMap((r) => (r.saved && r.saved.status !== 'archived' ? [r.saved] : []))))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, [preview]);
 
   const rule = useMemo<NewRecurring | null>(() => {
     const minCents = toCents(min);
@@ -70,8 +85,11 @@ export function RecurringForm({
     const dayNum = day.trim() === '' ? null : Number(day);
     if (!name.trim() || !pattern.trim() || Number.isNaN(minCents) || Number.isNaN(maxCents) || maxCents < minCents) return null;
     if (dayNum != null && (!Number.isInteger(dayNum) || dayNum < 1 || dayNum > 31)) return null;
-    return { name: name.trim(), categoryId, matchKind, pattern: pattern.trim(), minCents, maxCents, frequency, dayOfMonth: dayNum };
-  }, [name, categoryId, matchKind, pattern, min, max, frequency, day]);
+    const names = (text: string) => text.split(',').map((n) => n.trim()).filter(Boolean);
+    // Left empty: still undecided if it never was decided, else "not paid back".
+    const paidBackBy = names(paidBack).length > 0 ? names(paidBack) : initial.paidBackBy == null ? null : [];
+    return { name: name.trim(), categoryId, matchKind, pattern: pattern.trim(), minCents, maxCents, frequency, dayOfMonth: dayNum, alsoMatches: names(also), paidBackBy };
+  }, [name, categoryId, matchKind, pattern, min, max, frequency, day, also, paidBack, initial.paidBackBy]);
 
   useEffect(() => {
     if (!preview || !rule) return;
@@ -95,6 +113,7 @@ export function RecurringForm({
     }
   }
 
+  const twin = existing.find((s) => s.matchKind === matchKind && s.pattern.trim().toLowerCase() === pattern.trim().toLowerCase());
   const sortedCategories = [...categories].filter((c) => !c.archived && c.kind === 'expense').sort((a, b) => a.name.localeCompare(b.name));
   return (
     <div className="flex flex-col gap-3">
@@ -113,6 +132,9 @@ export function RecurringForm({
         </div>
         <input aria-label="Match text" value={pattern} onChange={(e) => setPattern(e.target.value)} className={fieldClass} style={fieldStyle} />
       </div>
+      <Field label="Also matches (other names it goes by, separated by commas)">
+        <input aria-label="Also matches" value={also} onChange={(e) => setAlso(e.target.value)} placeholder="e.g. wmt plus" className={fieldClass} style={fieldStyle} />
+      </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="From ($)">
           <input aria-label="Minimum amount" value={min} onChange={(e) => setMin(e.target.value)} className={fieldClass} style={fieldStyle} />
@@ -143,12 +165,16 @@ export function RecurringForm({
           onChange={setCategoryId}
         />
       </Field>
+      <Field label="Paid back by (credits that refund it, separated by commas)">
+        <input aria-label="Paid back by" value={paidBack} onChange={(e) => setPaidBack(e.target.value)} placeholder="e.g. Platinum Walmart+" className={fieldClass} style={fieldStyle} />
+      </Field>
       {preview && matches != null && (
         <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
           Matches {matches} {matches === 1 ? 'transaction' : 'transactions'} so far.
         </p>
       )}
       {!rule && <p className="m-0 text-[12px]" style={{ color: 'var(--warn)' }}>Fill in a name, what to match, and an amount range (from is at most to).</p>}
+      {twin && <p className="m-0 text-[12px]" style={{ color: 'var(--warn)' }}>You already have {twin.name} with this rule. Saving makes a second bill.</p>}
       {error && <p className="m-0 text-[12px]" style={{ color: 'var(--neg)' }}>{error}</p>}
       <div className="flex justify-end gap-2">
         <button type="button" onClick={onCancel} className="rounded-md px-3 py-1.5 text-[12px] font-semibold" style={{ color: 'var(--muted)' }}>

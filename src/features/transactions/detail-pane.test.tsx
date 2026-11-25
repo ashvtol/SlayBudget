@@ -81,9 +81,16 @@ describe('DetailPane', () => {
     const user = userEvent.setup();
     const onPickCategory = vi.fn();
     await renderPane(1, onPickCategory);
-    await user.click(screen.getByRole('button', { name: 'Review' }));
+    const mark = screen.getByRole('button', { name: 'Mark as Reviewed' });
+    expect(mark).toHaveAttribute('aria-pressed', 'false');
+    expect(mark.querySelector('svg')).toBeNull();
+    await user.click(mark);
     await waitFor(() => expect(useTransactionsStore.getState().byId(1)!.reviewed).toBe(true));
-    expect(screen.getByRole('button', { name: 'Reviewed' })).toBeInTheDocument();
+    const done = screen.getByRole('button', { name: 'Reviewed' });
+    expect(done).toHaveAttribute('aria-pressed', 'true');
+    expect(done).toHaveAttribute('title', 'Mark as Not Reviewed');
+    expect(done.style.color).toBe('var(--pos)');
+    expect(done.querySelector('svg')).toBeNull();
     expect(screen.queryByText('To review')).not.toBeInTheDocument();
     await user.click(screen.getByText('Groceries'));
     expect(onPickCategory).toHaveBeenCalledWith(1);

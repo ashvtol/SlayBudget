@@ -13,7 +13,7 @@ import { PriceCheckBox } from '@/features/recurrings/price-check-box';
 import { dayHeaderLabel, formatSignedMoney, groupByDay } from '@/lib/format';
 import { Money } from '@/components/money';
 import { ToolbarButton } from '@/components/toolbar-button';
-import { IconCalendar, IconCard, IconCheck, IconTag, IconTrash } from '@/components/icons';
+import { IconCalendar, IconCard, IconTag, IconTrash } from '@/components/icons';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DuplicateBox } from './duplicate-box';
 import { displayMerchant, TransactionRow, TransferPill } from './transaction-row';
@@ -224,10 +224,22 @@ export function ReviewButton({ id }: { id: number }) {
   const tx = useTransactionsStore((s) => s.byId(id));
   const toggleReviewed = useTransactionsStore((s) => s.toggleReviewed);
   if (!tx) return null;
+  // A macOS-style toggle: the label says what a click does, and a reviewed transaction shows green at a glance.
   return (
-    <ToolbarButton icon={IconCheck} active={tx.reviewed} aria-pressed={tx.reviewed} onClick={() => void toggleReviewed([tx.id])}>
-      {tx.reviewed ? 'Reviewed' : 'Review'}
-    </ToolbarButton>
+    <button
+      type="button"
+      aria-pressed={tx.reviewed}
+      title={tx.reviewed ? 'Mark as Not Reviewed' : 'Mark as Reviewed'}
+      onClick={() => void toggleReviewed([tx.id])}
+      className="inline-flex h-[28px] shrink-0 items-center whitespace-nowrap rounded-md border px-2.5 text-[12px] font-semibold transition-colors hover:brightness-125"
+      style={
+        tx.reviewed
+          ? { color: 'var(--pos)', borderColor: 'color-mix(in oklab, var(--pos) 45%, transparent)', background: 'color-mix(in oklab, var(--pos) 16%, transparent)' }
+          : { color: 'var(--text)', borderColor: 'var(--line-strong)', background: 'transparent' }
+      }
+    >
+      {tx.reviewed ? 'Reviewed' : 'Mark as Reviewed'}
+    </button>
   );
 }
 

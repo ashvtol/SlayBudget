@@ -57,7 +57,7 @@ describe('TransactionsPage', () => {
     await renderPage();
     await user.click(within(list()).getByText('Shell'));
     expect(within(details()).getByRole('heading', { name: 'Shell' })).toBeInTheDocument();
-    expect(within(details()).getByRole('button', { name: 'Review' })).toBeInTheDocument();
+    expect(within(details()).getByRole('button', { name: 'Mark as Reviewed' })).toBeInTheDocument();
   });
 
   it('opens the transaction another screen asked for on the first visit, while the page loads too', async () => {

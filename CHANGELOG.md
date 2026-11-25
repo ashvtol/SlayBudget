@@ -5,6 +5,11 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-25
+### Changed
+- **Reviewed shows at a glance.** The transaction's button reads **Mark as Reviewed**, and turns green as **Reviewed**
+  once it is, like a macOS toggle (no tick).
+
 ## [0.10.0] - 2026-11-25
 ### Added
 - **Bills that are paid back.** When a card's statement credit refunds a subscription (a card's Walmart+ credit,

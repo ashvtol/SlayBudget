@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { plotArea } from '@/features/charts/svg/frame';
 import userEvent from '@testing-library/user-event';
 import { afterEach } from 'vitest';
-import { createMemoryIpc, setIpc } from '@/lib/ipc';
+import { createMemoryIpc, ipc, setIpc } from '@/lib/ipc';
 import type { Category, Transaction } from '@/lib/types';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import { useAnalyticsStore } from './analytics-store';
@@ -124,6 +124,31 @@ describe('CashflowPage', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
+  it('in the details, clicking a month shows its total and categories; pointing alone changes nothing', async () => {
+    const user = userEvent.setup();
+    await setup();
+    await user.click(within(card('Spend')).getByRole('button', { name: /View more/i }));
+    const drawer = screen.getByRole('dialog', { name: 'Spend' });
+    const header = () => within(drawer).getByRole('group', { name: 'Shown month' });
+    const list = () => within(drawer).getByRole('list', { name: 'Categories' });
+    expect(header()).toHaveTextContent('November 2026$120.00');
+    const chart = within(drawer).getByRole('img', { name: 'Spend over two years' });
+    const area = plotArea(560, 130);
+    const months = 24;
+    const at = (i: number) => ({ clientX: area.left + (area.width / months) * (i + 0.5) });
+    fireEvent.pointerMove(chart, at(5)); // May 2025
+    expect(header()).toHaveTextContent('November 2026');
+    fireEvent.click(chart);
+    fireEvent.pointerLeave(chart);
+    expect(header()).toHaveTextContent('May 2025$50.00');
+    expect(list()).toHaveTextContent('Groceries');
+    expect(list()).toHaveTextContent('$50.00');
+    expect(within(drawer).getByRole('heading', { name: 'Categories in May 2025' })).toBeInTheDocument();
+    fireEvent.pointerMove(chart, at(5));
+    fireEvent.click(chart);
+    expect(header()).toHaveTextContent('November 2026');
+  });
+
   it('compares with the previous year when chosen', async () => {
     const user = userEvent.setup();
     await setup();
@@ -151,6 +176,49 @@ describe('CashflowPage', () => {
     await waitFor(() => expect(card('Spend')).not.toHaveTextContent('vs'));
     expect(within(card('Spend')).queryByLabelText(/^Up|^Down/)).not.toBeInTheDocument();
     expect(card('Spend')).toHaveTextContent('$120.00');
+  });
+
+  it('Income details list every source with who paid it, and you choose which categories count', async () => {
+    const user = userEvent.setup();
+    const income = (id: number, name: string): Category => ({ ...categories[0], id, name, emoji: null, kind: 'income' });
+    const row = (postedOn: string, cents: number, categoryId: number, merchant: string) => ({ ...tx(postedOn, cents, categoryId), merchant });
+    setIpc(createMemoryIpc({
+      categories: [...categories, income(30, 'Paycheck'), income(31, 'Interest')],
+      transactions: [row('2026-11-01', 400000, 30, 'acme corp'), row('2026-11-02', 1000, 31, 'big bank'), row('2026-11-03', -12000, 10, 'whole foods')],
+    }));
+    useProfileStore.setState({ activeProfileId: null });
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<CashflowPage />);
+    await waitFor(() => expect(card('Income')).toHaveTextContent('$4,010.00'));
+    await user.click(within(card('Income')).getByRole('button', { name: /View more/i }));
+    const drawer = screen.getByRole('dialog', { name: 'Income' });
+    expect(within(drawer).getByRole('table', { name: 'Key metrics' })).toHaveTextContent('Avg monthly income');
+    const sources = within(drawer).getByRole('list', { name: 'Categories' });
+    expect(within(sources).getAllByRole('listitem').map((li) => li.textContent)).toEqual(['PaycheckAcme Corp$4,000.00', 'InterestBig Bank$10.00']);
+    await user.click(within(drawer).getByRole('button', { name: 'Choose categories' }));
+    const choose = screen.getByRole('group', { name: 'Count in Income' });
+    expect(within(choose).getByRole('checkbox', { name: 'Paycheck' })).toBeChecked();
+    await user.click(within(choose).getByRole('checkbox', { name: 'Interest' }));
+    await waitFor(() => expect(card('Income')).toHaveTextContent('$4,000.00'));
+    expect(JSON.parse((await ipc().getSetting('cashflow_hidden'))!)).toEqual({ spend: [], income: ['31'] });
+    await user.click(within(drawer).getByRole('button', { name: 'Choose categories' }));
+    expect(within(drawer).getByRole('button', { name: 'Choose categories' })).toHaveTextContent('1 hidden');
+  });
+
+  it('Spend details choose their categories the same way', async () => {
+    const user = userEvent.setup();
+    await setup();
+    await user.click(within(card('Spend')).getByRole('button', { name: /View more/i }));
+    const drawer = screen.getByRole('dialog', { name: 'Spend' });
+    await user.click(within(drawer).getByRole('button', { name: 'Choose categories' }));
+    await user.click(within(screen.getByRole('group', { name: 'Count in Spend' })).getByRole('checkbox', { name: /Groceries/ }));
+    await waitFor(() => expect(card('Spend')).toHaveTextContent('$0.00'));
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('group', { name: 'Count in Spend' })).not.toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Spend' })).toBeInTheDocument();
+    await user.click(within(screen.getByRole('dialog', { name: 'Spend' })).getByRole('button', { name: 'Choose categories' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Spend' })).getByRole('table', { name: 'Key metrics' }));
+    expect(screen.queryByRole('group', { name: 'Count in Spend' })).not.toBeInTheDocument();
   });
 });
 

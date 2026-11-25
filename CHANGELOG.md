@@ -5,6 +5,18 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.2] - 2026-11-25
+### Added
+- **Choose what Cash flow counts.** Spend and Income details each have **Choose categories**: untick a category (say
+  reimbursements, or money moved from savings) and it leaves the totals, the charts and Net income. Your choice is
+  remembered.
+- **Every income source, and where spending went.** Income details list each source with who paid it (Paycheck · your
+  employer), and Spend details list each category with its top merchants.
+### Fixed
+- **Cash flow details show the month you click.** Click a month in Spend, Income or Net income's details to see its
+  total and categories; click it again to go back to this month. Pointing only highlights the bar.
+- **Income details show the average monthly income**, not spend.
+
 ## [0.10.1] - 2026-11-25
 ### Changed
 - **Reviewed shows at a glance.** The transaction's button reads **Mark as Reviewed**, and turns green as **Reviewed**

@@ -146,12 +146,23 @@ describe('buildCashflow drawer details', () => {
   it('reports per-year totals and average per month (partial current year by days)', () => {
     expect(c.years.map((y) => y.year)).toEqual([2026, 2025]);
     expect(c.years[1]).toMatchObject({ spendCents: 120000, avgMonthlySpendCents: 10000 });
+    expect(c.years[1].avgMonthlyIncomeCents).toBe(Math.round(c.years[1].incomeCents / 12));
     // 2026: Jan-Oct full (10) + 21/30 of November
     expect(c.years[0].avgMonthlySpendCents).toBe(Math.round(223000 / (10 + 21 / 30)));
   });
 
   it("lists this month's spend by category, largest first", () => {
     expect(c.thisMonthCategories.map((x) => [x.name, x.spendCents])).toEqual([['Rent', 220000], ['Groceries', 2000]]);
+  });
+
+  it("keeps every history month's categories, with the current month matching this month's", () => {
+    const months = Object.keys(c.sourcesByMonth.spend);
+    expect(months).toEqual(c.history.map((h) => h.month));
+    expect(c.sourcesByMonth.spend[months.at(-1)!].map((x) => [x.name, x.cents])).toEqual(c.thisMonthCategories.map((x) => [x.name, x.spendCents]));
+    for (const h of c.history) {
+      expect(c.sourcesByMonth.spend[h.month].reduce((s, x) => s + x.cents, 0)).toBe(h.spendCents);
+      expect(c.sourcesByMonth.income[h.month].reduce((s, x) => s + x.cents, 0)).toBe(h.incomeCents);
+    }
   });
 });
 
@@ -172,5 +183,46 @@ describe('more Cash flow ranges (Copilot)', () => {
 
   it('crosses a year boundary for the last 4 weeks', () => {
     expect(periodRange('last4w', 'previousPeriod', '2026-01-10').label).toBe('Dec 14, 2025 - Jan 10, 2026');
+  });
+});
+
+describe('choosing which categories Cash flow counts, and who each month came from', () => {
+  const categories = [
+    cat(10, 'Groceries', '#00ff00'),
+    cat(20, 'Restaurants', '#ff0000'),
+    { ...cat(30, 'Paycheck'), kind: 'income' as const },
+    { ...cat(31, 'Reimbursements'), kind: 'income' as const },
+  ];
+  const row = (postedOn: string, cents: number, categoryId: number, merchant: string) => ({ ...tx(postedOn, cents, categoryId), merchant, description: merchant.toUpperCase() });
+  const txs = [
+    row('2026-11-01', 400000, 30, 'acme corp'),
+    row('2026-11-15', 400000, 30, 'acme corp'),
+    row('2026-11-10', 25000, 31, 'work expenses'),
+    row('2026-11-03', -6000, 10, 'whole foods'),
+    row('2026-11-05', -2000, 10, 'trader joes'),
+    row('2026-11-07', -4500, 20, 'sweetgreen'),
+  ];
+  const build = (hidden?: { spend: string[]; income: string[] }) =>
+    buildCashflow({ transactions: txs, categories, groups, today: TODAY, period: 'month', compare: 'previousPeriod', includeExcluded: false, hidden });
+
+  it('lists each month\'s categories with who the money went to or came from, largest first', () => {
+    const c = build();
+    expect(c.sourcesByMonth.income['2026-11'].map((x) => [x.name, x.cents, x.people.map((p) => `${p.name} ${p.cents}`)])).toEqual([
+      ['Paycheck', 800000, ['Acme Corp 800000']],
+      ['Reimbursements', 25000, ['Work Expenses 25000']],
+    ]);
+    expect(c.sourcesByMonth.spend['2026-11'].map((x) => [x.name, x.cents, x.people.map((p) => p.name)])).toEqual([
+      ['Groceries', 8000, ['Whole Foods', 'Trader Joes']],
+      ['Restaurants', 4500, ['Sweetgreen']],
+    ]);
+  });
+
+  it('leaves a hidden category out of the totals, the charts and net income, but still offers it to choose', () => {
+    const c = build({ spend: ['20'], income: ['31'] });
+    expect(c.current).toMatchObject({ incomeCents: 800000, spendCents: 8000, netCents: 792000 });
+    expect(c.history.at(-1)).toMatchObject({ incomeCents: 800000, spendCents: 8000 });
+    expect(c.sourcesByMonth.income['2026-11'].map((x) => x.name)).toEqual(['Paycheck']);
+    expect(c.categoriesUsed.income.map((x) => [x.key, x.name])).toEqual([['30', 'Paycheck'], ['31', 'Reimbursements']]);
+    expect(c.categoriesUsed.spend.map((x) => x.name)).toEqual(['Groceries', 'Restaurants']);
   });
 });

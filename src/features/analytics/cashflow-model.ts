@@ -1,4 +1,5 @@
-import { incomeOf, isRegular, spendOf } from '@/lib/tx-type';
+import { incomeOf, isRegular, spendOf, txTypeOf } from '@/lib/tx-type';
+import { cleanMerchant } from '@/lib/merchant';
 // Everything the Copilot-style Cash flow screen and its "View more" drawer show.
 // Pure: built from a list of transactions so it can be tested without the UI.
 
@@ -36,6 +37,7 @@ export interface YearMetrics {
   spendCents: number;
   incomeCents: number;
   avgMonthlySpendCents: number;
+  avgMonthlyIncomeCents: number;
 }
 export interface CategorySpend {
   name: string;
@@ -54,6 +56,24 @@ export interface Cashflow {
   history: MonthPoint[];
   years: YearMetrics[];
   thisMonthCategories: CategorySpend[];
+  /** Each history month's spend and income by category, largest first, with who it went to or came from. */
+  sourcesByMonth: { spend: Record<string, Source[]>; income: Record<string, Source[]> };
+  /** Every category with spend or income, including hidden ones, to choose which count. */
+  categoriesUsed: { spend: CategoryChoice[]; income: CategoryChoice[] };
+}
+
+/** A category to count or hide: its id as text, or 'uncat'. */
+export interface CategoryChoice {
+  key: string;
+  name: string;
+  color: string;
+  emoji: string | null;
+}
+
+/** A month's money in one category, with the top merchants or payers. */
+export interface Source extends CategoryChoice {
+  cents: number;
+  people: { name: string; cents: number }[];
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -131,10 +151,20 @@ export function buildCashflow(input: {
   period: CashflowPeriod;
   compare: Comparison;
   includeExcluded: boolean;
+  /** Categories you chose not to count, as spend and as income (ids as text, or 'uncat'). */
+  hidden?: { spend: string[]; income: string[] };
 }): Cashflow {
   const { categories, groups, today, period, compare, includeExcluded } = input;
   const excluded = new Set(categories.filter((c) => c.excluded).map((c) => c.id));
-  const txs = includeExcluded ? input.transactions : input.transactions.filter((t) => t.categoryId == null || !excluded.has(t.categoryId));
+  const counted = includeExcluded ? input.transactions : input.transactions.filter((t) => t.categoryId == null || !excluded.has(t.categoryId));
+  const keyOfTx = (t: Transaction) => (t.categoryId == null ? 'uncat' : String(t.categoryId));
+  const hiddenSpend = new Set(input.hidden?.spend ?? []);
+  const hiddenIncome = new Set(input.hidden?.income ?? []);
+  const kindOf = (t: Transaction) => (txTypeOf(t) === 'income' ? 'income' : isRegular(t) ? 'spend' : null);
+  const txs = counted.filter((t) => {
+    const kind = kindOf(t);
+    return kind === 'income' ? !hiddenIncome.has(keyOfTx(t)) : kind === 'spend' ? !hiddenSpend.has(keyOfTx(t)) : true;
+  });
   const between = (from: string, to: string) => txs.filter((t) => t.postedOn >= from && t.postedOn <= to);
 
   const range = periodRange(period, compare, today);
@@ -197,17 +227,60 @@ export function buildCashflow(input: {
   const years: YearMetrics[] = [y, y - 1].map((year) => {
     const t = yearTotals(year);
     const months = year === y ? elapsed : 12;
-    return { year, spendCents: t.spendCents, incomeCents: t.incomeCents, avgMonthlySpendCents: Math.round(t.spendCents / months) };
+    return {
+      year,
+      spendCents: t.spendCents,
+      incomeCents: t.incomeCents,
+      avgMonthlySpendCents: Math.round(t.spendCents / months),
+      avgMonthlyIncomeCents: Math.round(t.incomeCents / months),
+    };
   });
 
-  // This month's spend by category.
-  const monthSpend = new Map<string, number>();
-  for (const t of byMonth.get(thisMonth) ?? []) {
-    if (isRegular(t)) monthSpend.set(keyOf(t), (monthSpend.get(keyOf(t)) ?? 0) + spendOf(t));
-  }
-  const thisMonthCategories = [...monthSpend.entries()]
-    .map(([key, spendCents]) => ({ ...describe(key), spendCents }))
-    .sort((a, b) => b.spendCents - a.spendCents);
+  // A month's spend by category.
+  const categoriesOf = (month: string): CategorySpend[] => {
+    const monthSpend = new Map<string, number>();
+    for (const t of byMonth.get(month) ?? []) {
+      if (isRegular(t)) monthSpend.set(keyOf(t), (monthSpend.get(keyOf(t)) ?? 0) + spendOf(t));
+    }
+    return [...monthSpend.entries()].map(([key, spendCents]) => ({ ...describe(key), spendCents })).sort((a, b) => b.spendCents - a.spendCents);
+  };
+  const thisMonthCategories = categoriesOf(thisMonth);
+
+  // Each month's spend and income by category, with the top three merchants or payers.
+  const sourcesOf = (month: string, kind: 'spend' | 'income'): Source[] => {
+    const byCat = new Map<string, Map<string, number>>();
+    for (const t of byMonth.get(month) ?? []) {
+      if (kindOf(t) !== kind) continue;
+      const cents = kind === 'income' ? incomeOf(t) : spendOf(t);
+      const people = byCat.get(keyOf(t)) ?? new Map<string, number>();
+      const who = cleanMerchant(t.merchant || t.description);
+      people.set(who, (people.get(who) ?? 0) + cents);
+      byCat.set(keyOf(t), people);
+    }
+    return [...byCat.entries()]
+      .map(([key, people]) => ({
+        key,
+        ...describe(key),
+        cents: [...people.values()].reduce((a, b) => a + b, 0),
+        people: [...people.entries()].map(([name, cents]) => ({ name, cents })).sort((a, b) => b.cents - a.cents).slice(0, 3),
+      }))
+      .sort((a, b) => b.cents - a.cents);
+  };
+  const sourcesByMonth = {
+    spend: Object.fromEntries(history.map((h) => [h.month, sourcesOf(h.month, 'spend')])),
+    income: Object.fromEntries(history.map((h) => [h.month, sourcesOf(h.month, 'income')])),
+  };
+  // Every category with money in the two years, hidden or not, largest first.
+  const usedOf = (kind: 'spend' | 'income'): CategoryChoice[] => {
+    const since = `${history[0].month}-01`;
+    const totals = new Map<string, number>();
+    for (const t of counted) {
+      if (t.postedOn < since || kindOf(t) !== kind) continue;
+      totals.set(keyOfTx(t), (totals.get(keyOfTx(t)) ?? 0) + (kind === 'income' ? incomeOf(t) : spendOf(t)));
+    }
+    return [...totals.entries()].sort((a, b) => b[1] - a[1]).map(([key]) => ({ key, ...describe(key) }));
+  };
+  const categoriesUsed = { spend: usedOf('spend'), income: usedOf('income') };
 
   return {
     range: { from: range.from, to: range.to, label: range.label },
@@ -220,5 +293,7 @@ export function buildCashflow(input: {
     history,
     years,
     thisMonthCategories,
+    sourcesByMonth,
+    categoriesUsed,
   };
 }

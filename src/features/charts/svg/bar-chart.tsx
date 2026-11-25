@@ -56,6 +56,7 @@ export function BarChart({
   height = 150,
   width,
   onHover,
+  selectedIndex = null,
 }: {
   label: string;
   /** The column heading for the values in the screen-reader table ("Net income"). */
@@ -70,6 +71,8 @@ export function BarChart({
   /** Fixed width (tests); otherwise the container's. */
   width?: number;
   onHover?: (index: number | null) => void;
+  /** A month kept shown (clicked): it stays lit while nothing is pointed at. */
+  selectedIndex?: number | null;
 }) {
   const [ref, w] = useMeasuredWidth(width);
   const area = plotArea(w, height);
@@ -96,7 +99,8 @@ export function BarChart({
       >
         {values.map((v, i) => {
           const slot = layout[i];
-          const lit = hover.index === i;
+          const focus = hover.index ?? selectedIndex;
+          const lit = focus === i;
           // The hovered bar turns a brighter green (or red), as in Copilot.
           const fill = color === 'sign' ? (v < 0 ? (lit ? 'var(--neg-bright)' : 'var(--neg)') : lit ? 'var(--pos-bright)' : 'var(--pos)') : color;
           return (
@@ -105,7 +109,7 @@ export function BarChart({
               data-part="bar"
               data-width={slot.barWidth}
               d={barPath(slot.barX, slot.barWidth, scale.y(v), scale.zero)}
-              style={{ fill, opacity: hover.index == null || hover.index === i ? 1 : DIM, transition }}
+              style={{ fill, opacity: focus == null || focus === i ? 1 : DIM, transition }}
             />
           );
         })}

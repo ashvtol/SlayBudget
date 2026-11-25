@@ -264,3 +264,39 @@ describe('buildRecurrings credits by year', () => {
     expect(item.years.find((y) => y.year === 2026)).toMatchObject({ spendCents: 0, creditedCents: 0 });
   });
 });
+
+describe('buildRecurrings trend', () => {
+  const bill = (id: number, merchant: string, cents: number, paidBackBy: string[] | null = null): Recurring => ({
+    ...rec(merchant, cents, '2026-11-05', '2026-12-05'),
+    saved: {
+      id, status: 'active', name: merchant, categoryId: null, matchKind: 'merchant', pattern: merchant, minCents: 0, maxCents: 99999,
+      frequency: 'monthly', dayOfMonth: 5, createdOn: '2025-01-01', alsoMatches: [], paidBackBy,
+    },
+  });
+  const charge = (id: number, merchant: string, d: string, cents: number) => ({ ...tx(merchant, d, -cents), recurringId: id });
+
+  it('totals what bills cost each month, after credits, with this month against last month and this year against last', () => {
+    const txs = [
+      charge(1, 'netflix', '2025-11-05', 1500), charge(1, 'netflix', '2025-12-05', 1500),
+      charge(1, 'netflix', '2026-10-05', 1800), charge(1, 'netflix', '2026-11-05', 1800),
+      charge(2, 'gym', '2026-10-20', 5000),
+      charge(3, 'walmart', '2026-10-22', 1400), tx('platinum walmart', '2026-10-22', 1400),
+      charge(4, 'old', '2025-03-01', 900),
+    ];
+    const recurring = [bill(1, 'netflix', 1800), bill(2, 'gym', 5000), bill(3, 'walmart', 1400, ['platinum walmart'])];
+    const archived: Recurring = { ...bill(4, 'old', 900), saved: { ...bill(4, 'old', 900).saved!, status: 'archived' } };
+    const t = buildRecurrings({ recurring: [...recurring, archived], transactions: txs, today: TODAY }).trend;
+    expect(t.months.map((m) => m.month)).toEqual([
+      '2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10', '2026-11',
+    ]);
+    expect(t.months.at(-2)!.paidCents).toBe(6800); // Oct: 1800 + 5000, Walmart credited back in full
+    expect(t.months.at(-1)!.paidCents).toBe(1800);
+    // Last month up to the same day (Nov 21 -> Oct 21): Netflix and the gym.
+    expect(t.lastMonthSoFarCents).toBe(6800);
+    expect(t.lastMonthName).toBe('October');
+    expect(t.yearToDateCents).toBe(1800 + 6800);
+    expect(t.lastYearToDateCents).toBe(900 + 1500); // Mar and Nov 2025, an archived bill included
+    expect(t.lastYearCents).toBe(900 + 1500 + 1500);
+    expect(t.monthlyAvgCents).toBe(Math.round((1500 + 1500 + 6800) / 12)); // Nov 2025 to Oct 2026
+  });
+});

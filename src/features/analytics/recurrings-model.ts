@@ -4,6 +4,7 @@
 import type { Recurring, Transaction } from '@/lib/types';
 import { cleanMerchant } from '@/lib/merchant';
 import { pairAcrossBills } from '@/features/recurrings/bill-credits';
+import { trendFrom, type SpendTrend } from './spend-trend';
 
 export type MonthState = 'paid' | 'missed' | 'upcoming' | 'none';
 
@@ -25,8 +26,12 @@ export interface RecurringItem {
   credited: 'full' | 'partial' | null;
 }
 
+export type RecurringTrend = SpendTrend;
+
 export interface RecurringsModel {
   summary: { leftToPayCents: number; paidCents: number };
+  /** What bills cost, after credits: each of the last 12 months, and this month and year against the last. */
+  trend: RecurringTrend;
   thisMonth: RecurringItem[];
   future: RecurringItem[];
   /** Expected before this month but never charged: stopped, or the data ends early. */
@@ -156,7 +161,14 @@ export function buildRecurrings(input: {
     .sort((a, b) => b.recurring.lastDate.localeCompare(a.recurring.lastDate) || a.recurring.merchant.localeCompare(b.recurring.merchant));
   const future = items.filter((i) => !thisMonth.includes(i) && !stale.includes(i)).sort(byDate);
 
+  // What each charge cost after its credit, by day, across every bill (archived ones too, for the months they ran).
+  const paid: { day: string; cents: number }[] = allItems.flatMap((i) =>
+    i.charges.map((c) => ({ day: c.postedOn, cents: -c.amountCents - (i.credits.get(c.id)?.amountCents ?? 0) })),
+  );
+  const trend = trendFrom(paid, today);
+
   return {
+    trend,
     summary: {
       // A bill that comes back in full costs nothing; what came back comes off what you paid.
       leftToPayCents: thisMonth.filter((i) => !i.paid && i.credited !== 'full').reduce((s, i) => s + i.recurring.typicalAmountCents, 0),

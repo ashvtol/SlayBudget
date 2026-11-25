@@ -87,6 +87,21 @@ describe('BudgetHistoryChart', () => {
     expect(within(svg()).getByText('$400.00')).toBeInTheDocument();
   });
 
+  it('the tag never covers a bar: it sits past the last month, at rest, while hovering or after a click', () => {
+    const onPick = vi.fn();
+    const { rerender } = draw({ onPick });
+    const clear = () => {
+      const tagX = Number(/translate\(([\d.]+)/.exec(svg().querySelector('[data-part="tag"]')!.getAttribute('transform')!)![1]);
+      const rightmost = Math.max(...bars().map((b) => Number(b.getAttribute('x')) + Number(b.getAttribute('width'))));
+      expect(tagX).toBeGreaterThanOrEqual(rightmost);
+    };
+    clear();
+    fireEvent.pointerMove(svg(), { clientX: at(3) });
+    clear();
+    rerender(<BudgetHistoryChart months={months} width={W} height={H} onPick={onPick} picked="2026-08" />);
+    clear();
+  });
+
   it('screen readers get each month’s spending and budget', () => {
     draw();
     const rows = within(screen.getByRole('table', { name: 'Budget history: values' })).getAllByRole('row');

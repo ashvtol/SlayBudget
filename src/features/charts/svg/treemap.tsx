@@ -1,4 +1,4 @@
-// The Insights spending map, laid out with d3-hierarchy (what visx's treemap uses): group frames with their name on top,
+// The Insights spending map, laid out with d3-hierarchy: group frames with their name on top,
 // category tiles colored by change against the previous period, and a category's merchants once you open it. Tiles are
 // absolutely positioned boxes so they glide to new places when the data changes (not with Reduce motion); hovering a
 // tile shows a dark card that follows the pointer at once.

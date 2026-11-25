@@ -1,6 +1,7 @@
 // Copilot's category history: 24 capsule bars (green within budget, orange over, blue with no budget, yellow for the
 // month in progress), a dash on the baseline for a month with nothing spent, the budget as a thin stepped line that
-// fades in from the left with a tag at the month you're looking at, and one-letter months. Hover brightens a month and
+// fades in from the left with a tag past the last month showing the budget of the month you're looking at, and
+// one-letter months. Hover brightens a month and
 // dims the rest; clicking picks it (its letter goes bold and the months after it fade).
 
 import { useId, type MouseEvent } from 'react';
@@ -43,9 +44,9 @@ export function budgetSteps(months: BudgetMonth[], layout: Slot[], y: (cents: nu
   return paths.map((p) => p.replace(/L([\d.]+),([\d.]+)L\1,\2/g, 'L$1,$2'));
 }
 
-/** Room for the month letters below and the budget tag above. */
+/** Room for the month letters below, and on the right for the budget tag, so it never covers a bar. */
 export function historyArea(width: number, height: number): PlotArea {
-  return { left: 4, top: 14, width: Math.max(0, width - 8), height: Math.max(0, height - 14 - 18) };
+  return { left: 4, top: 14, width: Math.max(0, width - 8 - TAG_WIDTH - 4), height: Math.max(0, height - 14 - 18) };
 }
 
 const monthName = (month: string) => `${FULL_MONTHS[Number(month.slice(5, 7)) - 1]} ${month.slice(0, 4)}`;
@@ -57,7 +58,10 @@ export function BudgetHistoryChart({
   width,
   onPick,
   onHover,
+  label = 'Budget history',
 }: {
+  /** What the chart shows, for screen readers. */
+  label?: string;
   months: BudgetMonth[];
   /** A month ("YYYY-MM") picked on the chart. */
   picked?: string;
@@ -90,7 +94,7 @@ export function BudgetHistoryChart({
     <div ref={ref} className="relative">
       <svg
         role="img"
-        aria-label="Budget history"
+        aria-label={label}
         width={w}
         height={height}
         className="block cursor-pointer overflow-visible outline-none focus-visible:[outline:2px_solid_var(--accent)] focus-visible:[outline-offset:2px]"
@@ -132,7 +136,7 @@ export function BudgetHistoryChart({
             <path key={i} data-part="budget" d={d} fill="none" strokeWidth={1.5} stroke={`url(#${fadeId})`} />
           ))}
           {tagBudget != null && (
-            <g data-part="tag" transform={`translate(${Math.min(layout[tagIndex].x + layout[tagIndex].slotWidth, area.width - TAG_WIDTH)},${y(tagBudget)})`}>
+            <g data-part="tag" transform={`translate(${area.width + 2},${y(tagBudget)})`}>
               <path d="M0,0 L8,-10 L8,10 Z" style={{ fill: 'var(--text)' }} />
               <rect x={8} y={-10} width={TAG_WIDTH - 8} height={20} rx={3} style={{ fill: 'var(--text)' }} />
               <text x={8 + (TAG_WIDTH - 8) / 2} y={0} dy="0.35em" textAnchor="middle" fontSize={11} fontWeight={700} style={{ fill: 'var(--panel)' }}>
@@ -158,7 +162,7 @@ export function BudgetHistoryChart({
           })}
         </g>
       </svg>
-      <table aria-label="Budget history: values" className="sr-only">
+      <table aria-label={`${label}: values`} className="sr-only">
         <thead>
           <tr>
             <th>Month</th>

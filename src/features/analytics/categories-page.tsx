@@ -5,7 +5,6 @@ import { Money } from '@/components/money';
 import { ToolbarButton } from '@/components/toolbar-button';
 import { pillColors } from '@/components/category-pill';
 import { BudgetHistoryChart } from '@/features/charts/svg/budget-history-chart';
-import { Ring } from '@/features/charts/mini-charts';
 import { ipc } from '@/lib/ipc';
 import { useProfileStore } from '@/lib/stores/profile-store';
 import type { BudgetPlan, Category, CategoryGroup, Recurring, Source, Transaction } from '@/lib/types';
@@ -13,6 +12,7 @@ import { TransactionRow } from '@/features/transactions/transaction-row';
 import { TransactionDrawer } from '@/features/transactions/transaction-drawer';
 import { BudgetEditor, GroupBudgetEditor, RebalanceDialog } from './budget-editors';
 import { useAnalyticsStore } from './analytics-store';
+import { BudgetSummary } from './budget-summary';
 import { buildCategories, type Row, type Selection } from './categories-model';
 import { CategoryLine } from './category-line';
 import { AddCategoryMenu } from '@/features/categories/add-category-menu';
@@ -167,22 +167,7 @@ export function CategoriesPage() {
       list={
         model && (
           <div className="flex flex-col gap-6 px-8 py-8">
-            <section aria-label="Budget summary" className="flex items-center justify-between rounded-[10px] border px-8 py-6" style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}>
-              <div>
-                <div className="text-[18px] font-semibold"><Money cents={model.summary.spentCents} decimals={false} /></div>
-                <div className="text-[12px]" style={{ color: 'var(--muted)' }}>spent in {monthName}</div>
-                {model.summary.expectedCents > 0 && (
-                  <div className="text-[12px]" style={{ color: 'var(--muted)' }}>
-                    + <Money cents={model.summary.expectedCents} decimals={false} /> expected
-                  </div>
-                )}
-              </div>
-              <Ring value={model.summary.spentCents} total={model.summary.budgetCents} label="Spent vs budget" color={model.summary.spentCents > model.summary.budgetCents ? 'var(--warn)' : 'var(--accent)'} />
-              <div className="text-right">
-                <div className="text-[18px] font-semibold"><Money cents={model.summary.budgetCents} decimals={false} /></div>
-                <div className="text-[12px]" style={{ color: 'var(--muted)' }}>total budget</div>
-              </div>
-            </section>
+            <BudgetSummary model={model} today={today} />
 
             <div>
               <div className="mb-2 flex items-center text-[11px] font-semibold uppercase tracking-[0.04em]" style={{ color: 'var(--muted)' }}>

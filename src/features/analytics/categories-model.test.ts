@@ -248,3 +248,18 @@ describe('buildCategories category transactions by month', () => {
     expect(build({ kind: 'group', id: 2 }).detail.transactionsByMonth).toEqual([]);
   });
 });
+
+describe('buildCategories trend', () => {
+  it('totals regular spending each month, with this month against last and this year against last', () => {
+    const t = build().trend;
+    expect(t.months).toHaveLength(12);
+    expect(t.months.at(-1)).toEqual({ month: '2026-11', paidCents: 236000 }); // rent, groceries, restaurants; not the card payment
+    expect(t.months.at(-2)).toEqual({ month: '2026-10', paidCents: 35000 });
+    expect(t.lastMonthSoFarCents).toBe(35000); // Oct 10 is before the 21st
+    expect(t.lastMonthName).toBe('October');
+    expect(t.yearToDateCents).toBe(236000 + 35000);
+    expect(t.lastYearToDateCents).toBe(24000);
+    expect(t.lastYearCents).toBe(24000);
+    expect(t.monthlyAvgCents).toBe(Math.round(35000 / 12));
+  });
+});

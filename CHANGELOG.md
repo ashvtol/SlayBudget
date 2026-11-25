@@ -5,6 +5,21 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.3] - 2026-11-25
+### Changed
+- **Removed the unused visx chart packages.** The charts draw their own SVG, with d3 only for the spending map's layout.
+### Added
+- **The Categories summary tells the same story.** This month's spending against your budget (left or over) and
+  against last month at the same point, a thick ring with the percent of budget spent, and this year against last.
+- **A better Recurrings summary.** This month shows what you've paid and what's left, against last month at the same
+  point (up in red, down in green), with a thick ring that shows the paid share in green and the percent paid. The
+  last 12 months use the same chart as Categories, with the average as its line: months above it are orange, at or
+  under it green, this month yellow (the ⓘ explains the colors; click a month for its total). This year sits against
+  the same time last year, beside the monthly average and last year's total. All after credits.
+### Fixed
+- **The budget tag no longer covers this month's bar.** On the Categories and Recurrings charts it sits past the last
+  month.
+
 ## [0.10.2] - 2026-11-25
 ### Added
 - **Choose what Cash flow counts.** Spend and Income details each have **Choose categories**: untick a category (say

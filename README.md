@@ -53,9 +53,9 @@ on your own computer, this is it.
 | 🏷️ **Smart categorization** | Learns from every category you choose, on your Mac (nothing is sent anywhere). Change one transaction and the merchant's other ones move too, with **Undo** and **Only this one**. A built-in list of about 900 common merchants helps from day one; cryptic descriptions ("TST* JOES", "SQ *BLUE BTL") are matched by their letters and words. When it's sure it sets the category and says why ("Like 6 others you put in Coffee"); otherwise it suggests one for you to accept, reject or swap for another, alone or all at once. Select several transactions to give them one category together. Money moved between your own accounts (checking to savings, paying the card) is paired and counted as a transfer, not spending. Gas stations and payment apps (Wise, Zelle, PayPal) are only ever suggested, and changing one asks which others with the same name go there too. Your rules and bank categories still apply, and Clean up "Other" works in bulk. |
 | 🎯 **Budgets** | Monthly budgets per category or group, per-month overrides, rollovers, and one-click rebalancing. |
 | 📊 **Dashboard** | Free to spend this month (with bills set aside), net income, transactions to review, top categories, upcoming bills, and tips with your savings rate against your goal. The spending line turns from green to yellow to orange as you get ahead of your budget's pace; point at any day to see what you'd spent and what the budget allowed by then. |
-| 🗂️ **Categories** | 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
+| 🗂️ **Categories** | A summary of this month against your budget and last month, and this year against last. 24 months of spending against budget, green within it and orange over. Point at a month to see it, click to open it, then open and edit any transaction in place. |
 | 💵 **Cash flow** | Income, spending and net for this month, the last 4 weeks, 3 or 12 months, or year to date, compared with the previous period or year. Move across a chart and the card shows that month against the same month last year; Spend lists that month's categories. In the details, click any month of the last two years to see each category with its top merchants, or each income source with who paid it, and choose which categories count. |
-| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. Bills can repeat weekly up to every 4 years, for subscriptions bought 2, 3 or 4 years at a time. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription are suggested for merging, including one whose statement name changed (HBO Max, then Max), with an ⓘ to compare them side by side. A bill that's paid back by a card's statement credit (Walmart+ refunded by Amex, say) shows each charge with its credit, "Fully credited" or "Partly credited", and what it actually cost you; SlayBudget finds those credits and asks "Do they pay it back?", even when one credit is shared by several bills. Charges join their bill even off the usual day, a price drop or rise shows an arrow, payment apps (Venmo, Zelle) match the person paid, and a bill follows its charges' category. |
+| 🔁 **Recurring bills and subscriptions** | Detected automatically, with due dates, reminders, amount ranges and pause or archive. The summary shows this month against last, a 12-month trend, and this year against last. Bills can repeat weekly up to every 4 years, for subscriptions bought 2, 3 or 4 years at a time. When a subscription changes price (up or down), SlayBudget asks once, "Is this Equinox at a new price?", and the bill follows the new price with a price history. Two bills that look like the same subscription are suggested for merging, including one whose statement name changed (HBO Max, then Max), with an ⓘ to compare them side by side. A bill that's paid back by a card's statement credit (Walmart+ refunded by Amex, say) shows each charge with its credit, "Fully credited" or "Partly credited", and what it actually cost you; SlayBudget finds those credits and asks "Do they pay it back?", even when one credit is shared by several bills. Charges join their bill even off the usual day, a price drop or rise shows an arrow, payment apps (Venmo, Zelle) match the person paid, and a bill follows its charges' category. |
 | 🗺️ **Insights** | An interactive spending map for any time range: drill from category to merchant and see what grew. Below it, Your money habits looks at all your history (see the next row). |
 | 🔥 **Your money habits** | Pick a money style, **FIRE** (Financial Independence, Retire Early) or **Soft saving**, and see your savings rate, your FI number (25 times a year of spending) and roughly how many years to independence, worked out from all your history. A suggested budget, next to the budgets you have now (↓ lower, ↑ raise), trims flexible spending toward a savings target you choose (needs and bills stay as they are, and you can leave any category out, or all of them, with the header checkbox); apply it in one click and ⌘Z takes it back. Tips cover the 50/30/20 split, an emergency fund target, spending that grew faster than income, what subscriptions cost a year, small purchases that add up, no-spend days and paying yourself first. Hide any tip; it comes back if its numbers change a lot. Mark categories as Essential to tell needs from wants. Rules of thumb, not financial advice. |
 | ↔️ **Resizable panes** | Drag the line between a list and its detail to make either side wider (Transactions, Categories, Recurrings). SlayBudget remembers it per page; double-click puts it back. |
@@ -78,7 +78,7 @@ on your own computer, this is it.
 ![SlayBudget transactions list with category pills, review dots and a transaction detail pane showing category, account, type, notes, tags and statement details](docs/screenshots/transactions.png)
 
 ### Categories: budgets against 24 months of history
-![SlayBudget categories view with spend against budget per category and a 24-month budget history chart](docs/screenshots/categories.png)
+![SlayBudget Categories with a summary of November's spending against the budget (88% spent, up 24% on October so far, this year against last), spend against budget per category, and a 24-month budget history chart](docs/screenshots/categories.png)
 
 ### Edit any transaction without leaving the page
 ![SlayBudget category detail with a side pane for editing a restaurant transaction](docs/screenshots/transaction-pane.png)
@@ -108,7 +108,7 @@ on your own computer, this is it.
 <td width="50%">
 
 **Recurring bills and subscriptions**
-![SlayBudget recurring bills with this month's payments, rules and payment history](docs/screenshots/recurrings.png)
+![SlayBudget Recurrings with a summary of what bills cost this month (98% paid, against October), the last 12 months against their average, this year against last, and suggestions to merge a renamed subscription and link a card credit](docs/screenshots/recurrings.png)
 
 </td>
 </tr>
@@ -444,7 +444,7 @@ macOS. Contributions are welcome.
 
 ## Tech stack
 
-**Tauri 2** · **Rust** (rusqlite, SQLite) · **React 19** · **TypeScript** · **Vite** · **Tailwind CSS** · **visx** ·
+**Tauri 2** · **Rust** (rusqlite, SQLite) · **React 19** · **TypeScript** · **Vite** · **Tailwind CSS** · **SVG charts with d3** ·
 **Zustand** · **Vitest**
 
 ```

@@ -3,6 +3,7 @@ import { incomeOf, isRegular, spendOf, txTypeOf } from '@/lib/tx-type';
 // group/category tree, and the detail panel for the current selection.
 
 import type { BudgetPlan, Recurring, Category, CategoryGroup, Transaction } from '@/lib/types';
+import { trendFrom, type SpendTrend } from './spend-trend';
 import { budgetsForMonth, rolloverCents, type RebalanceLine } from '@/lib/budget-plan';
 import { dueCharges } from '@/lib/recurring-due';
 import { normalizedName } from '@/lib/category-names';
@@ -58,6 +59,8 @@ export interface Detail {
 }
 export interface CategoriesModel {
   summary: { spentCents: number; budgetCents: number; expectedCents: number };
+  /** Regular spending: each of the last 12 months, and this month and year against the last. */
+  trend: SpendTrend;
   tree: GroupLine[];
   excluded: CatLine[];
   /** Income categories: this month's income in `spentCents`, never budgeted. */
@@ -179,6 +182,15 @@ export function buildCategories(input: {
     expectedCents: tree.reduce((s, g) => s + g.expectedCents, 0),
   };
 
+  // Spending in regular categories by day, the same rows the summary counts.
+  const regularIds = new Set(regular.map((c) => c.id));
+  const trend = trendFrom(
+    transactions
+      .filter((t) => t.categoryId != null && regularIds.has(t.categoryId) && isRegular(t) && t.postedOn <= today)
+      .map((t) => ({ day: t.postedOn, cents: spendOf(t) })),
+    today,
+  );
+
   // The detail shows the picked month (never a future one), else this month.
   const focus = input.month && input.month <= thisMonth ? input.month : thisMonth;
   const dTree = focus === thisMonth ? tree : treeFor(focus);
@@ -282,6 +294,7 @@ export function buildCategories(input: {
 
   return {
     summary,
+    trend,
     tree,
     excluded,
     income,

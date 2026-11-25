@@ -40,12 +40,19 @@ const tree = () => screen.getByRole('grid', { name: 'Categories' });
 const details = () => screen.getByRole('region', { name: 'Details' });
 
 describe('CategoriesPage', () => {
-  it('summarises spent this month against the total budget', async () => {
+  it('summarises this month against the budget and last month, and this year against last', async () => {
     await setup();
     const summary = screen.getByRole('region', { name: 'Budget summary' });
-    expect(summary).toHaveTextContent('$2,360spent in Nov');
-    expect(summary).toHaveTextContent('$2,700total budget');
-    expect(within(summary).getByRole('img', { name: 'Spent vs budget' })).toBeInTheDocument();
+    expect(summary).toHaveTextContent('November$2,360 spent');
+    expect(summary).toHaveTextContent('$340 left of $2,700 budget');
+    expect(summary).toHaveTextContent('Nothing in October to compare');
+    const ring = within(summary).getByRole('img', { name: 'Spent vs budget' });
+    expect(ring).toHaveTextContent('87%spent');
+    expect(ring.querySelector('[data-part="spent"]')?.getAttribute('stroke')).toBe('var(--pos)');
+    // No month-by-month chart here: the detail pane beside it already shows each month against the budget.
+    expect(within(summary).queryByRole('img', { name: /each month/ })).not.toBeInTheDocument();
+    const year = within(summary).getByRole('table', { name: 'Spending by year' });
+    expect(within(year).getByRole('row', { name: /^This year/ })).toHaveTextContent('$2,360');
   });
 
   it('shows groups and categories with spent and budget', async () => {
@@ -80,7 +87,7 @@ describe('CategoriesPage', () => {
     await user.clear(input);
     await user.type(input, '400{Enter}');
     await waitFor(async () => expect((await ipc().listCategories()).find((c) => c.id === 20)?.budgetCents).toBe(40000));
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('$2,800total budget'));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('of $2,800 budget'));
   });
 
   it('excludes the selected category', async () => {
@@ -226,7 +233,7 @@ describe('CategoriesPage income', () => {
     const income = await screen.findByRole('grid', { name: 'Income' });
     expect(within(income).getByRole('row', { name: /Salary/ })).toHaveTextContent('$5,000');
     expect(within(screen.getByRole('grid', { name: 'Categories' })).queryByRole('row', { name: /Salary/ })).not.toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('$2,200spent in Nov');
+    expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('November$2,200 spent');
     await user.click(within(income).getByRole('row', { name: /Salary/ }));
     expect(within(screen.getByRole('region', { name: 'Details' })).getByRole('heading', { name: 'Salary' })).toBeInTheDocument();
   });
@@ -244,7 +251,7 @@ describe('CategoriesPage expected bills', () => {
     render(<CategoriesPage />);
     const row = await within(await screen.findByRole('grid', { name: 'Categories' })).findByRole('row', { name: /Restaurants/ });
     expect(await within(row).findByLabelText('Expected $40')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('$40 expected');
+    expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('$40 in bills expected');
   });
 });
 
@@ -319,7 +326,7 @@ describe('CategoriesPage budgets (Copilot)', () => {
     await user.click(within(details()).getByRole('button', { name: 'Save budget' }));
     await waitFor(() => expect(within(tree()).getByRole('row', { name: /Food & Drink/ })).toHaveTextContent('$600'));
     expect(within(tree()).getByRole('row', { name: /Groceries/ })).not.toHaveTextContent('$300');
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('$2,800total budget'));
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Budget summary' })).toHaveTextContent('of $2,800 budget'));
   });
 
   it('offers rollover only when rollovers are on, and shows what carried over', async () => {

@@ -36,12 +36,31 @@ async function setup() {
 const details = () => screen.getByRole('region', { name: 'Details' });
 
 describe('RecurringPage', () => {
-  it('summarises left to pay and paid so far this month', async () => {
+  it('summarises this month against last, the last 12 months, and this year against last', async () => {
     await setup();
     const summary = screen.getByRole('region', { name: 'Recurring summary' });
-    expect(summary).toHaveTextContent('$18left to pay');
-    expect(summary).toHaveTextContent('$2,200paid so far');
-    expect(within(summary).getByRole('img', { name: 'Paid vs due this month' })).toBeInTheDocument();
+    expect(summary).toHaveTextContent('This month$2,200 paid');
+    expect(summary).toHaveTextContent('$18 left to pay');
+    expect(summary).toHaveTextContent('Same as October so far');
+    const ring = within(summary).getByRole('img', { name: 'Paid vs due this month' });
+    expect(ring).toHaveTextContent('99%paid');
+    expect(ring.querySelector('[data-part="paid"]')?.getAttribute('stroke')).toBe('var(--pos)');
+    expect(ring.querySelector('[data-part="left"]')).toBeNull(); // what's left is the plain track
+    expect(Number(ring.querySelector('[data-part="paid"]')?.getAttribute('stroke-width'))).toBeGreaterThanOrEqual(20);
+    // The same chart as Categories: capsule bars, one-letter months, and the 12-month average as its line and tag.
+    const chart = within(summary).getByRole('img', { name: /last 12 months/i });
+    expect(chart.querySelectorAll('[data-part="bar"]')).toHaveLength(12);
+    expect(within(chart).getAllByText(/^[JFMASOND]$/)).toHaveLength(12);
+    expect(chart.querySelector('[data-part="budget"]')).not.toBeNull();
+    expect(chart.querySelector('[data-part="tag"]')).toHaveTextContent('$1,663.49');
+    // What the colors mean sits behind an ⓘ.
+    expect(within(summary).queryByText(/above the average/)).not.toBeInTheDocument();
+    await userEvent.setup().click(within(summary).getByRole('button', { name: 'What the colors mean' }));
+    expect(within(summary).getByText(/above the average/)).toBeInTheDocument();
+    const year = within(summary).getByRole('table', { name: 'Bills by year' });
+    expect(within(year).getByRole('row', { name: /^This year/ })).toHaveTextContent('$6,654');
+    expect(within(year).getByRole('row', { name: /^Monthly average/ })).toHaveTextContent('$371');
+    expect(within(year).getByRole('row', { name: /^Last year/ })).toHaveTextContent('$0all of 2025');
   });
 
   it('lists this month with date, name, frequency, amount and paid state', async () => {

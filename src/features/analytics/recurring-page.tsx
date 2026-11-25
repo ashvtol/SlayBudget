@@ -9,7 +9,6 @@ import { IconCheck, IconMore, IconPlus, IconTriangleDown, IconTriangleRight } fr
 import { ToolbarButton } from '@/components/toolbar-button';
 import { Button } from '@/components/button';
 import { Modal, NewRecurringDialog, RecurringForm } from '@/features/recurrings/recurring-form';
-import { Ring } from '@/features/charts/mini-charts';
 import { TransactionRow } from '@/features/transactions/transaction-row';
 import { cleanMerchant } from '@/lib/merchant';
 import { ipc } from '@/lib/ipc';
@@ -23,6 +22,7 @@ import { suggestPayback, type PaybackSuggestion } from '@/features/recurrings/bi
 import { formatMoney } from '@/lib/format';
 import { useCurrencyStore } from '@/features/currency/currency-store';
 import { useAnalyticsStore } from './analytics-store';
+import { RecurringSummary } from './recurring-summary';
 import { buildRecurrings, ordinalDay, type RecurringItem } from './recurrings-model';
 
 const CADENCE_LABEL: Record<Recurring['cadence'], string> = {
@@ -232,17 +232,7 @@ export function RecurringPage() {
               </p>
             ) : (
               <>
-                <section aria-label="Recurring summary" className="flex items-center justify-between rounded-[10px] border px-8 py-6" style={{ background: 'var(--panel)', borderColor: 'var(--line)' }}>
-                  <div>
-                    <div className="text-[18px] font-semibold"><Money cents={model.summary.leftToPayCents} decimals={false} /></div>
-                    <div className="text-[12px]" style={{ color: 'var(--muted)' }}>left to pay</div>
-                  </div>
-                  <Ring value={model.summary.paidCents} total={model.summary.paidCents + model.summary.leftToPayCents} label="Paid vs due this month" />
-                  <div className="text-right">
-                    <div className="text-[18px] font-semibold"><Money cents={model.summary.paidCents} decimals={false} /></div>
-                    <div className="text-[12px]" style={{ color: 'var(--muted)' }}>paid so far</div>
-                  </div>
-                </section>
+                <RecurringSummary model={model} today={today} />
                 {src.lookAlikes.length > 0 && (
                   <LookAlikes
                     pairs={src.lookAlikes}

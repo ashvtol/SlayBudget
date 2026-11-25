@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://ashvtol.github.io/SlayBudget/sitemap.xml

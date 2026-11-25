@@ -14,7 +14,7 @@ Import your bank statements, let SlayBudget categorize every transaction, and se
 [![React 19](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](src)
 [![GitHub stars](https://img.shields.io/github/stars/ashvtol/SlayBudget?style=social)](https://github.com/ashvtol/SlayBudget/stargazers)
 
-**[⬇️ Download for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)** · [Windows and Linux (untested)](#windows-and-linux-untested)<br><br>[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
+**[⬇️ Download for Mac](https://github.com/ashvtol/SlayBudget/releases/latest)** · [Website](https://ashvtol.github.io/SlayBudget/) · [Windows and Linux (untested)](#windows-and-linux-untested)<br><br>[Features](#features) · [Screenshots](#screenshots) · [Why local-first](#why-local-first) · [Install](#install) · [FAQ](#faq) · [Changelog](CHANGELOG.md) · [Contributing](#contributing)
 
 <br>
 

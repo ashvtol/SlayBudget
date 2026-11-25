@@ -1,0 +1,39 @@
+# Publishes the website in site/ to GitHub Pages (https://ashvtol.github.io/SlayBudget/), with the README's screenshots
+# and the app icon copied in, so the site and the README always show the same pictures.
+name: Website
+
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', 'docs/screenshots/**', '.github/workflows/pages.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Assemble the site
+        run: |
+          mkdir -p _site/screenshots
+          cp site/index.html site/styles.css site/download.js site/robots.txt site/sitemap.xml _site/
+          cp docs/screenshots/*.png _site/screenshots/
+          cp src-tauri/icons/128x128.png _site/icon.png
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4

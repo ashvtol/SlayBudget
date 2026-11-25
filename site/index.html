@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SlayBudget: the free, private budgeting app for Mac</title>
+  <meta name="description" content="Free, open-source budgeting app for Mac. Import bank statements, auto-categorize spending, track budgets, bills and subscriptions. Your data stays on your Mac.">
+  <link rel="canonical" href="https://ashvtol.github.io/SlayBudget/">
+  <meta name="theme-color" content="#02080f">
+  <meta name="color-scheme" content="dark light">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="SlayBudget">
+  <meta property="og:title" content="SlayBudget: the free, private budgeting app for Mac">
+  <meta property="og:description" content="Import your statements, let it categorize every transaction, and see where your money goes. No subscription, no bank login, no cloud.">
+  <meta property="og:url" content="https://ashvtol.github.io/SlayBudget/">
+  <meta property="og:image" content="https://ashvtol.github.io/SlayBudget/screenshots/social-preview.png">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="SlayBudget: the free, private budgeting app for Mac">
+  <meta name="twitter:description" content="A free, open-source Copilot Money and YNAB alternative that keeps your money data on your Mac.">
+  <meta name="twitter:image" content="https://ashvtol.github.io/SlayBudget/screenshots/social-preview.png">
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="styles.css">
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "SlayBudget",
+    "applicationCategory": "FinanceApplication",
+    "operatingSystem": "macOS, Windows, Linux",
+    "description": "Free, open-source, local-first budgeting app. Import bank statements, auto-categorize spending, budgets, recurring bills and subscriptions.",
+    "url": "https://ashvtol.github.io/SlayBudget/",
+    "downloadUrl": "https://github.com/ashvtol/SlayBudget/releases/latest",
+    "license": "https://opensource.org/licenses/MIT",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "screenshot": "https://ashvtol.github.io/SlayBudget/screenshots/dashboard.png"
+  }
+  </script>
+  <script type="module">
+    import { wireDownloads } from './download.js';
+    wireDownloads();
+  </script>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="#top"><img src="icon.png" alt="" width="28" height="28"> SlayBudget</a>
+    <nav aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#faq">FAQ</a>
+      <a href="https://github.com/ashvtol/SlayBudget">GitHub</a>
+    </nav>
+    <a class="button small" data-download href="https://github.com/ashvtol/SlayBudget/releases/latest"><span data-download-label>Download</span></a>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <p class="eyebrow">Free · Open source · Your data stays on your Mac</p>
+      <h1>Know where every dollar goes.<br><span>Without handing anyone your bank password.</span></h1>
+      <p class="lede">SlayBudget reads your bank statements, sorts every transaction, tracks your bills and subscriptions, and shows what you can still spend this month. No subscription, no account, no cloud.</p>
+      <div class="cta">
+        <a class="button" data-download href="https://github.com/ashvtol/SlayBudget/releases/latest"><span data-download-label>Download SlayBudget</span></a>
+        <a class="button ghost" href="https://github.com/ashvtol/SlayBudget">View on GitHub</a>
+      </div>
+      <p class="fine"><span data-version>Free</span> · Made for macOS · Windows and Linux builds too</p>
+      <img class="shot hero-shot" src="screenshots/dashboard.png" alt="SlayBudget dashboard with money left to spend this month, transactions to review, upcoming bills and top categories against budget" width="1440" height="900">
+    </section>
+
+    <section id="features" class="features">
+      <article class="feature">
+        <div class="copy">
+          <h2>It learns how you categorize</h2>
+          <p>Change one transaction and the rest of that merchant follows, history included. A small model on your Mac learns from every choice and tells you why it picked a category. Cryptic statement lines like "TST* JOES" still land in the right place.</p>
+        </div>
+        <img class="shot" src="screenshots/suggested-categories.png" alt="Suggested categories with the reason and one click to accept" loading="lazy" width="1440" height="900">
+      </article>
+
+      <article class="feature flip">
+        <div class="copy">
+          <h2>Every bill and subscription, handled</h2>
+          <p>Recurring charges are found for you, with due dates and price changes. If a card pays a subscription back, you see each charge with its credit and what it really cost you. Renamed on your statement? It suggests merging.</p>
+        </div>
+        <img class="shot" src="screenshots/paid-back.png" alt="A Walmart+ subscription fully credited by a card, each charge followed by its credit" loading="lazy" width="1440" height="900">
+      </article>
+
+      <article class="feature">
+        <div class="copy">
+          <h2>Budgets you'll actually keep</h2>
+          <p>Set a budget per category or group and see 24 months of spending against it, green when you're within it and orange when you're over. Roll leftovers over, rebalance in one click.</p>
+        </div>
+        <img class="shot" src="screenshots/categories.png" alt="Categories with monthly spending against budget" loading="lazy" width="1440" height="900">
+      </article>
+
+      <article class="feature flip">
+        <div class="copy">
+          <h2>FIRE or soft saving, your call</h2>
+          <p>Your money habits look across all your history: savings rate, your financial independence number, a suggested budget toward the goal you pick, and tips on the 50/30/20 split, subscriptions and no-spend days.</p>
+        </div>
+        <img class="shot" src="screenshots/money-habits.png" alt="Your money habits with a savings rate, FI number and a suggested budget" loading="lazy" width="1440" height="900">
+      </article>
+
+      <article class="feature">
+        <div class="copy">
+          <h2>Drop in your statements</h2>
+          <p>CSV, PDF, QFX or OFX. It works out which account each statement belongs to, skips repeats, flags possible duplicates, and can watch a folder so new statements import themselves.</p>
+        </div>
+        <img class="shot" src="screenshots/which-account.png" alt="Import asking once which account a statement belongs to" loading="lazy" width="1440" height="900">
+      </article>
+    </section>
+
+    <section class="more">
+      <h2>A few more things</h2>
+      <ul class="grid">
+        <li><b>Undo everything</b><span>⌘Z takes back a category, a delete or a whole import.</span></li>
+        <li><b>Price change alerts</b><span>Asked once when a subscription costs more.</span></li>
+        <li><b>Double charges</b><span>Possible duplicates are flagged, never deleted for you.</span></li>
+        <li><b>30+ currencies</b><span>Converted offline at each month's rate.</span></li>
+        <li><b>Notifications</b><span>Bills due, budgets running over, paychecks in.</span></li>
+        <li><b>Four themes</b><span>Navy, Daylight, Aurora and Graphite.</span></li>
+        <li><b>Household profiles</b><span>Keep people separate or see it all together.</span></li>
+        <li><b>Keyboard first</b><span>Shortcuts for every screen, full keyboard navigation.</span></li>
+      </ul>
+    </section>
+
+    <section id="privacy" class="privacy">
+      <h2>Private by design</h2>
+      <p class="lede">Most budgeting apps want your bank login and a copy of every transaction on their servers. SlayBudget keeps everything in one file on your Mac.</p>
+      <ul class="points">
+        <li><b>No account</b><span>Nothing to sign up for, nothing to log in to.</span></li>
+        <li><b>No bank login</b><span>You import statements you already have.</span></li>
+        <li><b>No telemetry</b><span>No tracking, no ads, nothing sent anywhere.</span></li>
+        <li><b>Open source</b><span>MIT licensed. Read every line on GitHub.</span></li>
+      </ul>
+    </section>
+
+    <section class="price">
+      <div class="card">
+        <p class="eyebrow">Pricing</p>
+        <p class="amount">$0<span>, forever</span></p>
+        <p>No trial, no paywall, nothing to cancel. Every feature, for everyone.</p>
+        <a class="button" data-download href="https://github.com/ashvtol/SlayBudget/releases/latest"><span data-download-label>Download SlayBudget</span></a>
+      </div>
+    </section>
+
+    <section id="faq" class="faq">
+      <h2>Questions</h2>
+      <details><summary>Is SlayBudget really free?</summary><p>Yes. It's open source under the MIT license, with no paid tier and no ads. If it helps you, a star on GitHub helps other people find it.</p></details>
+      <details><summary>Does it connect to my bank?</summary><p>No. You download statements from your bank (CSV, PDF, QFX or OFX) and drop them in. Nothing asks for your bank password.</p></details>
+      <details><summary>Where is my data stored?</summary><p>In one SQLite file on your Mac. There's no server. Back it up like any other file, or with the one-click backup in Settings.</p></details>
+      <details><summary>Is it a Copilot Money, YNAB or Mint alternative?</summary><p>Yes, if you want budgets, categories, bills and insights without a subscription or giving an app your bank login. It's an independent project, not affiliated with any of them.</p></details>
+      <details><summary>Which Macs does it run on?</summary><p>Apple silicon and Intel Macs. Windows and Linux builds are published too, but they're untested.</p></details>
+      <details><summary>How do updates work?</summary><p>SlayBudget checks GitHub for signed updates, shows what's new since your version, and installs only when you click.</p></details>
+    </section>
+
+    <section class="final">
+      <h2>Take control of your money, privately.</h2>
+      <a class="button" data-download href="https://github.com/ashvtol/SlayBudget/releases/latest"><span data-download-label>Download SlayBudget</span></a>
+      <p class="fine"><a href="https://github.com/ashvtol/SlayBudget/releases/latest">All downloads</a> · <a href="https://github.com/ashvtol/SlayBudget/blob/main/CHANGELOG.md">What's new</a></p>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <p>SlayBudget is free and open source (MIT). It is an independent project and is not affiliated with Copilot Money, YNAB, Intuit or Mint.</p>
+    <p><a href="https://github.com/ashvtol/SlayBudget">GitHub</a> · <a href="https://github.com/ashvtol/SlayBudget/blob/main/CONTRIBUTING.md">Contribute</a> · <a href="https://github.com/ashvtol/SlayBudget/issues">Report a problem</a></p>
+  </footer>
+</body>
+</html>

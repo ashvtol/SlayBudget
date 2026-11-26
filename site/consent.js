@@ -1,7 +1,7 @@
 // Analytics only with consent: nothing from Google loads (no requests, no cookies) until a visitor accepts. The choice
 // is remembered; the footer's "Cookie settings" asks again. Used only to improve SlayBudget, never shared or sold.
 
-export const GTM_ID = 'GTM-T2BB2L5J';
+export const GA_ID = 'G-C5GWC1BX5M';
 const KEY = 'sb-consent';
 
 const stored = () => {
@@ -19,14 +19,21 @@ const remember = (value) => {
   }
 };
 
-/** Load Google Tag Manager once, after consent. */
-function loadTagManager(doc) {
-  if (doc.querySelector('script[src*="googletagmanager.com/gtm.js"]')) return;
+/** Google's gtag: queue a command (the library reads the queue once it loads). */
+function gtag() {
   window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push({ 'gtm.start': Date.now(), event: 'gtm.js' });
+  // eslint-disable-next-line prefer-rest-params
+  window.dataLayer.push(arguments);
+}
+
+/** Load Google Analytics once, after consent, with Google signals and ad personalization off. */
+function loadAnalytics(doc) {
+  if (doc.querySelector('script[src*="googletagmanager.com/gtag/js"]')) return;
+  gtag('js', new Date());
+  gtag('config', GA_ID, { allow_google_signals: false, allow_ad_personalization_signals: false });
   const script = doc.createElement('script');
   script.async = true;
-  script.src = `https://www.googletagmanager.com/gtm.js?id=${GTM_ID}`;
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${GA_ID}`;
   doc.head.appendChild(script);
 }
 
@@ -51,7 +58,7 @@ function showBanner(doc) {
   banner.querySelector('[data-consent="accept"]').addEventListener('click', () => {
     remember('granted');
     closeBanner(doc);
-    loadTagManager(doc);
+    loadAnalytics(doc);
   });
   banner.querySelector('[data-consent="decline"]').addEventListener('click', () => {
     remember('denied');
@@ -63,7 +70,7 @@ function showBanner(doc) {
 /** On each page load: load analytics if accepted before, ask if never asked, and wire "Cookie settings". */
 export function initConsent(doc = document) {
   const choice = stored();
-  if (choice === 'granted') loadTagManager(doc);
+  if (choice === 'granted') loadAnalytics(doc);
   else if (choice !== 'denied') showBanner(doc);
   for (const el of doc.querySelectorAll('[data-cookie-settings]')) {
     if (el.dataset.wired) continue;
@@ -75,6 +82,5 @@ export function initConsent(doc = document) {
 /** Count a download click (with the platform), only with consent. */
 export function trackDownload(platform) {
   if (stored() !== 'granted') return;
-  window.dataLayer = window.dataLayer || [];
-  window.dataLayer.push({ event: 'download_click', platform });
+  gtag('event', 'download_click', { platform });
 }

@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { GTM_ID, initConsent, trackDownload } from './consent.js';
+import { GA_ID, initConsent, trackDownload } from './consent.js';
 
-const gtmScripts = () => [...document.querySelectorAll('script[src*="googletagmanager.com/gtm.js"]')];
+const gtmScripts = () => [...document.querySelectorAll('script[src*="googletagmanager.com/gtag/js"]')];
+type Layer = { dataLayer?: unknown[] };
+const layer = () => ((window as unknown as Layer).dataLayer ?? []).map((a) => [...(a as ArrayLike<unknown>)]);
 const banner = () => document.querySelector('[data-consent-banner]') as HTMLElement | null;
 
 beforeEach(() => {
@@ -21,11 +23,13 @@ describe('cookie consent', () => {
     expect(gtmScripts()).toHaveLength(0);
   });
 
-  it('accepting loads Tag Manager once, remembers it, and closes the banner', () => {
+  it('accepting loads Google Analytics once, with ad signals off, remembers it, and closes the banner', () => {
     initConsent();
     (banner()!.querySelector('[data-consent="accept"]') as HTMLButtonElement).click();
     expect(gtmScripts()).toHaveLength(1);
-    expect(gtmScripts()[0].getAttribute('src')).toContain(`id=${GTM_ID}`);
+    expect(gtmScripts()[0].getAttribute('src')).toContain(`id=${GA_ID}`);
+    expect(GA_ID).toBe('G-C5GWC1BX5M');
+    expect(layer()).toContainEqual(['config', GA_ID, { allow_google_signals: false, allow_ad_personalization_signals: false }]);
     expect(localStorage.getItem('sb-consent')).toBe('granted');
     expect(banner()).toBeNull();
     initConsent(); // the next visit
@@ -46,9 +50,9 @@ describe('cookie consent', () => {
 
   it('a download click is counted only with consent', () => {
     trackDownload('mac');
-    expect((window as unknown as { dataLayer?: unknown[] }).dataLayer ?? []).toHaveLength(0);
+    expect(layer()).toHaveLength(0);
     localStorage.setItem('sb-consent', 'granted');
     trackDownload('mac');
-    expect((window as unknown as { dataLayer: Record<string, unknown>[] }).dataLayer.at(-1)).toMatchObject({ event: 'download_click', platform: 'mac' });
+    expect(layer().at(-1)).toEqual(['event', 'download_click', { platform: 'mac' }]);
   });
 });

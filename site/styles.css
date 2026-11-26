@@ -128,3 +128,24 @@ details p { color: var(--muted); margin: 12px 0 0; }
 @media (max-width: 520px) {
   .grid, .points { grid-template-columns: 1fr; }
 }
+
+/* Cookie consent: a quiet sheet at the bottom, like a macOS notification. */
+.consent {
+  position: fixed; z-index: 50; left: 50%; bottom: 20px; transform: translateX(-50%);
+  width: min(560px, calc(100vw - 32px));
+  display: flex; align-items: center; gap: 16px;
+  padding: 14px 16px; border-radius: 14px;
+  background: color-mix(in oklab, var(--panel) 92%, transparent);
+  backdrop-filter: saturate(180%) blur(20px); -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 20px 50px -20px rgba(0, 0, 0, 0.6);
+  font-size: 14px; color: var(--muted);
+}
+.consent p { margin: 0; flex: 1; }
+.consent-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.linklike { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.linklike:hover { text-decoration: underline; }
+@media (max-width: 520px) {
+  .consent { flex-direction: column; align-items: stretch; }
+  .consent-actions { justify-content: flex-end; }
+}

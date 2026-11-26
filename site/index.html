@@ -37,7 +37,13 @@
   </script>
   <script type="module">
     import { wireDownloads } from './download.js';
+    import { initConsent, trackDownload } from './consent.js';
     wireDownloads();
+    initConsent();
+    // Count download clicks (with the platform), only if analytics were accepted.
+    document.addEventListener('click', (e) => {
+      if (e.target.closest('[data-download]')) trackDownload(document.documentElement.dataset.platform ?? 'other');
+    });
   </script>
 </head>
 <body>
@@ -127,7 +133,7 @@
       <ul class="points">
         <li><b>No account</b><span>Nothing to sign up for, nothing to log in to.</span></li>
         <li><b>No bank login</b><span>You import statements you already have.</span></li>
-        <li><b>No telemetry</b><span>No tracking, no ads, nothing sent anywhere.</span></li>
+        <li><b>No telemetry</b><span>The app tracks nothing, shows no ads and sends nothing anywhere.</span></li>
         <li><b>Open source</b><span>MIT licensed. Read every line on GitHub.</span></li>
       </ul>
     </section>
@@ -160,7 +166,8 @@
 
   <footer class="foot">
     <p>SlayBudget is free and open source (MIT). It is an independent project and is not affiliated with Copilot Money, YNAB, Intuit or Mint.</p>
-    <p><a href="https://github.com/ashvtol/SlayBudget">GitHub</a> · <a href="https://github.com/ashvtol/SlayBudget/blob/main/CONTRIBUTING.md">Contribute</a> · <a href="https://github.com/ashvtol/SlayBudget/issues">Report a problem</a></p>
+    <p>With your consent, this website uses Google Analytics only to improve SlayBudget. It's never shared or sold.</p>
+    <p><a href="https://github.com/ashvtol/SlayBudget">GitHub</a> · <a href="https://github.com/ashvtol/SlayBudget/blob/main/CONTRIBUTING.md">Contribute</a> · <a href="https://github.com/ashvtol/SlayBudget/issues">Report a problem</a> · <button type="button" class="linklike" data-cookie-settings>Cookie settings</button></p>
   </footer>
 </body>
 </html>

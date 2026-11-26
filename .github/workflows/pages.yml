@@ -28,7 +28,7 @@ jobs:
       - name: Assemble the site
         run: |
           mkdir -p _site/screenshots
-          cp site/index.html site/styles.css site/download.js site/robots.txt site/sitemap.xml _site/
+          cp site/index.html site/styles.css site/download.js site/consent.js site/robots.txt site/sitemap.xml _site/
           cp docs/screenshots/*.png _site/screenshots/
           cp src-tauri/icons/128x128.png _site/icon.png
       - uses: actions/configure-pages@v5

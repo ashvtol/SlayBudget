@@ -139,7 +139,7 @@ fn running_twice_changes_nothing() {
     assert_eq!(second.profiles_created, 0);
     assert_eq!(second.sources_created, 0);
     assert_eq!(second.categories_created, 0);
-    assert_eq!(categories::list(&conn).unwrap().len(), 31 + 7);
+    assert_eq!(categories::list(&conn).unwrap().len(), 46 + 7);
     assert_eq!(learning::list(&conn).unwrap().len(), 6);
 }
 

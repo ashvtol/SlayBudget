@@ -67,6 +67,8 @@ pub enum CategorySource {
     Transfer,
     /// The bank's own category.
     Bank,
+    /// Pays a charge back (a statement credit or a refund): the charge's category.
+    Credit,
     #[default]
     Keyword,
 }
@@ -80,6 +82,7 @@ impl CategorySource {
             CategorySource::Model => "model",
             CategorySource::Transfer => "transfer",
             CategorySource::Bank => "bank",
+            CategorySource::Credit => "credit",
             CategorySource::Keyword => "keyword",
         }
     }
@@ -91,6 +94,7 @@ impl CategorySource {
             "model" => CategorySource::Model,
             "transfer" => CategorySource::Transfer,
             "bank" => CategorySource::Bank,
+            "credit" => CategorySource::Credit,
             _ => CategorySource::Keyword,
         }
     }

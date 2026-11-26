@@ -392,32 +392,187 @@ const DEFAULTS: &[Seed] = &[
     ("Other", "📦", "#8e8e93", "Other", "📦", "Other", E, false),
 ];
 
+/// Categories added to the defaults in version 2: the common ones people expect (Copilot, YNAB). Existing installs get
+/// them once, on update, by `add_new_defaults`.
+const ADDED_IN_2: &[Seed] = &[
+    (
+        "Food & Drink",
+        "🍽️",
+        "#ff9500",
+        "Coffee",
+        "☕",
+        "Coffee",
+        E,
+        false,
+    ),
+    (
+        "Food & Drink",
+        "🍽️",
+        "#ff9500",
+        "Bars & Alcohol",
+        "🍺",
+        "Bars & Alcohol",
+        E,
+        false,
+    ),
+    (
+        "Home",
+        "🏠",
+        "#34c759",
+        "Rent & Mortgage",
+        "🔑",
+        "Rent & Mortgage",
+        E,
+        false,
+    ),
+    (
+        "Home",
+        "🏠",
+        "#34c759",
+        "Utilities",
+        "💡",
+        "Utilities",
+        E,
+        false,
+    ),
+    (
+        "Home",
+        "🏠",
+        "#34c759",
+        "Home & Household",
+        "🧺",
+        "Home & Household",
+        E,
+        false,
+    ),
+    (
+        "Shopping", "🛍️", "#007aff", "Clothing", "👕", "Clothing", E, false,
+    ),
+    (
+        "Health & Care",
+        "🩺",
+        "#ff3b30",
+        "Fitness",
+        "🏋️",
+        "Fitness",
+        E,
+        false,
+    ),
+    (
+        "Family",
+        "👪",
+        "#ff2d55",
+        "Kids & Childcare",
+        "🧸",
+        "Kids & Childcare",
+        E,
+        false,
+    ),
+    ("Family", "👪", "#ff2d55", "Pets", "🐾", "Pets", E, false),
+    ("Finance", "🏦", "#8e8e93", "Taxes", "🧾", "Taxes", E, false),
+    (
+        "Finance", "🏦", "#8e8e93", "Interest", "💳", "Interest", E, false,
+    ),
+    (
+        "Finance",
+        "🏦",
+        "#8e8e93",
+        "Cash & ATM",
+        "🏧",
+        "Cash & ATM",
+        E,
+        false,
+    ),
+    // Paying down a loan moves money to a debt you owe: like a transfer, out of spending.
+    (
+        "Finance",
+        "🏦",
+        "#8e8e93",
+        "Loan Payments",
+        "🏛️",
+        "Loan Payments",
+        T,
+        true,
+    ),
+    (
+        "Giving", "🎁", "#ff9500", "Charity", "💝", "Charity", E, false,
+    ),
+    (
+        "Income",
+        "💵",
+        "#34c759",
+        "Reimbursements",
+        "💸",
+        "Reimbursements",
+        I,
+        false,
+    ),
+];
+
+/// Which defaults this database has had: "2" once `ADDED_IN_2` was offered.
+const DEFAULTS_KEY: &str = "default_categories";
+const DEFAULTS_VERSION: &str = "2";
+
+fn insert_seed(conn: &Connection, seed: &Seed, sort_order: i64) -> Result<()> {
+    let (group, gemoji, gcolor, name, emoji, legacy, kind, excluded) = seed;
+    let group_id = find_or_create_group(conn, group, Some(gemoji), Some(gcolor))?;
+    conn.execute(
+        "INSERT INTO categories (group_id, name, emoji, kind, excluded, sort_order, legacy_name, essential)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            group_id,
+            name,
+            emoji,
+            kind.as_str(),
+            *excluded as i64,
+            sort_order,
+            legacy,
+            (*kind == CategoryKind::Expense && default_essential(name)) as i64
+        ],
+    )?;
+    Ok(())
+}
+
 /// Insert the default groups and categories if the tables are empty. Idempotent.
 pub fn seed_defaults(conn: &Connection) -> Result<()> {
     let count: i64 = conn.query_row("SELECT count(*) FROM categories", [], |r| r.get(0))?;
     if count > 0 {
         return Ok(());
     }
-    for (i, (group, gemoji, gcolor, name, emoji, legacy, kind, excluded)) in
-        DEFAULTS.iter().enumerate()
-    {
-        let group_id = find_or_create_group(conn, group, Some(gemoji), Some(gcolor))?;
-        conn.execute(
-            "INSERT INTO categories (group_id, name, emoji, kind, excluded, sort_order, legacy_name, essential)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-            params![
-                group_id,
-                name,
-                emoji,
-                kind.as_str(),
-                *excluded as i64,
-                i as i64,
-                legacy,
-                (*kind == CategoryKind::Expense && default_essential(name)) as i64
-            ],
-        )?;
+    for (i, seed) in DEFAULTS.iter().chain(ADDED_IN_2).enumerate() {
+        insert_seed(conn, seed, i as i64)?;
     }
+    crate::settings::set(conn, DEFAULTS_KEY, DEFAULTS_VERSION)?;
     Ok(())
+}
+
+/// Give an existing database the categories added to the defaults since it was made, once: a name you already have
+/// (in any case) is skipped, and one you delete afterwards stays deleted. Returns how many were added.
+pub fn add_new_defaults(conn: &Connection) -> Result<usize> {
+    if crate::settings::get(conn, DEFAULTS_KEY)?.as_deref() == Some(DEFAULTS_VERSION) {
+        return Ok(0);
+    }
+    crate::db::atomically(conn, |c| {
+        let mut added = 0;
+        let next: i64 = c.query_row(
+            "SELECT coalesce(max(sort_order), 0) + 1 FROM categories",
+            [],
+            |r| r.get(0),
+        )?;
+        for seed in ADDED_IN_2 {
+            let exists: bool = c.query_row(
+                "SELECT EXISTS (SELECT 1 FROM categories WHERE lower(name) = lower(?1))",
+                [seed.3],
+                |r| r.get(0),
+            )?;
+            if !exists {
+                insert_seed(c, seed, next + added as i64)?;
+                added += 1;
+            }
+        }
+        crate::settings::set(c, DEFAULTS_KEY, DEFAULTS_VERSION)?;
+        Ok(added)
+    })
 }
 
 /// Word stems that make a category a need by default ("grocer" covers Groceries).

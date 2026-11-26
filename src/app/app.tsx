@@ -19,6 +19,7 @@ import { sectionForShortcut, useNavStore } from '@/lib/stores/nav-store';
 import { useThemeStore } from '@/lib/stores/theme-store';
 import { useDisplayStore } from '@/lib/stores/display-store';
 import { useUpdateStore } from '@/features/updates/update-store';
+import { watchToday } from '@/features/analytics/analytics-store';
 import { UpdateDialog } from '@/features/updates/update-ui';
 import { UndoToast, useUndoKeys } from '@/features/undo/undo';
 import { SCAN_EVERY_MS, useBackgroundImports } from '@/features/import/background-imports';
@@ -88,6 +89,8 @@ export function App() {
 
   // Look for a new version shortly after launch and every 6 hours; the dialog asks before installing.
   useEffect(() => useUpdateStore.getState().startAutoCheck(), []);
+  // Left open past midnight (or a month's end), the screens move to the new day.
+  useEffect(() => watchToday(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

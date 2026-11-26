@@ -213,7 +213,7 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
         style={{ borderColor: dragging ? 'var(--accent)' : 'var(--line)', background: dragging ? 'color-mix(in srgb, var(--accent) 8%, transparent)' : 'transparent' }}
       >
         <p className="m-0 text-sm" style={{ color: 'var(--muted)' }}>
-          Drop CSV, PDF or OFX statements here, or
+          Drop CSV, PDF, OFX, QFX, QBO or QIF statements here, or
         </p>
         <div className="flex gap-2">
           <button type="button" onClick={() => fileInput.current?.click()} className="min-h-11 rounded-lg border px-4 text-sm font-medium" style={{ borderColor: 'var(--line)', color: 'var(--text)' }}>
@@ -223,7 +223,7 @@ export function ImportPage({ deps = createDefaultImportDeps(), onImported }: { d
             Choose folder
           </button>
         </div>
-        <input ref={fileInput} type="file" multiple accept=".csv,.tsv,.pdf,.ofx,.qfx" aria-label="Choose files" className="hidden" onChange={(e) => void handleFiles([...(e.target.files ?? [])])} />
+        <input ref={fileInput} type="file" multiple accept=".csv,.tsv,.pdf,.ofx,.qfx,.qbo,.qif" aria-label="Choose files" className="hidden" onChange={(e) => void handleFiles([...(e.target.files ?? [])])} />
         <input
           ref={folderInput}
           type="file"

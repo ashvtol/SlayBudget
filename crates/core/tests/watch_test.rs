@@ -25,10 +25,21 @@ fn the_watched_folder_is_searched_into_account_folders_for_statement_files_only(
     touch(&root.join("Amex Gold/nov.CSV"), "x");
     touch(&root.join("Me/Citi/statement.pdf"), "x");
     touch(&root.join("Me/Citi/old/deep/too-deep.csv"), "x");
+    touch(&root.join("Quicken/export.qif"), "x");
+    touch(&root.join("Quicken/webconnect.qbo"), "x");
     touch(&root.join("notes.txt"), "x");
     touch(&root.join(".hidden/secret.csv"), "x");
     let found = watch::candidates(Some(&root), None);
-    assert_eq!(names(&found), vec!["nov.CSV", "statement.pdf", "top.csv"]);
+    assert_eq!(
+        names(&found),
+        vec![
+            "export.qif",
+            "nov.CSV",
+            "statement.pdf",
+            "top.csv",
+            "webconnect.qbo"
+        ]
+    );
     assert!(found.iter().all(|c| c.from == From::Watched));
     let _ = fs::remove_dir_all(&root);
 }

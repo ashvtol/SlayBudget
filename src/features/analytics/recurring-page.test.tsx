@@ -143,7 +143,7 @@ describe('RecurringPage', () => {
   it('shows bills that stopped arriving under Not seen lately', async () => {
     setIpc(createMemoryIpc({
       sources,
-      transactions: [tx('geico auto', '2026-04-03', -14200), tx('geico auto', '2026-05-03', -14200), tx('geico auto', '2026-06-03', -14200)],
+      transactions: [tx('geico auto', '2026-04-03', -14200), tx('geico auto', '2026-05-03', -14200), tx('geico auto', '2026-06-03', -14200), tx('groceries', '2026-11-10', -2500)],
     }));
     useAnalyticsStore.setState({ today: '2026-11-21' });
     render(<RecurringPage />);
@@ -155,13 +155,28 @@ describe('RecurringPage', () => {
   it('dates stopped bills from another year in full and says when nothing is due this month', async () => {
     setIpc(createMemoryIpc({
       sources,
-      transactions: [tx('walmart+', '2025-03-22', -1427), tx('walmart+', '2025-04-22', -1427), tx('walmart+', '2025-05-22', -1427)],
+      transactions: [tx('walmart+', '2025-03-22', -1427), tx('walmart+', '2025-04-22', -1427), tx('walmart+', '2025-05-22', -1427), tx('groceries', '2026-11-10', -2500)],
     }));
     useAnalyticsStore.setState({ today: '2026-11-21' });
     render(<RecurringPage />);
     const stale = await screen.findByRole('list', { name: 'Not seen lately' });
     expect(stale).toHaveTextContent('Last May 22, 2025');
     expect(screen.getByText('Nothing due this month.')).toBeInTheDocument();
+  });
+});
+
+describe('RecurringPage when the statements end before this month', () => {
+  it('keeps bills due after the newest statement in This month and asks for newer statements', async () => {
+    setIpc(createMemoryIpc({
+      sources,
+      transactions: [tx('phone co', '2026-07-30', -4500), tx('phone co', '2026-08-30', -4500), tx('phone co', '2026-09-30', -4500), tx('groceries', '2026-10-25', -2500)],
+    }));
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<RecurringPage />);
+    const month = await screen.findByRole('list', { name: 'This month' });
+    expect(month).toHaveTextContent(/Phone Co/i);
+    expect(screen.queryByRole('list', { name: 'Not seen lately' })).toBeNull();
+    expect(screen.getByText("Your newest statement ends Oct 25th. Import newer ones to see what's been paid.")).toBeInTheDocument();
   });
 });
 

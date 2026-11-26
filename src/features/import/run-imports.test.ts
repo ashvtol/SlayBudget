@@ -34,6 +34,9 @@ describe('classifyFile', () => {
   it('maps extensions, case-insensitively', () => {
     expect(classifyFile('YTD.CSV')).toBe('csv');
     expect(classifyFile('stmt.qfx')).toBe('ofx');
+    // QuickBooks Web Connect is OFX; Quicken's QIF goes the same way.
+    expect(classifyFile('stmt.QBO')).toBe('ofx');
+    expect(classifyFile('export.qif')).toBe('ofx');
     expect(classifyFile('March 09.pdf')).toBe('pdf');
     expect(classifyFile('notes.txt')).toBe('unsupported');
   });

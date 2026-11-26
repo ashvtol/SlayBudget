@@ -142,11 +142,7 @@ fn with_nothing_of_yours_the_starter_list_only_suggests() {
     assert_eq!(report.moved, 0);
     let t = db.get(id);
     assert_eq!(t.category_id, Some(db.cat("Other")));
-    assert_eq!(
-        t.suggested_category_id,
-        Some(db.cat("Food & Dining")),
-        "{t:?}"
-    );
+    assert_eq!(t.suggested_category_id, Some(db.cat("Coffee")), "{t:?}");
     assert_eq!(history::suggestion_count(&db.conn, Some(db.p)).unwrap(), 1);
 }
 
@@ -196,7 +192,7 @@ fn accepting_a_category_suggestion_teaches_the_model() {
         .conn
         .query_row(
             "SELECT docs FROM model_totals WHERE category_id = ?1",
-            [db.cat("Food & Dining")],
+            [db.cat("Coffee")],
             |r| r.get(0),
         )
         .unwrap();
@@ -205,12 +201,12 @@ fn accepting_a_category_suggestion_teaches_the_model() {
         .conn
         .query_row(
             "SELECT docs FROM model_totals WHERE category_id = ?1",
-            [db.cat("Food & Dining")],
+            [db.cat("Coffee")],
             |r| r.get(0),
         )
         .unwrap();
     assert_eq!(after - before, 3.0);
-    assert_eq!(db.get(id).category_id, Some(db.cat("Food & Dining")));
+    assert_eq!(db.get(id).category_id, Some(db.cat("Coffee")));
 }
 
 #[test]

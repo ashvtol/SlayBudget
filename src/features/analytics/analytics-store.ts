@@ -56,6 +56,8 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
   groups: [],
 
   async load(profileId) {
+    // A Mac app stays open for days: every load uses the real date.
+    if (get().today !== todayStr()) set({ today: todayStr() });
     const { range, today } = get();
     set({ loading: true });
     const [monthly, categories, budgets, cashflow, recurring, cats, groups] = await Promise.all([
@@ -76,3 +78,20 @@ export const useAnalyticsStore = create<AnalyticsState>((set, get) => ({
     set({ range });
   },
 }));
+
+/** Keep `today` current while the app stays open: checked every minute and whenever the window comes back to the
+ *  front, so this month's screens move to the new month without a restart. Returns a function that stops watching. */
+export function watchToday(): () => void {
+  const check = () => {
+    const now = todayStr();
+    if (useAnalyticsStore.getState().today !== now) useAnalyticsStore.setState({ today: now });
+  };
+  const timer = setInterval(check, 60_000);
+  window.addEventListener('focus', check);
+  document.addEventListener('visibilitychange', check);
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('focus', check);
+    document.removeEventListener('visibilitychange', check);
+  };
+}

@@ -3,23 +3,23 @@
 # Seeds the classifier at weight 1. Reviewed by hand. No payment apps (Venmo, Zelle, PayPal, Cash App).
 
 # Coffee Shop
-starbucks	Coffee Shop|Food & Dining
-dunkin	Coffee Shop|Food & Dining
-dunkin donuts	Coffee Shop|Food & Dining
-peets	Coffee Shop|Food & Dining
-peets coffee	Coffee Shop|Food & Dining
-philz	Coffee Shop|Food & Dining
-blue bottle	Coffee Shop|Food & Dining
-tim hortons	Coffee Shop|Food & Dining
-dutch bros	Coffee Shop|Food & Dining
-coffee bean	Coffee Shop|Food & Dining
-la colombe	Coffee Shop|Food & Dining
-coffee	Coffee Shop|Food & Dining
-cafe	Coffee Shop|Food & Dining
-espresso	Coffee Shop|Food & Dining
-roasters	Coffee Shop|Food & Dining
-boba	Coffee Shop|Food & Dining
-kung fu tea	Coffee Shop|Food & Dining
+starbucks	Coffee|Coffee Shop|Food & Dining
+dunkin	Coffee|Coffee Shop|Food & Dining
+dunkin donuts	Coffee|Coffee Shop|Food & Dining
+peets	Coffee|Coffee Shop|Food & Dining
+peets coffee	Coffee|Coffee Shop|Food & Dining
+philz	Coffee|Coffee Shop|Food & Dining
+blue bottle	Coffee|Coffee Shop|Food & Dining
+tim hortons	Coffee|Coffee Shop|Food & Dining
+dutch bros	Coffee|Coffee Shop|Food & Dining
+coffee bean	Coffee|Coffee Shop|Food & Dining
+la colombe	Coffee|Coffee Shop|Food & Dining
+coffee	Coffee|Coffee Shop|Food & Dining
+cafe	Coffee|Coffee Shop|Food & Dining
+espresso	Coffee|Coffee Shop|Food & Dining
+roasters	Coffee|Coffee Shop|Food & Dining
+boba	Coffee|Coffee Shop|Food & Dining
+kung fu tea	Coffee|Coffee Shop|Food & Dining
 # Food & Dining
 mcdonalds	Food & Dining
 mcdonald's	Food & Dining
@@ -132,15 +132,15 @@ caviar	Takeout|Food & Dining
 gopuff	Takeout|Food & Dining
 slice	Takeout|Food & Dining
 # Drinks
-pub	Drinks|Food & Dining
-brewery	Drinks|Food & Dining
-brewing	Drinks|Food & Dining
-taproom	Drinks|Food & Dining
-winery	Drinks|Food & Dining
-distillery	Drinks|Food & Dining
-total wine	Drinks|Food & Dining
-bevmo	Drinks|Food & Dining
-liquor	Drinks|Food & Dining
+pub	Bars & Alcohol|Drinks|Food & Dining
+brewery	Bars & Alcohol|Drinks|Food & Dining
+brewing	Bars & Alcohol|Drinks|Food & Dining
+taproom	Bars & Alcohol|Drinks|Food & Dining
+winery	Bars & Alcohol|Drinks|Food & Dining
+distillery	Bars & Alcohol|Drinks|Food & Dining
+total wine	Bars & Alcohol|Drinks|Food & Dining
+bevmo	Bars & Alcohol|Drinks|Food & Dining
+liquor	Bars & Alcohol|Drinks|Food & Dining
 # Groceries
 safeway	Groceries
 kroger	Groceries
@@ -280,7 +280,7 @@ patreon	Subscriptions
 duolingo	Subscriptions
 headspace	Subscriptions
 calm com	Subscriptions
-peloton	Subscriptions
+peloton	Fitness|Subscriptions
 noom	Subscriptions
 weight watchers	Subscriptions
 icloud	Subscriptions
@@ -456,44 +456,44 @@ oil change	Car Maintenance
 car service	Car Maintenance
 dealership service	Car Maintenance
 # Housing & Utilities
-pg&e	Housing & Utilities
-pge	Housing & Utilities
-pacific gas	Housing & Utilities
-southern california edison	Housing & Utilities
-sdg&e	Housing & Utilities
-con edison	Housing & Utilities
-coned	Housing & Utilities
-duke energy	Housing & Utilities
-dominion energy	Housing & Utilities
-georgia power	Housing & Utilities
-florida power	Housing & Utilities
-fpl	Housing & Utilities
-xcel energy	Housing & Utilities
-national grid	Housing & Utilities
-eversource	Housing & Utilities
-pseg	Housing & Utilities
-puget sound energy	Housing & Utilities
-socalgas	Housing & Utilities
-southern california gas	Housing & Utilities
-water district	Housing & Utilities
-water utility	Housing & Utilities
-water dept	Housing & Utilities
-utilities	Housing & Utilities
-sewer	Housing & Utilities
-waste management	Housing & Utilities
-republic services	Housing & Utilities
-trash	Housing & Utilities
+pg&e	Utilities|Housing & Utilities
+pge	Utilities|Housing & Utilities
+pacific gas	Utilities|Housing & Utilities
+southern california edison	Utilities|Housing & Utilities
+sdg&e	Utilities|Housing & Utilities
+con edison	Utilities|Housing & Utilities
+coned	Utilities|Housing & Utilities
+duke energy	Utilities|Housing & Utilities
+dominion energy	Utilities|Housing & Utilities
+georgia power	Utilities|Housing & Utilities
+florida power	Utilities|Housing & Utilities
+fpl	Utilities|Housing & Utilities
+xcel energy	Utilities|Housing & Utilities
+national grid	Utilities|Housing & Utilities
+eversource	Utilities|Housing & Utilities
+pseg	Utilities|Housing & Utilities
+puget sound energy	Utilities|Housing & Utilities
+socalgas	Utilities|Housing & Utilities
+southern california gas	Utilities|Housing & Utilities
+water district	Utilities|Housing & Utilities
+water utility	Utilities|Housing & Utilities
+water dept	Utilities|Housing & Utilities
+utilities	Utilities|Housing & Utilities
+sewer	Utilities|Housing & Utilities
+waste management	Utilities|Housing & Utilities
+republic services	Utilities|Housing & Utilities
+trash	Utilities|Housing & Utilities
 # Rent
-rent	Rent|Housing & Utilities - Rent|Housing & Utilities
-apartments	Rent|Housing & Utilities - Rent|Housing & Utilities
-apartment	Rent|Housing & Utilities - Rent|Housing & Utilities
-property management	Rent|Housing & Utilities - Rent|Housing & Utilities
-leasing	Rent|Housing & Utilities - Rent|Housing & Utilities
-realty	Rent|Housing & Utilities - Rent|Housing & Utilities
-landlord	Rent|Housing & Utilities - Rent|Housing & Utilities
-bilt rent	Rent|Housing & Utilities - Rent|Housing & Utilities
-apartments com	Rent|Housing & Utilities - Rent|Housing & Utilities
-greystar	Rent|Housing & Utilities - Rent|Housing & Utilities
+rent	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+apartments	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+apartment	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+property management	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+leasing	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+realty	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+landlord	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+bilt rent	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+apartments com	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
+greystar	Rent & Mortgage|Rent|Housing & Utilities - Rent|Housing & Utilities
 # Mobile
 verizon wireless	Mobile|Phone & Internet
 t-mobile	Mobile|Phone & Internet
@@ -539,25 +539,25 @@ best buy	Shopping
 bestbuy	Shopping
 apple store	Shopping
 apple com	Shopping
-home depot	Shopping
-lowes	Shopping
-lowe's	Shopping
-ikea	Shopping
-wayfair	Shopping
+home depot	Home & Household|Shopping
+lowes	Home & Household|Shopping
+lowe's	Home & Household|Shopping
+ikea	Home & Household|Shopping
+wayfair	Home & Household|Shopping
 overstock	Shopping
-bed bath	Shopping
-crate & barrel	Shopping
-crate and barrel	Shopping
-pottery barn	Shopping
-west elm	Shopping
-williams sonoma	Shopping
-homegoods	Shopping
+bed bath	Home & Household|Shopping
+crate & barrel	Home & Household|Shopping
+crate and barrel	Home & Household|Shopping
+pottery barn	Home & Household|Shopping
+west elm	Home & Household|Shopping
+williams sonoma	Home & Household|Shopping
+homegoods	Home & Household|Shopping
 tj maxx	Shopping
 tjmaxx	Shopping
 marshalls	Shopping
-ross stores	Shopping
-ross dress	Shopping
-burlington	Shopping
+ross stores	Clothing|Shopping
+ross dress	Clothing|Shopping
+burlington	Clothing|Shopping
 nordstrom	Shopping
 nordstrom rack	Shopping
 macys	Shopping
@@ -567,24 +567,24 @@ kohls	Shopping
 kohl's	Shopping
 saks	Shopping
 neiman marcus	Shopping
-old navy	Shopping
-gap	Shopping
-banana republic	Shopping
-athleta	Shopping
-uniqlo	Shopping
-h&m	Shopping
-zara	Shopping
-american eagle	Shopping
-abercrombie	Shopping
-hollister	Shopping
-j crew	Shopping
-madewell	Shopping
-lululemon	Shopping
-nike	Shopping
-adidas	Shopping
-under armour	Shopping
-foot locker	Shopping
-dsw	Shopping
+old navy	Clothing|Shopping
+gap	Clothing|Shopping
+banana republic	Clothing|Shopping
+athleta	Clothing|Shopping
+uniqlo	Clothing|Shopping
+h&m	Clothing|Shopping
+zara	Clothing|Shopping
+american eagle	Clothing|Shopping
+abercrombie	Clothing|Shopping
+hollister	Clothing|Shopping
+j crew	Clothing|Shopping
+madewell	Clothing|Shopping
+lululemon	Clothing|Shopping
+nike	Clothing|Shopping
+adidas	Clothing|Shopping
+under armour	Clothing|Shopping
+foot locker	Clothing|Shopping
+dsw	Clothing|Shopping
 rei	Shopping
 dicks sporting	Shopping
 dick's sporting	Shopping
@@ -592,8 +592,8 @@ academy sports	Shopping
 sephora	Shopping
 ulta	Shopping
 bath & body	Shopping
-victoria's secret	Shopping
-victorias secret	Shopping
+victoria's secret	Clothing|Shopping
+victorias secret	Clothing|Shopping
 michaels	Shopping
 joann	Shopping
 hobby lobby	Shopping
@@ -605,34 +605,34 @@ barnes & noble	Shopping
 barnes noble	Shopping
 gamestop	Shopping
 guitar center	Shopping
-petco	Shopping
-petsmart	Shopping
-chewy	Shopping
+petco	Pets|Shopping
+petsmart	Pets|Shopping
+chewy	Pets|Shopping
 etsy	Shopping
 ebay	Shopping
-shein	Shopping
+shein	Clothing|Shopping
 temu	Shopping
 aliexpress	Shopping
-poshmark	Shopping
-depop	Shopping
+poshmark	Clothing|Shopping
+depop	Clothing|Shopping
 mercari	Shopping
-thredup	Shopping
+thredup	Clothing|Shopping
 asos	Shopping
-zappos	Shopping
-everlane	Shopping
-allbirds	Shopping
+zappos	Clothing|Shopping
+everlane	Clothing|Shopping
+allbirds	Clothing|Shopping
 warby parker	Shopping
-casper	Shopping
-purple mattress	Shopping
+casper	Home & Household|Shopping
+purple mattress	Home & Household|Shopping
 dollar tree	Shopping
 dollar general	Shopping
 family dollar	Shopping
 five below	Shopping
 big lots	Shopping
-ace hardware	Shopping
-true value	Shopping
-harbor freight	Shopping
-menards	Shopping
+ace hardware	Home & Household|Shopping
+true value	Home & Household|Shopping
+harbor freight	Home & Household|Shopping
+menards	Home & Household|Shopping
 costco online	Shopping
 sams club online	Shopping
 shopify	Shopping
@@ -695,22 +695,22 @@ nails	Personal Care
 spa	Personal Care
 beauty	Personal Care
 cosmetics	Personal Care
-equinox	Personal Care
-24 hour fitness	Personal Care
-la fitness	Personal Care
-planet fitness	Personal Care
-anytime fitness	Personal Care
-crunch fitness	Personal Care
-gold's gym	Personal Care
-golds gym	Personal Care
-orangetheory	Personal Care
-soulcycle	Personal Care
-classpass	Personal Care
-ymca	Personal Care
-gym	Personal Care
-fitness	Personal Care
-yoga	Personal Care
-pilates	Personal Care
+equinox	Fitness|Personal Care
+24 hour fitness	Fitness|Personal Care
+la fitness	Fitness|Personal Care
+planet fitness	Fitness|Personal Care
+anytime fitness	Fitness|Personal Care
+crunch fitness	Fitness|Personal Care
+gold's gym	Fitness|Personal Care
+golds gym	Fitness|Personal Care
+orangetheory	Fitness|Personal Care
+soulcycle	Fitness|Personal Care
+classpass	Fitness|Personal Care
+ymca	Fitness|Personal Care
+gym	Fitness|Personal Care
+fitness	Fitness|Personal Care
+yoga	Fitness|Personal Care
+pilates	Fitness|Personal Care
 dry clean	Personal Care
 dry cleaner	Personal Care
 laundry	Personal Care
@@ -721,11 +721,11 @@ college	Education
 school	Education
 academy	Education
 community college	Education
-student loan	Education
-navient	Education
-nelnet	Education
-mohela	Education
-sallie mae	Education
+student loan	Loan Payments|Education
+navient	Loan Payments|Education
+nelnet	Loan Payments|Education
+mohela	Loan Payments|Education
+sallie mae	Loan Payments|Education
 coursera	Education
 udemy	Education
 edx	Education
@@ -872,22 +872,22 @@ foreign transaction fee	Bank Fees
 atm fee	Bank Fees
 wire fee	Bank Fees
 service charge	Bank Fees
-interest charge	Bank Fees
-finance charge	Bank Fees
+interest charge	Interest|Bank Fees
+finance charge	Interest|Bank Fees
 # Gifts & Donations
-gofundme	Gifts & Donations
-red cross	Gifts & Donations
-american red cross	Gifts & Donations
-unicef	Gifts & Donations
-salvation army	Gifts & Donations
+gofundme	Charity|Gifts & Donations
+red cross	Charity|Gifts & Donations
+american red cross	Charity|Gifts & Donations
+unicef	Charity|Gifts & Donations
+salvation army	Charity|Gifts & Donations
 goodwill	Gifts & Donations
-st jude	Gifts & Donations
-wikipedia	Gifts & Donations
-charity	Gifts & Donations
-donation	Gifts & Donations
-donate	Gifts & Donations
-foundation	Gifts & Donations
-church	Gifts & Donations
+st jude	Charity|Gifts & Donations
+wikipedia	Charity|Gifts & Donations
+charity	Charity|Gifts & Donations
+donation	Charity|Gifts & Donations
+donate	Charity|Gifts & Donations
+foundation	Charity|Gifts & Donations
+church	Charity|Gifts & Donations
 1-800-flowers	Gifts & Donations
 1800flowers	Gifts & Donations
 florist	Gifts & Donations
@@ -947,3 +947,27 @@ refund	Credits/Refunds
 return credit	Credits/Refunds
 reversal	Credits/Refunds
 chargeback	Credits/Refunds
+irs usataxpymt	Taxes|Bank Fees
+franchise tax bd	Taxes|Bank Fees
+tax payment	Taxes|Bank Fees
+dept of revenue	Taxes|Bank Fees
+atm withdrawal	Cash & ATM|Bank Fees
+cash withdrawal	Cash & ATM|Bank Fees
+atm cash	Cash & ATM|Bank Fees
+bright horizons	Kids & Childcare|Education
+kindercare	Kids & Childcare|Education
+daycare	Kids & Childcare|Education
+childcare	Kids & Childcare|Education
+goddard school	Kids & Childcare|Education
+banfield	Pets|Healthcare
+vca animal	Pets|Healthcare
+veterinary	Pets|Healthcare
+rover com	Pets|Shopping
+barkbox	Pets|Shopping
+expensify	Reimbursements|Income - Other
+reimbursement	Reimbursements|Income - Other
+auto loan	Loan Payments|Transfer
+car loan	Loan Payments|Transfer
+personal loan	Loan Payments|Transfer
+mortgage pmt	Rent & Mortgage|Housing & Utilities
+rocket mortgage	Rent & Mortgage|Housing & Utilities

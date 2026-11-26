@@ -5,6 +5,7 @@ pub mod analytics;
 pub mod budgets;
 pub mod categories;
 pub mod categorize;
+pub mod credits;
 pub mod db;
 pub mod duplicates;
 pub mod error;

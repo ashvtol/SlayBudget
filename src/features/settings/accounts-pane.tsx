@@ -14,13 +14,13 @@ const TYPES: [AccountType, string][] = [
 
 const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : s);
 
-/** "Chase, ending 1004", "CSV files with columns Amount, Date", "QFX/OFX files", "PDF statements from Citi". */
+/** "Chase, ending 1004", "CSV files with columns Amount, Date", "QFX, OFX, QBO or QIF files", "PDF statements from Citi". */
 export function describeClue(c: AccountClue): string {
   if (c.kind === 'last4') {
     const [bank, digits] = c.value.split('|');
     return bank ? `${bank}, ending ${digits}` : `Ending ${digits}`;
   }
-  if (c.value === 'ofx') return 'QFX/OFX files';
+  if (c.value === 'ofx') return 'QFX, OFX, QBO or QIF files';
   if (c.value.startsWith('pdf:')) return `PDF statements from ${c.value.slice(4).replace(/\b\w/g, (x) => x.toUpperCase())}`;
   if (c.value.startsWith('csv:')) return `CSV files with columns ${c.value.slice(4).split('|').map(capitalize).join(', ')}`;
   return c.value;

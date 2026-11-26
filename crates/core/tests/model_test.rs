@@ -126,7 +126,7 @@ fn bands_follow_the_thresholds() {
 fn a_known_merchant_wins_over_generic_words_until_you_say_otherwise() {
     let conn = open_in_memory().unwrap();
     slaybudget_core::categorize::starter::seed(&conn).unwrap();
-    let dining = cat(&conn, "Food & Dining");
+    let coffee = cat(&conn, "Coffee");
     let p = model::classify(
         &conn,
         &extract_merchant("STARBUCKS STORE 991"),
@@ -134,9 +134,9 @@ fn a_known_merchant_wins_over_generic_words_until_you_say_otherwise() {
     )
     .unwrap()
     .unwrap();
-    assert_eq!(p.category_id, dining);
+    assert_eq!(p.category_id, coffee);
     assert_eq!(
-        model::explain(&conn, "starbucks store", dining).unwrap(),
+        model::explain(&conn, "starbucks store", coffee).unwrap(),
         "Known merchant: Starbucks"
     );
     assert_ne!(

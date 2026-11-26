@@ -1,6 +1,8 @@
 //! CSV statement parsing for the layouts SlayBudget knows, plus a generic fallback.
 
-use super::{number_occurrences, parse_cents, parse_date, ParsedRow};
+use super::{
+    day_comes_first, number_occurrences, parse_cents, parse_date, parse_date_order, ParsedRow,
+};
 use crate::error::{CoreError, Result};
 use serde::{Deserialize, Serialize};
 
@@ -30,13 +32,38 @@ const HEADER_STARTS: &[&str] = &[
     "post date",
 ];
 
-/// Drop metadata lines (e.g. Citi's "Time period of report") before the header row.
-pub(crate) fn strip_preamble(text: &str) -> &str {
-    for (offset, line) in text.split_inclusive('\n').scan(0usize, |pos, line| {
+/// One line's fields, as the CSV reader would split them.
+fn fields(line: &str) -> Vec<String> {
+    csv::ReaderBuilder::new()
+        .has_headers(false)
+        .flexible(true)
+        .trim(csv::Trim::All)
+        .from_reader(line.as_bytes())
+        .records()
+        .next()
+        .and_then(|r| r.ok())
+        .map(|r| r.iter().map(str::to_string).collect())
+        .unwrap_or_default()
+}
+
+/// Each line with its byte offset.
+fn lines(text: &str) -> impl Iterator<Item = (usize, &str)> {
+    text.split_inclusive('\n').scan(0usize, |pos, line| {
         let start = *pos;
         *pos += line.len();
         Some((start, line))
-    }) {
+    })
+}
+
+/// Drop metadata lines before the header row (Citi's "Time period of report", Bank of America's summary, Venmo's
+/// title rows): the header is the first line naming a date, a description and an amount (or debit/credit) column.
+pub(crate) fn strip_preamble(text: &str) -> &str {
+    for (offset, line) in lines(text).take(60) {
+        if line.contains(',') && detect(&fields(line)).is_ok() {
+            return &text[offset..];
+        }
+    }
+    for (offset, line) in lines(text) {
         let lower = line.trim().trim_start_matches('"').to_lowercase();
         if HEADER_STARTS.iter().any(|h| lower.starts_with(h)) && lower.contains(',') {
             return &text[offset..];
@@ -45,14 +72,58 @@ pub(crate) fn strip_preamble(text: &str) -> &str {
     text
 }
 
+/// A file with no header row (Wells Fargo): the columns, read from what the first row's values look like. The date is
+/// the first field that reads as a date, the amount the first other field that reads as money, the description the
+/// longest remaining field with letters in it.
+fn headerless(text: &str) -> Option<Columns> {
+    let first = lines(text).map(|(_, l)| l).find(|l| !l.trim().is_empty())?;
+    let row = fields(first);
+    let date = row.iter().position(|v| parse_date(v).is_some())?;
+    let amount = row.iter().enumerate().position(|(i, v)| {
+        i != date
+            && v.chars().any(|c| c.is_ascii_digit())
+            && parse_cents(v).is_some()
+            && v.chars()
+                .all(|c| c.is_ascii_digit() || "-+$.,() ".contains(c))
+    })?;
+    let description = row
+        .iter()
+        .enumerate()
+        .filter(|(i, v)| *i != date && *i != amount && v.chars().any(char::is_alphabetic))
+        .max_by_key(|(_, v)| v.len())
+        .map(|(i, _)| i)?;
+    Some(Columns {
+        date,
+        description,
+        amount: Some(amount),
+        debit: None,
+        credit: None,
+        direction: None,
+        status: None,
+        category: None,
+    })
+}
+
 struct Columns {
     date: usize,
     description: usize,
     amount: Option<usize>,
     debit: Option<usize>,
     credit: Option<usize>,
+    /// A Debit/Credit (DR/CR, D/C) column saying which way an unsigned amount went.
+    direction: Option<usize>,
     status: Option<usize>,
     category: Option<usize>,
+}
+
+/// Which way a row's money went, from a direction column's value: Some(true) out, Some(false) in, None unknown (a
+/// "Type" column can hold "Sale" or "Payment" too, which leaves the amount as it is).
+fn money_out(value: &str) -> Option<bool> {
+    match value.trim().to_lowercase().as_str() {
+        "debit" | "dr" | "d" | "withdrawal" => Some(true),
+        "credit" | "cr" | "c" | "deposit" => Some(false),
+        _ => None,
+    }
 }
 
 fn find(headers: &[String], names: &[&str]) -> Option<usize> {
@@ -64,7 +135,20 @@ fn find(headers: &[String], names: &[&str]) -> Option<usize> {
 fn detect(headers: &[String]) -> Result<(CsvLayout, Columns)> {
     let date = find(
         headers,
-        &["date", "transaction date", "posted date", "post date"],
+        &[
+            "date",
+            "transaction date",
+            "posted date",
+            "post date",
+            "posting date",
+            "trans. date",
+            "trans date",
+            "date posted",
+            "booking date",
+            "datetime",
+            "started date",
+            "completed date",
+        ],
     );
     let description = find(
         headers,
@@ -74,11 +158,55 @@ fn detect(headers: &[String]) -> Result<(CsvLayout, Columns)> {
             "transaction description",
             "payee",
             "name",
+            "note",
         ],
     );
-    let amount = find(headers, &["amount"]);
-    let debit = find(headers, &["debit"]);
-    let credit = find(headers, &["credit"]);
+    let amount = find(
+        headers,
+        &[
+            "amount",
+            "transaction amount",
+            "amt",
+            "amount (usd)",
+            "transaction amt",
+        ],
+    )
+    // PayPal: what reached the account after fees, else the gross.
+    .or_else(|| find(headers, &["net", "net amount"]))
+    .or_else(|| find(headers, &["gross"]))
+    .or_else(|| {
+        // Any other "... amount" column, never a running balance.
+        headers.iter().position(|h| {
+            let h = h.trim().to_lowercase();
+            h.contains("amount") && !h.contains("balance")
+        })
+    });
+    let debit = find(
+        headers,
+        &[
+            "debit",
+            "debits",
+            "withdrawal",
+            "withdrawals",
+            "debit amount",
+            "money out",
+            "paid out",
+            "outflow",
+        ],
+    );
+    let credit = find(
+        headers,
+        &[
+            "credit",
+            "credits",
+            "deposit",
+            "deposits",
+            "credit amount",
+            "money in",
+            "paid in",
+            "inflow",
+        ],
+    );
     let (Some(date), Some(description)) = (date, description) else {
         return Err(CoreError::Invalid(
             "CSV has no date and description columns".into(),
@@ -95,6 +223,20 @@ fn detect(headers: &[String]) -> Result<(CsvLayout, Columns)> {
         amount,
         debit,
         credit,
+        direction: find(
+            headers,
+            &[
+                "transaction type",
+                "type",
+                "credit/debit",
+                "debit/credit",
+                "dr/cr",
+                "cr/dr",
+                "debit/credit indicator",
+                "credit/debit indicator",
+                "credit debit indicator",
+            ],
+        ),
         status: find(headers, &["status"]),
         category: find(headers, &["category"]),
     };
@@ -129,17 +271,20 @@ pub fn parse_csv(text: &str) -> Result<ParsedStatement> {
 /// (`Date,Description,Amount`) looks generic, but lists charges as positive amounts.
 pub fn parse_csv_from(text: &str, amex_account: bool) -> Result<ParsedStatement> {
     let text = strip_preamble(text.trim_start_matches('\u{feff}'));
+    let first_line = fields(lines(text).map(|(_, l)| l).next().unwrap_or(""));
+    let (headers, mut layout, cols) = match detect(&first_line) {
+        Ok((layout, cols)) => (first_line, layout, cols),
+        Err(e) => match headerless(text) {
+            // No header row: every line is a transaction, with no other columns to name.
+            Some(cols) => (Vec::new(), CsvLayout::Generic, cols),
+            None => return Err(e),
+        },
+    };
     let mut reader = csv::ReaderBuilder::new()
+        .has_headers(!headers.is_empty())
         .flexible(true)
         .trim(csv::Trim::All)
         .from_reader(text.as_bytes());
-    let headers: Vec<String> = reader
-        .headers()
-        .map_err(|e| CoreError::Invalid(format!("CSV header: {e}")))?
-        .iter()
-        .map(str::to_string)
-        .collect();
-    let (mut layout, cols) = detect(&headers)?;
     if amex_account && layout == CsvLayout::Generic && cols.amount.is_some() {
         layout = CsvLayout::Amex;
     }
@@ -150,6 +295,7 @@ pub fn parse_csv_from(text: &str, amex_account: bool) -> Result<ParsedStatement>
         cols.amount,
         cols.debit,
         cols.credit,
+        cols.direction,
     ];
     let extra: Vec<(usize, String)> = headers
         .iter()
@@ -157,17 +303,34 @@ pub fn parse_csv_from(text: &str, amex_account: bool) -> Result<ParsedStatement>
         .filter(|(i, h)| !used.contains(&Some(*i)) && !h.trim().is_empty())
         .map(|(i, h)| (i, label(h)))
         .collect();
+    let records: Vec<csv::StringRecord> =
+        reader
+            .records()
+            .collect::<std::result::Result<_, _>>()
+            .map_err(|e| CoreError::Invalid(format!("CSV row: {e}")))?;
+    // UK and European banks write day/month/year: one day above 12 in the file settles it for every row.
+    let day_first = records
+        .iter()
+        .any(|r| r.get(cols.date).is_some_and(day_comes_first));
+    let lower: Vec<String> = headers.iter().map(|h| h.trim().to_lowercase()).collect();
+    // Discover and Apple Card list purchases as positive amounts; their headers give them away.
+    let card_positive = lower
+        .iter()
+        .any(|h| h == "trans. date" || h == "clearing date");
+    // Each kept row read from a bare amount: (its index, whether it is a card payment).
+    let mut as_is: Vec<(usize, bool)> = Vec::new();
 
     let mut rows = Vec::new();
     let mut skipped = 0usize;
-    for record in reader.records() {
-        let record = record.map_err(|e| CoreError::Invalid(format!("CSV row: {e}")))?;
+    for record in &records {
         let get = |i: Option<usize>| i.and_then(|i| record.get(i)).unwrap_or("").trim();
-        let Some(posted_on) = parse_date(get(Some(cols.date))) else {
+        let Some(posted_on) = parse_date_order(get(Some(cols.date)), day_first) else {
             skipped += 1;
             continue;
         };
         let description = get(Some(cols.description)).to_string();
+        // Some(is a card payment) when the sign is the file's own, read from a bare amount.
+        let mut bare: Option<bool> = None;
         let amount_cents = match layout {
             CsvLayout::Amex => parse_cents(get(cols.amount)).map(|c| -c),
             CsvLayout::CitiCostco => {
@@ -183,7 +346,19 @@ pub fn parse_csv_from(text: &str, amex_account: bool) -> Result<ParsedStatement>
                 let debit = parse_cents(get(cols.debit));
                 let credit = parse_cents(get(cols.credit));
                 match (parse_cents(get(cols.amount)), debit, credit) {
-                    (Some(a), _, _) => Some(a),
+                    (Some(a), _, _) => Some(match money_out(get(cols.direction)) {
+                        Some(true) => -a.abs(),
+                        Some(false) => a.abs(),
+                        None => {
+                            let line = get(Some(cols.description)).to_lowercase();
+                            let payment = get(cols.direction).eq_ignore_ascii_case("payment")
+                                || ["payment", "thank you", "autopay"]
+                                    .iter()
+                                    .any(|w| line.contains(w));
+                            bare = Some(payment);
+                            a
+                        }
+                    }),
                     (None, Some(d), _) if d != 0 => Some(-d.abs()),
                     (None, _, Some(c)) if c != 0 => Some(c.abs()),
                     _ => None,
@@ -218,6 +393,28 @@ pub fn parse_csv_from(text: &str, amex_account: bool) -> Result<ParsedStatement>
             raw_category,
             details,
         });
+        if let Some(payment) = bare {
+            as_is.push((rows.len() - 1, payment));
+        }
+    }
+    // A card that lists purchases as positive, known by its header or by its payments being its only money out.
+    let kept: Vec<(i64, bool)> = as_is
+        .iter()
+        .filter_map(|(i, p)| rows.get(*i).map(|r| (r.amount_cents, *p)))
+        .collect();
+    let payments: Vec<i64> = kept.iter().filter(|(_, p)| *p).map(|(c, _)| *c).collect();
+    let others: Vec<i64> = kept.iter().filter(|(_, p)| !*p).map(|(c, _)| *c).collect();
+    let flip = layout == CsvLayout::Generic
+        && (card_positive
+            || (!payments.is_empty()
+                && payments.iter().all(|c| *c < 0)
+                && others.iter().filter(|c| **c > 0).count() > others.len() / 2));
+    if flip {
+        for (i, _) in &as_is {
+            if let Some(row) = rows.get_mut(*i) {
+                row.amount_cents = -row.amount_cents;
+            }
+        }
     }
     number_occurrences(&mut rows);
     Ok(ParsedStatement {

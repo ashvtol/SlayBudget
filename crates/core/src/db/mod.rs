@@ -45,11 +45,15 @@ const MIGRATIONS: &[(i64, &str)] = &[
         include_str!("../../migrations/0017_every_few_years.sql"),
     ),
     (18, include_str!("../../migrations/0018_bill_credits.sql")),
+    (
+        19,
+        include_str!("../../migrations/0019_credits_follow_charges.sql"),
+    ),
 ];
 
-/// Migration 16 rewrites how every category is tracked, and 17 and 18 change the recurrings table:
-/// the database is copied beside itself first.
-const BACKUP_BEFORE: i64 = 18;
+/// Migration 16 rewrites how every category is tracked, 17 and 18 change the recurrings table, and with 19 credits
+/// move to their charges' categories: the database is copied beside itself first.
+const BACKUP_BEFORE: i64 = 19;
 
 /// Open (or create) the database at `path` and bring it up to the latest schema.
 pub fn open_db(path: &Path) -> Result<Connection> {
@@ -65,8 +69,10 @@ pub fn open_db(path: &Path) -> Result<Connection> {
             "smart-categorization"
         } else if current < 17 {
             "every-few-years"
-        } else {
+        } else if current < 18 {
             "bill-credits"
+        } else {
+            "credits-follow-charges"
         };
         backup_before(&conn, label, &stamp)?;
     }
@@ -74,12 +80,15 @@ pub fn open_db(path: &Path) -> Result<Connection> {
     crate::fx::refresh_display(&conn)?;
     crate::profiles::ensure_default(&conn)?;
     crate::categories::seed_defaults(&conn)?;
+    crate::categories::add_new_defaults(&conn)?;
     crate::categories::apply_default_essentials(&conn)?;
     crate::profiles::backfill_institutions(&conn)?;
     crate::categories::fill_missing_emojis(&conn)?;
     crate::recurrings::seed_if_needed(&conn)?;
     // Charges an earlier version's rules skipped join their bills now.
     crate::recurrings::link_unlinked(&conn)?;
+    // Credits that pay a charge back count in its category.
+    crate::credits::follow_charges(&conn)?;
     Ok(conn)
 }
 

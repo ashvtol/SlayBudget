@@ -290,6 +290,8 @@ pub fn import_rows(
         transfers::apply_pairs(conn, &pairs)?;
         refunds::rematch(conn, Some(profile_id))?;
         crate::recurrings::after_import(conn)?;
+        // A credit that pays back a charge counts in the charge's category.
+        crate::credits::follow_charges(conn)?;
         flags = crate::duplicates::detect(conn, import_id, &new_ids, &accounted_ids)?;
     }
     Ok(ImportReport {
@@ -443,7 +445,7 @@ pub fn import_pdf(
     )
 }
 
-/// Import an OFX/QFX file. Credit card files carry CCSTMTRS; everything else is treated as checking.
+/// Import an OFX/QFX/QBO or QIF file. Credit card files say so; everything else is treated as checking.
 pub fn import_ofx(
     conn: &Connection,
     profile_id: ProfileId,
@@ -454,7 +456,7 @@ pub fn import_ofx(
     let (_, source_name) = source_from_path(path);
     let source_id =
         profiles::find_or_create_source(conn, profile_id, &source_name, SourceKind::Ofx)?;
-    let kind = if text.contains("<CCSTMTRS>") {
+    let kind = if super::ofx::is_card(text) {
         StatementKind::Card
     } else {
         StatementKind::Checking
@@ -542,7 +544,7 @@ pub fn import_file(
             }
             StatementFile::Ofx(text) => {
                 let parsed = parse_ofx(text)?;
-                let kind = if text.contains("<CCSTMTRS>") {
+                let kind = if super::ofx::is_card(text) {
                     StatementKind::Card
                 } else {
                     StatementKind::Checking

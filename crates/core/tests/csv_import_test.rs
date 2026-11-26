@@ -147,3 +147,55 @@ fn a_basic_csv_elsewhere_keeps_its_signs() {
         -500
     );
 }
+
+#[test]
+fn an_unsigned_amount_with_a_debit_credit_column_is_read_with_its_sign() {
+    // Capital One's layout: "Transaction Amount" always positive, "Transaction Type" says which way it went.
+    let csv = "Account Number,Transaction Description,Transaction Date,Transaction Type,Transaction Amount,Balance\n\
+               1234,\"ATM Withdrawal - MAIN ST ATM SEATTLE, WA\",11/07/26,Debit,103,7.05\n\
+               1234,Zelle money received from SAM RIVERA,11/07/26,Credit,100,110.05\n\
+               1234,Monthly Interest Paid,10/31/26,Credit,0.01,10.05\n";
+    let parsed = parse_csv(csv).unwrap();
+    let rows: Vec<(NaiveDate, &str, i64)> = parsed
+        .rows
+        .iter()
+        .map(|r| (r.posted_on, r.description.as_str(), r.amount_cents))
+        .collect();
+    assert_eq!(
+        rows,
+        vec![
+            (
+                d("2026-11-07"),
+                "ATM Withdrawal - MAIN ST ATM SEATTLE, WA",
+                -10300
+            ),
+            (
+                d("2026-11-07"),
+                "Zelle money received from SAM RIVERA",
+                10000
+            ),
+            (d("2026-10-31"), "Monthly Interest Paid", 1),
+        ]
+    );
+}
+
+#[test]
+fn common_names_for_the_amount_and_its_direction_are_recognized() {
+    for (amount, kind, debit, credit) in [
+        ("Amt", "Type", "Debit", "Credit"),
+        ("Transaction Amount", "Credit/Debit", "DR", "CR"),
+        ("Amount (USD)", "Debit/Credit Indicator", "D", "C"),
+    ] {
+        let csv = format!("Date,Description,{kind},{amount}\n01/05/2026,COFFEE,{debit},4.50\n01/06/2026,REFUND,{credit},2.00\n");
+        let parsed = parse_csv(&csv).unwrap_or_else(|e| panic!("{amount}/{kind}: {e}"));
+        assert_eq!(
+            parsed
+                .rows
+                .iter()
+                .map(|r| r.amount_cents)
+                .collect::<Vec<_>>(),
+            vec![-450, 200],
+            "{amount}/{kind}"
+        );
+    }
+}

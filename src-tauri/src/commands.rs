@@ -44,7 +44,13 @@ fn recorded<T>(
 ) -> IpcResult<T> {
     let conn = lock(state);
     let mut stack = state.undo.lock().unwrap_or_else(|p| p.into_inner());
-    let value = stack.record(&conn, &label, f);
+    // Every change ends with credits following their charges (a charge moved to another category takes its credit
+    // along), inside the same step, so Undo takes both back.
+    let value = stack.record(&conn, &label, |c| {
+        let value = f(c)?;
+        slaybudget_core::credits::follow_charges(c)?;
+        Ok(value)
+    });
     show_undo_menu(state, &stack);
     Ok(value?)
 }
@@ -1128,7 +1134,7 @@ pub fn scan_watched_folder(state: State<'_, AppState>) -> IpcResult<WatchScanDto
                 })?;
                 pipeline::import_csv(&guard, profile_id, &path_str, &text)?
             }
-            Some("ofx") | Some("qfx") => {
+            Some("ofx") | Some("qfx") | Some("qbo") | Some("qif") => {
                 dto.files_scanned += 1;
                 let text = std::fs::read_to_string(&path).map_err(|e| IpcError {
                     code: "io",

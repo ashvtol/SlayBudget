@@ -10,7 +10,7 @@ use rusqlite::{Connection, OptionalExtension};
 use std::sync::LazyLock;
 
 /// Bump when the list changes, so it is taught again.
-pub const STARTER_VERSION: &str = "1";
+pub const STARTER_VERSION: &str = "2";
 const SEEDED_KEY: &str = "starter_seeded";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

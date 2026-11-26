@@ -258,7 +258,7 @@ fn explain_names_your_examples_or_the_known_merchant() {
         why.starts_with("Like 3 others you put in Shopping ("),
         "{why}"
     );
-    let known = model::explain(&db.conn, "starbucks", db.cat("Food & Dining")).unwrap();
+    let known = model::explain(&db.conn, "starbucks", db.cat("Coffee")).unwrap();
     assert_eq!(known, "Known merchant: Starbucks");
 }
 

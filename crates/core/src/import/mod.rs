@@ -8,6 +8,7 @@ pub mod ofx;
 pub mod pdf;
 pub mod pipeline;
 pub mod plaid;
+pub mod qif;
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -116,22 +117,53 @@ pub fn parse_cents(raw: &str) -> Option<i64> {
     Some(if negative { -cents } else { cents })
 }
 
-/// Parse the date formats banks use: `MM/DD/YYYY`, `YYYY-MM-DD`, `M/D/YY`.
+/// Parse the date formats banks use: `MM/DD/YYYY`, `YYYY-MM-DD`, `M/D/YY`, with any time after it dropped.
 pub fn parse_date(raw: &str) -> Option<NaiveDate> {
+    parse_date_order(raw, false)
+}
+
+/// The date part of a date and time: "2026-01-05T18:20:11" or "2026-01-05 08:15:00" -> "2026-01-05".
+fn date_part(raw: &str) -> &str {
     let s = raw.trim();
-    // chrono's %Y accepts a two-digit year as year 26, so use the two-digit form only
-    // for the M/D/YY shape (three numeric fields, short first field, two-digit last).
+    let s = s.split(' ').next().unwrap_or(s);
+    match s.find('T') {
+        Some(i)
+            if s[..i].ends_with(|c: char| c.is_ascii_digit())
+                && s[i + 1..].starts_with(|c: char| c.is_ascii_digit()) =>
+        {
+            &s[..i]
+        }
+        _ => s,
+    }
+}
+
+/// The three numeric fields of a `D/M/Y` or `M/D/Y` date, if that is its shape.
+fn numeric_parts(s: &str) -> Option<Vec<&str>> {
     let parts: Vec<&str> = s.split(['/', '-']).collect();
-    let two_digit_year = parts.len() == 3
+    (parts.len() == 3
         && parts
             .iter()
             .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
-        && parts[0].len() <= 2
-        && parts[2].len() == 2;
-    let formats: &[&str] = if two_digit_year {
-        &["%m/%d/%y", "%m-%d-%y"]
-    } else {
-        &["%m/%d/%Y", "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%m-%d-%Y"]
+        && parts[0].len() <= 2)
+        .then_some(parts)
+}
+
+/// Whether a date can only be day-first ("13/01/2026").
+pub fn day_comes_first(raw: &str) -> bool {
+    numeric_parts(date_part(raw)).is_some_and(|p| p[0].parse::<u32>().is_ok_and(|d| d > 12))
+}
+
+/// Parse a date, reading `NN/NN/YYYY` as day-first when the file's dates are.
+pub fn parse_date_order(raw: &str, day_first: bool) -> Option<NaiveDate> {
+    let s = date_part(raw);
+    // chrono's %Y accepts a two-digit year as year 26, so use the two-digit form only
+    // for the M/D/YY shape (three numeric fields, short first field, two-digit last).
+    let two_digit_year = numeric_parts(s).is_some_and(|p| p[2].len() == 2);
+    let formats: &[&str] = match (two_digit_year, day_first) {
+        (true, false) => &["%m/%d/%y", "%m-%d-%y"],
+        (true, true) => &["%d/%m/%y", "%d-%m-%y"],
+        (false, false) => &["%m/%d/%Y", "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%m-%d-%Y"],
+        (false, true) => &["%d/%m/%Y", "%Y-%m-%d", "%Y/%m/%d", "%d-%b-%Y", "%d-%m-%Y"],
     };
     for fmt in formats {
         if let Ok(d) = NaiveDate::parse_from_str(s, fmt) {

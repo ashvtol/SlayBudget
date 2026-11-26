@@ -130,12 +130,50 @@ describe('buildRecurrings bills not seen lately', () => {
   });
 });
 
+describe('buildRecurrings when the statements stop before today', () => {
+  // A new install: the newest statement ends Oct 25, and today is Nov 21.
+  const m = buildRecurrings({
+    recurring: [
+      rec('phone', 4500, '2026-09-30', '2026-10-30'),
+      rec('netflix', 1799, '2026-10-20', '2026-11-20'),
+      rec('gym', 3000, '2026-08-05', '2026-09-05'),
+    ],
+    transactions: [
+      tx('phone', '2026-08-30', -4500),
+      tx('phone', '2026-09-30', -4500),
+      tx('netflix', '2026-09-20', -1799),
+      tx('netflix', '2026-10-20', -1799),
+      tx('gym', '2026-08-05', -3000),
+      tx('groceries', '2026-10-25', -2500),
+    ],
+    today: TODAY,
+  });
+
+  it('keeps a bill due after the newest statement in this month, waiting for the next statement, not "not seen lately"', () => {
+    expect(m.thisMonth.map((i) => [i.recurring.merchant, i.date, i.paid, i.waiting])).toEqual([
+      ['phone', '2026-10-30', false, true],
+      ['netflix', '2026-11-20', false, true],
+    ]);
+    expect(m.summary.leftToPayCents).toBe(4500 + 1799);
+  });
+
+  it('still lists a bill whose due date the statements cover as not seen lately', () => {
+    expect(m.stale.map((i) => i.recurring.merchant)).toEqual(['gym']);
+  });
+
+  it('says where the statements end, so the page can ask for newer ones', () => {
+    expect(m.statementsEndOn).toBe('2026-10-25');
+    expect(build().statementsEndOn).toBeNull();
+  });
+});
+
 describe('buildRecurrings stopped bills', () => {
   const stopped = buildRecurrings({
     recurring: [rec('walmart+', 1427, '2025-05-22', '2025-06-22'), rec('adobe', 1102, '2026-03-02', '2026-04-02')],
     transactions: [
       tx('walmart+', '2025-03-22', -1427), tx('walmart+', '2025-04-22', -1427), tx('walmart+', '2025-05-22', -1427),
       tx('adobe', '2026-01-02', -1102), tx('adobe', '2026-03-02', -1102),
+      tx('groceries', '2026-11-10', -2500), // the account is still in use: these bills really stopped
     ],
     today: TODAY,
   });

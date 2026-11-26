@@ -1,4 +1,4 @@
-//! OFX / QFX (SGML flavour) parsing: just the STMTTRN blocks.
+//! OFX, QFX and QBO parsing (SGML or XML): just the STMTTRN blocks. QIF files are handed to `qif`.
 
 use super::{number_occurrences, parse_cents, ParsedRow};
 use crate::error::{CoreError, Result};
@@ -26,7 +26,16 @@ fn tag<'a>(block: &'a str, name: &str) -> Option<&'a str> {
     (!value.is_empty()).then_some(value)
 }
 
+/// Parse an OFX, QFX or QBO file (SGML or XML), or a QIF file, which comes in the same way.
 pub fn parse_ofx(text: &str) -> Result<ParsedOfx> {
+    if super::qif::is_qif(text) {
+        let (rows, skipped) = super::qif::parse_qif(text);
+        return Ok(ParsedOfx {
+            currency: None,
+            rows,
+            skipped,
+        });
+    }
     if !text.contains("<OFX>") && !text.contains("<ofx>") {
         return Err(CoreError::Invalid("not an OFX file".into()));
     }
@@ -68,4 +77,9 @@ pub fn parse_ofx(text: &str) -> Result<ParsedOfx> {
         rows,
         skipped,
     })
+}
+
+/// Whether a statement file is a credit card's: an OFX credit card statement, or a QIF `!Type:CCard` file.
+pub fn is_card(text: &str) -> bool {
+    text.contains("<CCSTMTRS>") || text.contains("<ccstmtrs>") || super::qif::is_card(text)
 }

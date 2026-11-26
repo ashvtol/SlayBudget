@@ -258,7 +258,16 @@ export function RecurringPage() {
                     onDecline={(id) => void act(() => ipc().setRecurringPaidBackBy(id, []))}
                   />
                 )}
-                <BillList title="This month" items={model.thisMonth} src={src} today={today} selected={current} onSelect={setSelected} emptyText="Nothing due this month." />
+                <BillList
+                  title="This month"
+                  items={model.thisMonth}
+                  src={src}
+                  today={today}
+                  selected={current}
+                  onSelect={setSelected}
+                  emptyText="Nothing due this month."
+                  note={model.statementsEndOn ? `Your newest statement ends ${ordinalDay(model.statementsEndOn)}. Import newer ones to see what's been paid.` : undefined}
+                />
                 {model.future.length > 0 && <BillList title="In the future" items={model.future} src={src} today={today} selected={current} onSelect={setSelected} />}
                 {model.stale.length > 0 && <BillList title="Not seen lately" items={model.stale} src={src} today={today} selected={current} onSelect={setSelected} stale thisYear={today.slice(0, 4)} />}
                 {model.paused.length > 0 && <BillList title="Paused" items={model.paused} src={src} today={today} selected={current} onSelect={setSelected} />}
@@ -641,6 +650,7 @@ function BillList({
   emptyText,
   hideTitle = false,
   today,
+  note,
 }: {
   title: string;
   items: RecurringItem[];
@@ -652,7 +662,10 @@ function BillList({
   thisYear?: string;
   emptyText?: string;
   hideTitle?: boolean;
+  /** A line under the title, such as where the statements end. */
+  note?: string;
 }) {
+  const currency = useCurrencyStore((s) => s.displayCurrency);
   return (
     <section>
       {!hideTitle && (
@@ -661,11 +674,15 @@ function BillList({
           {title}
         </h2>
       )}
+      {note && <p className="m-0 mb-2 px-1 text-[12px]" style={{ color: 'var(--warn)' }}>{note}</p>}
       {items.length === 0 && emptyText && <p className="m-0 px-1 text-[13px]" style={{ color: 'var(--muted)' }}>{emptyText}</p>}
       <ul aria-label={title} className="m-0 flex list-none flex-col p-0">
         {items.map((i) => {
           const cat = i.recurring.categoryId != null ? src.categoriesById[i.recurring.categoryId] : undefined;
           const active = selected?.key === i.key;
+          // Paid this month: the charge, and what came back for it.
+          const charged = i.paid && i.charges[0] ? -i.charges[0].amountCents : null;
+          const back = charged != null ? (i.credits.get(i.charges[0].id)?.amountCents ?? 0) : 0;
           return (
             <li
               key={i.key}
@@ -677,17 +694,23 @@ function BillList({
               <span
                 className={`${stale ? 'w-[118px]' : 'w-[64px]'} shrink-0 whitespace-nowrap`}
                 style={{ color: stale ? 'var(--warn)' : 'var(--muted)' }}
-                title={stale ? `Expected ${ordinalDay(i.date)}` : undefined}
+                title={stale ? `Expected ${ordinalDay(i.date)}` : i.waiting && !i.paid ? 'Not in your statements yet' : undefined}
               >
                 {stale ? `Last ${lastSeen(i.recurring.lastDate, thisYear)}` : ordinalDay(i.date)}
               </span>
               <CategoryIcon emoji={cat?.emoji} color={cat?.color} className="w-4" />
               <span className="truncate">{i.rules.name}</span>
               <span className="truncate text-[12px]" style={{ color: 'var(--muted)' }}>{CADENCE_LABEL[i.recurring.cadence]}</span>
-              {i.credited && (
-                <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--pos)' }} title={i.credited === 'full' ? 'Paid back in full' : 'Partly paid back'}>
-                  Credited
+              {back > 0 ? (
+                <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--pos)' }} title={`Charged ${formatMoney(charged ?? 0, currency)}, ${formatMoney(back, currency)} back`}>
+                  {formatMoney(back, currency)} back
                 </span>
+              ) : (
+                i.credited && (
+                  <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--pos)' }} title={i.credited === 'full' ? 'Paid back in full' : 'Partly paid back'}>
+                    Credited
+                  </span>
+                )
               )}
 
               <span className="relative ml-auto shrink-0">
@@ -710,8 +733,9 @@ function BillList({
                   );
                 })()}
               </span>
-              {/* Paid this month: what it actually cost; else what it usually costs. */}
-              <Money cents={i.paid && i.charges[0] ? -i.charges[0].amountCents : i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
+              {/* Paid this month: what it actually cost, after anything that came back; else what it usually costs. The
+                  price arrow stays on the charge itself. */}
+              <Money cents={charged != null ? charged - back : i.recurring.typicalAmountCents} className="w-[76px] shrink-0 text-right font-semibold" />
               <span className="flex w-3 shrink-0 justify-center" style={{ color: 'var(--text)' }}>
                 {i.paid && <span role="img" aria-label="Paid" className="flex"><IconCheck size={13} /></span>}
               </span>

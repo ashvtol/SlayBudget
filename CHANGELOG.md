@@ -5,6 +5,41 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.4] - 2026-11-26
+### Added
+- **15 more default categories.** Coffee, Bars & Alcohol, Rent & Mortgage, Utilities, Home & Household, Clothing,
+  Fitness, Pets, Kids & Childcare (in a new Family group), Taxes, Interest, Cash & ATM, Loan Payments (a transfer, out of
+  spending), Charity and Reimbursements (income). Existing users get the ones they don't already have, once; delete one
+  and it stays deleted. The built-in merchant list points at them: Starbucks to Coffee, Planet Fitness to Fitness,
+  Petco to Pets, Home Depot to Home & Household, utilities to Utilities, the IRS to Taxes and so on. Transactions you
+  already categorized stay where they are.
+- **Quicken and QuickBooks files import.** Quicken's QIF files (bank and card, including multi-account exports, split
+  transactions and older dates like 1/ 5' 6), QuickBooks Web Connect (.qbo) files, OFX 2 (XML) files, and the CSV
+  exports from QuickBooks (bank uploads and Transaction Detail reports) and Quicken (Windows and Mac). Drop them in or
+  let a watched folder pick them up; card files are recognized as cards.
+### Fixed
+- **Credits count against what they paid back, everywhere.** A card's statement credit for a bill (Amex Platinum's
+  YouTube or Walmart+ credit) and a refund matched to its purchase are now filed in the charge's category, so
+  Subscriptions, Categories, Cash flow, budgets and total spending show what you really spent. Before, credits sat in
+  Credits & Refunds, which is left out of totals, so they reduced nothing. A credit you filed yourself (by hand, with a
+  rule, or locked) stays where you put it, and your database is backed up before the first move. In Recurrings, this
+  month's row shows what the bill cost after its credit ("$0.00", "$14.28 back"); the price arrow still follows the
+  charge itself.
+- **The app moves to the new day while it stays open.** Left open past midnight or a month's end, Recurrings,
+  Categories, Cash flow and the dashboard kept showing the old date; they now follow the clock.
+- **Recurrings doesn't call a bill "not seen" when your statements simply end before it.** A bill due after the newest
+  statement from its account stays in This month, waiting, and This month says where your statements end so you can
+  import newer ones.
+- **More banks' CSV files import.** The generic reader knows more names for the amount column ("Transaction Amount",
+  "Amt") and reads a Debit/Credit (or DR/CR) column for which way an amount went, so statements like Capital One's,
+  where every amount is positive, import with withdrawals as money out.
+- **CSV files from 20+ banks and apps import with the right signs and dates.** Tested against the export layouts of
+  Chase, Bank of America, Wells Fargo, Capital One, Discover, Apple Card, US Bank, Ally, Navy Federal, Schwab, PNC, TD
+  Bank, SoFi, USAA, Chime, Venmo, PayPal, Revolut, Monzo and Wise. The reader now finds the header below any title or
+  summary lines, reads files with no header row, knows more column names (Posting Date, Trans. Date, Withdrawals and
+  Deposits, PayPal's Net), drops the time from a date and time, reads day/month/year files, and flips cards that list
+  purchases as positive (Discover, Apple Card).
+
 ## [0.10.3] - 2026-11-25
 ### Changed
 - **Removed the unused visx chart packages.** The charts draw their own SVG, with d3 only for the spending map's layout.

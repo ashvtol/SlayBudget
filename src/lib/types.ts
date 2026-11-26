@@ -147,7 +147,7 @@ export interface Transaction {
   transferPairId?: number | null;
 }
 
-export type CategorySource = 'user' | 'rule' | 'learned' | 'model' | 'transfer' | 'bank' | 'keyword';
+export type CategorySource = 'user' | 'rule' | 'learned' | 'model' | 'transfer' | 'bank' | 'credit' | 'keyword';
 
 /** Budgets beyond each category's default (`Category.budgetCents`, "all months"). */
 export interface BudgetPlan {

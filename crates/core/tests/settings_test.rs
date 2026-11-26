@@ -29,5 +29,5 @@ fn all_returns_every_pair() {
     settings::set(&conn, "b", "2").unwrap();
     let all = settings::all(&conn).unwrap();
     assert_eq!(all.get("a").map(String::as_str), Some("1"));
-    assert_eq!(all.len(), 2);
+    assert_eq!(all.get("b").map(String::as_str), Some("2"));
 }

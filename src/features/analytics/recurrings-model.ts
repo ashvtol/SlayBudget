@@ -24,6 +24,8 @@ export interface RecurringItem {
   credits: Map<number, Transaction>;
   /** Whether its latest charge came back in full, in part, or not at all (null: not paid back). */
   credited: 'full' | 'partial' | null;
+  /** Due after the newest statement from its account: not seen yet because it isn't imported yet. */
+  waiting: boolean;
 }
 
 export type RecurringTrend = SpendTrend;
@@ -38,6 +40,8 @@ export interface RecurringsModel {
   stale: RecurringItem[];
   paused: RecurringItem[];
   archived: RecurringItem[];
+  /** The newest transaction's day when the statements end before this month began (import newer ones), else null. */
+  statementsEndOn: string | null;
 }
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -93,6 +97,22 @@ export function buildRecurrings(input: {
     transactions.filter((t) => t.amountCents > 0 && t.postedOn <= today),
   );
 
+  // How far each account's statements go: a bill due after that can't have been seen yet.
+  const seenUpTo = new Map<number, string>();
+  let newest: string | null = null;
+  for (const t of transactions) {
+    if (t.postedOn > today) continue;
+    if ((seenUpTo.get(t.sourceId) ?? '') < t.postedOn) seenUpTo.set(t.sourceId, t.postedOn);
+    if (newest == null || newest < t.postedOn) newest = t.postedOn;
+  }
+  // Charges post a few days after their due date.
+  const POSTING_DAYS = 3;
+  const plusDays = (day: string, n: number) => {
+    const d = new Date(`${day}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  };
+
   const allItems: RecurringItem[] = recurring.map((r) => {
     const charges = chargesOf(r);
     const paidThisMonth = charges.find((t) => t.postedOn.startsWith(thisMonthKey));
@@ -127,10 +147,14 @@ export function buildRecurrings(input: {
       return { year, spendCents, avgChargeCents: inYear.length ? Math.round(spendCents / inYear.length) : 0, creditedCents };
     });
 
+    const date = paidThisMonth?.postedOn ?? r.nextDate;
+    const coveredTo = (charges[0] ? seenUpTo.get(charges[0].sourceId) : undefined) ?? newest ?? today;
+    const waiting = paidThisMonth == null && plusDays(date, POSTING_DAYS) > coveredTo;
+
     return {
       key: r.saved ? String(r.saved.id) : r.merchant,
       recurring: r,
-      date: paidThisMonth?.postedOn ?? r.nextDate,
+      date,
       paid: paidThisMonth != null,
       charges,
       rules: r.saved
@@ -147,6 +171,7 @@ export function buildRecurrings(input: {
       lastSourceId: charges[0]?.sourceId ?? null,
       credits,
       credited,
+      waiting,
     };
   });
 
@@ -155,7 +180,11 @@ export function buildRecurrings(input: {
   const paused = allItems.filter((i) => statusOf(i) === 'paused').sort(byDate);
   const archived = allItems.filter((i) => statusOf(i) === 'archived').sort((a, b) => a.rules.name.localeCompare(b.rules.name));
   const items = allItems.filter((i) => statusOf(i) === 'active');
-  const thisMonth = items.filter((i) => i.paid || i.date.startsWith(thisMonthKey)).sort(byDate);
+  // This month: paid this month, due this month, or due earlier but after the newest statement (not imported yet).
+  const monthStart = `${thisMonthKey}-01`;
+  const thisMonth = items
+    .filter((i) => i.paid || i.date.startsWith(thisMonthKey) || (i.waiting && i.date < monthStart))
+    .sort(byDate);
   const stale = items
     .filter((i) => !thisMonth.includes(i) && i.date < `${thisMonthKey}-01`)
     .sort((a, b) => b.recurring.lastDate.localeCompare(a.recurring.lastDate) || a.recurring.merchant.localeCompare(b.recurring.merchant));
@@ -181,5 +210,6 @@ export function buildRecurrings(input: {
     stale,
     paused,
     archived,
+    statementsEndOn: newest != null && newest < monthStart ? newest : null,
   };
 }

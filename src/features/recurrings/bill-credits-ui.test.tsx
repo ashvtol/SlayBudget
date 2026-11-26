@@ -109,3 +109,50 @@ describe('bills that are paid back', () => {
     expect(within(ask).queryByRole('table')).not.toBeInTheDocument();
   });
 });
+
+describe('a paid-back bill in the This month list', () => {
+  /** Walmart+ since June, paid back each month; November's charge went up to $15.98, with the usual $14.28 credit. */
+  async function seedNovember(creditCents: number) {
+    nextId = 1;
+    const charges = [...MONTHS.map((m) => row(`2026-${m}-22`, 'WALMART+ MEMBER', 'walmart+ member', -1428)), row('2026-11-12', 'WALMART+ MEMBER', 'walmart+ member', -1598)];
+    const credits = [...MONTHS, '11'].map((m) => row(`2026-${m}-${m === '11' ? '12' : '22'}`, 'PLATINUM WALMART+ CREDIT', 'platinum walmart+', m === '11' ? creditCents : 1428));
+    setIpc(createMemoryIpc({ sources, transactions: [...charges, ...credits] }));
+    const bills = await ipc().listRecurring(null);
+    const id = bills.find((b) => b.saved?.pattern === 'walmart+ member')!.saved!.id;
+    await ipc().setRecurringPaidBackBy(id, ['platinum walmart+']);
+  }
+  const thisMonthRow = () => within(screen.getByRole('list', { name: 'This month' })).getByRole('listitem', { name: 'Walmart+ Member' });
+
+  it('shows what it cost after the credit, and how much came back', async () => {
+    await seedNovember(1428);
+    await renderRecurrings();
+    const r = thisMonthRow();
+    expect(r).toHaveTextContent('$14.28 back');
+    expect(r).toHaveTextContent('$1.70');
+    expect(r).not.toHaveTextContent('$15.98');
+    expect(within(r).getByText('$14.28 back')).toHaveAttribute('title', 'Charged $15.98, $14.28 back');
+  });
+
+  it('shows $0.00 when it came back in full', async () => {
+    await seedNovember(1598);
+    await renderRecurrings();
+    expect(thisMonthRow()).toHaveTextContent('$0.00');
+    expect(thisMonthRow()).toHaveTextContent('$15.98 back');
+  });
+
+  it('still shows the price going up on the charge itself, whatever came back', async () => {
+    await seedNovember(1598);
+    await renderRecurrings();
+    expect(within(thisMonthRow()).getByRole('img', { name: 'Price went up' })).toBeInTheDocument();
+  });
+
+  it('a bill with no credit this month shows its full charge and no "back"', async () => {
+    nextId = 1;
+    const charges = [...MONTHS, '11'].map((m) => row(`2026-${m}-12`, 'NETFLIX.COM', 'netflix com', -1799));
+    setIpc(createMemoryIpc({ sources, transactions: charges }));
+    await renderRecurrings();
+    const r = within(screen.getByRole('list', { name: 'This month' })).getByRole('listitem', { name: /Netflix/ });
+    expect(r).toHaveTextContent('$17.99');
+    expect(r).not.toHaveTextContent('back');
+  });
+});

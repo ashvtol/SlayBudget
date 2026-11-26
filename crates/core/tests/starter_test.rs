@@ -45,25 +45,25 @@ fn the_longest_pattern_wins_and_only_whole_words_match() {
 #[test]
 fn a_user_category_is_preferred_over_the_built_in_fallback() {
     let conn = open_in_memory().unwrap();
-    let e = starter::lookup("starbucks").unwrap();
-    let dining = categories::find_by_legacy_name(&conn, "Food & Dining")
+    // "Mobile, else Phone & Internet": a new install has only the fallback.
+    let e = starter::lookup("VERIZON WIRELESS PAYMENT").unwrap();
+    assert_eq!(e.targets[0], "Mobile");
+    let phone = categories::find_by_legacy_name(&conn, "Phone & Internet")
         .unwrap()
         .unwrap()
         .id;
-    assert_eq!(starter::target(&conn, e).unwrap(), Some(dining));
+    assert_eq!(starter::target(&conn, e).unwrap(), Some(phone));
     conn.execute(
-        "INSERT INTO categories (group_id, name, kind, legacy_name) SELECT group_id, 'Coffee Shop', 'expense', 'Coffee Shop' FROM categories WHERE id = ?1",
-        [dining],
+        "INSERT INTO categories (group_id, name, kind, legacy_name) SELECT group_id, 'Mobile', 'expense', 'Mobile' FROM categories WHERE id = ?1",
+        [phone],
     )
     .unwrap();
-    let coffee: i64 = conn
-        .query_row(
-            "SELECT id FROM categories WHERE name = 'Coffee Shop'",
-            [],
-            |r| r.get(0),
-        )
+    let mobile: i64 = conn
+        .query_row("SELECT id FROM categories WHERE name = 'Mobile'", [], |r| {
+            r.get(0)
+        })
         .unwrap();
-    assert_eq!(starter::target(&conn, e).unwrap(), Some(coffee));
+    assert_eq!(starter::target(&conn, e).unwrap(), Some(mobile));
 }
 
 #[test]
@@ -98,4 +98,31 @@ fn dots_and_slashes_separate_words() {
             .pattern,
         "amazon com"
     );
+}
+
+#[test]
+fn known_merchants_land_in_the_specific_categories() {
+    let conn = open_in_memory().unwrap();
+    let name_of = |text: &str| {
+        let e = starter::lookup(text).unwrap_or_else(|| panic!("{text} not in the list"));
+        let id = starter::target(&conn, e).unwrap().unwrap();
+        categories::get(&conn, id).unwrap().name
+    };
+    for (text, category) in [
+        ("STARBUCKS STORE 123", "Coffee"),
+        ("PLANET FITNESS CLUB", "Fitness"),
+        ("PETCO 1234", "Pets"),
+        ("THE HOME DEPOT 0456", "Home & Household"),
+        ("UNIQLO USA", "Clothing"),
+        ("PG&E WEB ONLINE", "Utilities"),
+        ("IRS USATAXPYMT", "Taxes"),
+        ("ATM WITHDRAWAL 123 MAIN ST", "Cash & ATM"),
+        ("INTEREST CHARGE ON PURCHASES", "Interest"),
+        ("NAVIENT PAYMENT", "Loan Payments"),
+        ("AMERICAN RED CROSS", "Charity"),
+        ("BRIGHT HORIZONS", "Kids & Childcare"),
+        ("EXPENSIFY REIMBURSEMENT", "Reimbursements"),
+    ] {
+        assert_eq!(name_of(text), category, "{text}");
+    }
 }

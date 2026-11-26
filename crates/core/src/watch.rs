@@ -5,7 +5,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-const STATEMENT_EXTENSIONS: [&str; 5] = ["csv", "tsv", "ofx", "qfx", "pdf"];
+const STATEMENT_EXTENSIONS: [&str; 7] = ["csv", "tsv", "ofx", "qfx", "qbo", "qif", "pdf"];
 /// watched/<profile>/<account>/file.csv is as deep as it goes.
 const MAX_DEPTH: usize = 3;
 

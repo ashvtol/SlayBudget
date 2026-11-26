@@ -6,7 +6,8 @@ export type ImportKind = 'csv' | 'ofx' | 'pdf' | 'unsupported';
 export function classifyFile(name: string): ImportKind {
   const lower = name.toLowerCase();
   if (lower.endsWith('.csv') || lower.endsWith('.tsv')) return 'csv';
-  if (lower.endsWith('.ofx') || lower.endsWith('.qfx')) return 'ofx';
+  // QuickBooks' .qbo is OFX; Quicken's .qif is read on the same path.
+  if (['.ofx', '.qfx', '.qbo', '.qif'].some((ext) => lower.endsWith(ext))) return 'ofx';
   if (lower.endsWith('.pdf')) return 'pdf';
   return 'unsupported';
 }

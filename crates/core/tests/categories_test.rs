@@ -193,8 +193,8 @@ mod manage {
     #[test]
     fn create_unique_refuses_a_duplicate_name() {
         let conn = open_in_memory().unwrap();
-        categories::create_unique(&conn, &new_cat("Drinks", "Coffee")).unwrap();
-        let again = categories::create_unique(&conn, &new_cat("Other", "☕️ coffee"));
+        categories::create_unique(&conn, &new_cat("Drinks", "Matcha")).unwrap();
+        let again = categories::create_unique(&conn, &new_cat("Other", "🍵 matcha"));
         assert!(matches!(again, Err(CoreError::Invalid(_))));
         assert!(matches!(
             categories::create_unique(&conn, &new_cat("Other", "  ")),
@@ -661,4 +661,81 @@ fn emoji_suggestions_match_whole_words_not_fragments() {
     assert_eq!(categories::suggest_emoji("Barber"), "🏷️");
     assert_eq!(categories::suggest_emoji("Car Wash"), "🚗");
     assert_eq!(categories::suggest_emoji("Entertainment - Outdoors"), "🏕️");
+}
+
+const NEW_IN_V2: &[(&str, CategoryKind)] = &[
+    ("Coffee", CategoryKind::Expense),
+    ("Bars & Alcohol", CategoryKind::Expense),
+    ("Rent & Mortgage", CategoryKind::Expense),
+    ("Utilities", CategoryKind::Expense),
+    ("Home & Household", CategoryKind::Expense),
+    ("Clothing", CategoryKind::Expense),
+    ("Fitness", CategoryKind::Expense),
+    ("Pets", CategoryKind::Expense),
+    ("Kids & Childcare", CategoryKind::Expense),
+    ("Taxes", CategoryKind::Expense),
+    ("Charity", CategoryKind::Expense),
+    ("Cash & ATM", CategoryKind::Expense),
+    ("Interest", CategoryKind::Expense),
+    ("Reimbursements", CategoryKind::Income),
+    ("Loan Payments", CategoryKind::Transfer),
+];
+
+fn named(conn: &rusqlite::Connection, name: &str) -> Option<categories::Category> {
+    categories::list(conn)
+        .unwrap()
+        .into_iter()
+        .find(|c| c.name == name)
+}
+
+#[test]
+fn a_new_install_has_the_common_categories_people_expect() {
+    let conn = open_in_memory().unwrap();
+    for (name, kind) in NEW_IN_V2 {
+        let c = named(&conn, name).unwrap_or_else(|| panic!("no {name}"));
+        assert_eq!(c.kind, *kind, "{name}");
+    }
+    assert!(named(&conn, "Rent & Mortgage").unwrap().essential);
+    assert!(named(&conn, "Utilities").unwrap().essential);
+    assert!(named(&conn, "Kids & Childcare").unwrap().essential);
+    assert!(!named(&conn, "Coffee").unwrap().essential);
+    // Loan payments move money to a debt you owe, not spending.
+    assert!(named(&conn, "Loan Payments").unwrap().excluded);
+}
+
+#[test]
+fn an_existing_install_gains_new_default_categories_once_and_a_deleted_one_stays_gone() {
+    let conn = open_in_memory().unwrap();
+    // As an earlier version left it: no Coffee or Pets, and an older defaults version.
+    for name in ["Coffee", "Pets"] {
+        categories::delete(&conn, named(&conn, name).unwrap().id).unwrap();
+    }
+    slaybudget_core::settings::set(&conn, "default_categories", "1").unwrap();
+    assert_eq!(categories::add_new_defaults(&conn).unwrap(), 2);
+    assert!(named(&conn, "Coffee").is_some() && named(&conn, "Pets").is_some());
+    // Removed by you after the update: not brought back.
+    categories::delete(&conn, named(&conn, "Pets").unwrap().id).unwrap();
+    assert_eq!(categories::add_new_defaults(&conn).unwrap(), 0);
+    assert!(named(&conn, "Pets").is_none());
+}
+
+#[test]
+fn a_category_you_already_made_with_that_name_is_not_added_twice() {
+    let conn = open_in_memory().unwrap();
+    categories::delete(&conn, named(&conn, "Coffee").unwrap().id).unwrap();
+    categories::create(
+        &conn,
+        &NewCategory {
+            group: "Food & Drink".into(),
+            name: "coffee".into(),
+            emoji: None,
+            color: None,
+            budget_cents: None,
+            excluded: false,
+            kind: CategoryKind::Expense,
+        },
+    )
+    .unwrap();
+    slaybudget_core::settings::set(&conn, "default_categories", "1").unwrap();
+    assert_eq!(categories::add_new_defaults(&conn).unwrap(), 0);
 }

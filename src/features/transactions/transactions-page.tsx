@@ -13,6 +13,7 @@ import { TagPicker } from './tag-picker';
 import { isFiltered } from './filter-model';
 import { TransactionsList } from './transactions-list';
 import { useTransactionsStore } from './transactions-store';
+import { RecategorizeOffer } from './recategorize-offer';
 import { useScreen } from '@/app/shell/screen';
 import type { TxType } from '@/lib/types';
 
@@ -42,6 +43,8 @@ export function TransactionsPage() {
   const setCategories = useTransactionsStore((s) => s.setCategories);
   const categoriesById = useTransactionsStore((s) => s.categoriesById);
   const [searchOpen, setSearchOpen] = useState(false);
+  /** After a category is set on several rows: offer the other transactions with those names, together. */
+  const [bulkOffer, setBulkOffer] = useState<{ merchants: string[]; categoryId: number } | null>(null);
 
   // Shown again after another screen: refresh in the background, keeping the view.
   const { active, activation } = useScreen();
@@ -131,7 +134,11 @@ export function TransactionsPage() {
                 onClose={closePopover}
                 onPick={(id) => {
                   closePopover();
-                  if (id != null) void setCategories(selectedIds, id);
+                  if (id == null) return;
+                  const merchants = [...new Set(transactions.filter((t) => selected.has(t.id)).map((t) => t.merchant))].filter(Boolean);
+                  void setCategories(selectedIds, id).then(() => {
+                    if (selectedIds.length > 1 && merchants.length > 0) setBulkOffer({ merchants, categoryId: id });
+                  });
                 }}
               />
             )}
@@ -178,6 +185,21 @@ export function TransactionsPage() {
         <div className="relative flex h-full flex-col">
           {(searchOpen || hasText) && <SearchField />}
           <FilterChips />
+          {bulkOffer && (
+            <div className="px-3 pb-2">
+              <RecategorizeOffer
+                key={`${bulkOffer.merchants.join('|')}-${bulkOffer.categoryId}`}
+                merchant={bulkOffer.merchants[0]}
+                others={bulkOffer.merchants.slice(1)}
+                categoryId={bulkOffer.categoryId}
+                categoriesById={categoriesById}
+                onDone={(moved) => {
+                  setBulkOffer(null);
+                  if (moved) void refresh();
+                }}
+              />
+            </div>
+          )}
           <TransactionsList paused={!active || popover !== null || pickerId != null} onOpen={open} onPickCategory={setPickerId} onFilters={() => setPopover('filter')} activeId={shownId} />
           {pickerId != null && <CategoryPicker transactionId={pickerId} onClose={() => setPickerId(null)} />}
         </div>

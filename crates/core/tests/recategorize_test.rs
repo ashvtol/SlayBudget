@@ -88,14 +88,18 @@ fn similar_merchants_are_flagged() {
 }
 
 #[test]
-fn platform_target_previews_nothing() {
+fn a_payment_app_name_previews_exactly_its_rows_never_similar_ones() {
     let db = setup();
     let rent = cat(&db.conn, "Housing & Utilities");
-    db.add(1, "VENMO PAYMENT 1234567", -50000, Some(db.other()));
-    db.add(2, "VENMO PAYMENT 7654321", -50000, Some(db.other()));
-    let m =
-        recategorize::preview(&db.conn, &Target::Merchant("venmo 1234567".into()), rent).unwrap();
-    assert!(m.is_empty());
+    let same = db.add(1, "WISE US INC TRANSFER", -167500, Some(db.other()));
+    let again = db.add(2, "WISE US INC REFUND", -4000, Some(db.other()));
+    db.add(3, "WISE COFFEE ROASTERS", -1200, Some(db.other())); // a similar name: left out
+    let key = slaybudget_core::categorize::extract_merchant("WISE US INC TRANSFER");
+    let m = recategorize::preview(&db.conn, &Target::Merchant(key), rent).unwrap();
+    let mut ids: Vec<i64> = m.iter().map(|x| x.transaction.id).collect();
+    ids.sort();
+    assert_eq!(ids, vec![same, again]);
+    assert!(m.iter().all(|x| !x.similar));
 }
 
 #[test]
@@ -262,16 +266,21 @@ fn other_groups_counts_other_and_uncategorized() {
 }
 
 #[test]
-fn contains_skips_payment_platforms() {
+fn contains_finds_payment_app_rows_too() {
     let db = setup();
     let rent = cat(&db.conn, "Housing & Utilities");
-    db.add(1, "VENMO PAYMENT 1234567", -50000, Some(db.other()));
-    let shop = db.add(2, "VENMO SHOP LLC", -900, Some(db.other()));
-    let m = recategorize::preview(&db.conn, &Target::Contains("venmo".into()), rent).unwrap();
-    // "venmo shop llc" is itself a platform key too: nothing platform-like is offered.
-    assert!(m.iter().all(|x| x.transaction.id != shop
-        || !slaybudget_core::categorize::is_payment_platform(&x.transaction.merchant)));
-    assert!(m.is_empty());
+    let wise = db.add(
+        1,
+        "WISE US INC TRANSFER TO RENT LLC",
+        -167500,
+        Some(db.other()),
+    );
+    let bank = db.add(2, "ACH RENT LLC PAYMENT", -167500, Some(db.other()));
+    db.add(3, "WISE US INC TRANSFER TO SAM", -4000, Some(db.other()));
+    let m = recategorize::preview(&db.conn, &Target::Contains("rent llc".into()), rent).unwrap();
+    let mut ids: Vec<i64> = m.iter().map(|x| x.transaction.id).collect();
+    ids.sort();
+    assert_eq!(ids, vec![wise, bank]);
 }
 
 #[test]

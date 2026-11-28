@@ -52,7 +52,7 @@ describe('RecurringForm category', () => {
     await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 's{Enter}');
     expect(screen.getByRole('button', { name: 'Category' })).toHaveTextContent('📺 Subscriptions');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ categoryId: 8 }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ categoryId: 8 }), []);
   });
 });
 
@@ -66,7 +66,7 @@ describe('RecurringForm frequency', () => {
     expect(options).toEqual(['Weekly', 'Every 2 weeks', 'Monthly', 'Quarterly', 'Annually', 'Every 2 years', 'Every 3 years', 'Every 4 years']);
     await user.selectOptions(frequency, 'Every 3 years');
     await user.click(screen.getByRole('button', { name: 'Save' }));
-    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ frequency: 'triennial' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ frequency: 'triennial' }), []);
   });
 });
 
@@ -89,5 +89,50 @@ describe('RecurringForm duplicates', () => {
     render(<RecurringForm initial={initial} categories={[]} onSave={async () => {}} onCancel={() => {}} />);
     await new Promise((r) => setTimeout(r, 20));
     expect(screen.queryByText(/You already have/)).not.toBeInTheDocument();
+  });
+});
+
+describe('RecurringForm matching transactions', () => {
+  const charge = (id: number, postedOn: string) => ({
+    id, profileId: 1, sourceId: 1, postedOn, description: 'NETFLIX.COM', merchant: 'netflix', amountCents: -1799, currency: 'USD',
+    categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+  });
+  const seed = () => {
+    setIpc(createMemoryIpc({ transactions: [charge(1, '2026-08-05'), charge(2, '2026-09-05'), charge(3, '2026-10-05')] }));
+    return ipc().listRecurring(null).then(async (rs) => {
+      for (const r of rs) if (r.saved) await ipc().deleteRecurring(r.saved.id);
+    });
+  };
+
+  it('lists what it would claim behind an ⓘ, all ticked, and saves leaving out what you untick', async () => {
+    await seed();
+    const user = userEvent.setup();
+    const onSave = vi.fn(async () => {});
+    render(<RecurringForm initial={initial} categories={[]} preview onSave={onSave} onCancel={() => {}} />);
+    await screen.findByText('Matches 3 transactions');
+    await user.click(screen.getByRole('button', { name: 'Show the matching transactions' }));
+    expect(screen.getByText('3 of 3 selected')).toBeInTheDocument();
+    await user.click(screen.getByRole('checkbox', { name: 'Include NETFLIX.COM on 2026-09-05' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ pattern: 'netflix' }), [2]);
+  });
+
+  it('Select none leaves every match out; Select all brings them back', async () => {
+    await seed();
+    const user = userEvent.setup();
+    const onSave = vi.fn(async () => {});
+    render(<RecurringForm initial={initial} categories={[]} preview onSave={onSave} onCancel={() => {}} />);
+    await screen.findByText('Matches 3 transactions');
+    await user.click(screen.getByRole('button', { name: 'Show the matching transactions' }));
+    await user.click(screen.getByRole('button', { name: 'Select none' }));
+    expect(screen.getByText('0 of 3 selected')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Select all' }));
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    expect(onSave).toHaveBeenCalledWith(expect.anything(), []);
+  });
+
+  it('editing a bill shows no list', () => {
+    render(<RecurringForm initial={initial} categories={[]} onSave={async () => {}} onCancel={() => {}} />);
+    expect(screen.queryByText(/^Matches \d+ transaction/)).toBeNull();
   });
 });

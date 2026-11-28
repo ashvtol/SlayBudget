@@ -258,8 +258,9 @@ describe('memory ipc recategorizing', () => {
     const contains = await ipc.previewRecategorize({ kind: 'contains', value: 'wsdot-goodtogo 1' }, 2);
     expect(contains.map((m) => m.transaction.id)).toEqual([1]);
     expect(await ipc.previewRecategorize({ kind: 'contains', value: 'ws' }, 2)).toEqual([]);
-    expect(await ipc.previewRecategorize({ kind: 'merchant', value: 'venmo 1234567' }, 2)).toEqual([]);
-    expect(await ipc.previewRecategorize({ kind: 'contains', value: 'venmo' }, 2)).toEqual([]);
+    // A payment app's own name, and contains, find its rows too (the screen leaves them unticked).
+    expect((await ipc.previewRecategorize({ kind: 'merchant', value: 'venmo 1234567' }, 2)).map((m) => m.transaction.id)).toEqual([4]);
+    expect((await ipc.previewRecategorize({ kind: 'contains', value: 'venmo' }, 2)).map((m) => m.transaction.id)).toEqual([4]);
   });
 
   it('matches merchant keys case-insensitively (sample data is capitalized)', async () => {
@@ -396,6 +397,21 @@ describe('memory ipc saved recurrings', () => {
     expect(list.map((r) => r.saved?.status)).toEqual(['active', 'active']);
     expect((await ipc.listTransactions({})).filter((t) => t.recurringId != null)).toHaveLength(7);
     expect(await ipc.recurringSuggestions(null)).toEqual([]);
+  });
+
+  it('lists the charges a rule would claim, and creates a bill leaving out the ones you untick', async () => {
+    const ipc = seed();
+    for (const r of await ipc.listRecurring(null)) await ipc.deleteRecurring(r.saved!.id);
+    const matches = await ipc.previewRecurringMatches(rule);
+    expect(matches).toHaveLength(4);
+    expect(matches.map((t) => t.postedOn)).toEqual([...matches.map((t) => t.postedOn)].sort());
+    const [left] = matches;
+    const id = await ipc.createRecurring(rule, [left.id]);
+    const linked = (await ipc.listTransactions({})).filter((t) => t.recurringId === id).map((t) => t.id);
+    expect(linked).toHaveLength(3);
+    expect(linked).not.toContain(left.id);
+    await ipc.updateRecurring(id, rule);
+    expect((await ipc.listTransactions({})).find((t) => t.id === left.id)?.recurringId ?? null).toBeNull();
   });
 
   it('creates, edits, pauses, deletes and unlinks', async () => {

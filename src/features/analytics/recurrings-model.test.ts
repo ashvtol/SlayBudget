@@ -338,3 +338,43 @@ describe('buildRecurrings trend', () => {
     expect(t.monthlyAvgCents).toBe(Math.round((1500 + 1500 + 6800) / 12)); // Nov 2025 to Oct 2026
   });
 });
+
+describe('buildRecurrings bills not seen yet this month', () => {
+  // Today is Nov 21; Hulu is due on the 13th.
+  const hulu = rec('hulu', 2763, '2026-10-13', '2026-11-13');
+  const history = [tx('hulu', '2026-09-13', -2763), tx('hulu', '2026-10-13', -2763)];
+  const itemOf = (more: Transaction[], recs: Recurring[] = [hulu]) =>
+    buildRecurrings({ recurring: recs, transactions: [...history, ...more], today: TODAY }).thisMonth.find((i) => i.recurring.merchant === 'hulu')!;
+
+  it('is not seen yet once the statements go past its due day and a few days to post, without it', () => {
+    const i = itemOf([tx('groceries', '2026-11-20', -2500)]);
+    expect([i.paid, i.waiting, i.late]).toEqual([false, false, true]);
+  });
+
+  it('is still waiting within the few days a charge takes to post', () => {
+    const i = itemOf([tx('groceries', '2026-11-15', -2500)]);
+    expect([i.waiting, i.late]).toEqual([true, false]);
+  });
+
+  it('is waiting, not late, when the statements end before its due day', () => {
+    const i = itemOf([tx('groceries', '2026-11-10', -2500)]);
+    expect([i.waiting, i.late]).toEqual([true, false]);
+  });
+
+  it('is never late once paid', () => {
+    const i = itemOf([tx('hulu', '2026-11-14', -2763), tx('groceries', '2026-11-20', -2500)]);
+    expect([i.paid, i.late]).toEqual([true, false]);
+  });
+
+  it('a bill due later this month is not late', () => {
+    const later = rec('hulu', 2763, '2026-10-28', '2026-11-28');
+    const i = buildRecurrings({ recurring: [later], transactions: [tx('hulu', '2026-10-28', -2763), tx('groceries', '2026-11-20', -2500)], today: TODAY }).thisMonth[0];
+    expect(i.late).toBe(false);
+  });
+
+  it('only looks at statements from the account that pays it', () => {
+    // Another card's statement reaches Nov 20; Hulu's card ends Nov 12.
+    const i = itemOf([tx('groceries', '2026-11-12', -2500), tx('gas', '2026-11-20', -4000, 2)]);
+    expect([i.waiting, i.late]).toEqual([true, false]);
+  });
+});

@@ -32,7 +32,6 @@ function setup(transactions: Transaction[], props: Partial<Parameters<typeof Rec
   render(
     <RecategorizeOffer
       merchant="wsdot goodtogo"
-      sampleDescription="WSDOT GOODTOGO 1"
       categoryId={2}
       categoriesById={categoriesById}
       onDone={onDone}
@@ -74,7 +73,7 @@ describe('RecategorizeOffer', () => {
     setup(wsdot);
     memory.previewRecategorize = preview;
     cleanup();
-    render(<RecategorizeOffer merchant="wsdot goodtogo" sampleDescription="WSDOT GOODTOGO 1" categoryId={2} categoriesById={categoriesById} onDone={() => {}} />);
+    render(<RecategorizeOffer merchant="wsdot goodtogo" categoryId={2} categoriesById={categoriesById} onDone={() => {}} />);
     await ready();
     await within(panel()).findByRole('radio', { name: /All named/ });
     await waitFor(() => expect(rows()).toHaveLength(3));
@@ -130,18 +129,36 @@ describe('RecategorizeOffer', () => {
     expect(saveRule).not.toHaveBeenCalled();
   });
 
-  it('payment platforms only say one at a time', async () => {
+  it('payment apps get the same choices, with nothing ticked and no rule for the future by default', async () => {
     const user = userEvent.setup();
-    const onDone = setup([tx(1, '2026-05-01', 'VENMO PAYMENT 1234567', 'venmo 1234567')], { merchant: 'venmo 1234567', sampleDescription: 'VENMO PAYMENT 1234567' });
+    const wise = [
+      tx(1, '2026-11-04', 'WISE US INC TRANSFER TO RENT LLC', 'wise us inc', { amountCents: -167500 }),
+      tx(2, '2026-10-30', 'WISE US INC TRANSFER TO SAM', 'wise us inc', { amountCents: -4000 }),
+      tx(3, '2026-10-04', 'WISE US INC TRANSFER TO RENT LLC', 'wise us inc', { amountCents: -167500 }),
+    ];
+    const onDone = setup(wise, { merchant: 'wise us inc' });
     await ready();
-    expect(await within(panel()).findByText('Venmo payments are categorized one at a time.')).toBeInTheDocument();
-    expect(within(panel()).queryByRole('radio')).not.toBeInTheDocument();
-    await user.click(within(panel()).getByRole('button', { name: 'OK' }));
-    expect(onDone).toHaveBeenCalledWith(null);
+    expect(await within(panel()).findByRole('radio', { name: /All named .Wise Us Inc./ })).toBeChecked();
+    expect(rows()).toHaveLength(3);
+    expect(rows().every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+    expect(within(panel()).getByRole('button', { name: 'Apply to 0' })).toBeDisabled();
+    expect(within(panel()).getByRole('switch', { name: 'Also file future transactions this way' })).not.toBeChecked();
+    // Narrow it to the rent: contains "rent llc", then tick both.
+    await user.click(within(panel()).getByRole('radio', { name: /Names containing/ }));
+    const field = within(panel()).getByRole('textbox', { name: 'Name contains' });
+    await user.clear(field);
+    await user.type(field, 'rent llc');
+    await waitFor(() => expect(rows()).toHaveLength(2));
+    expect(rows().every((r) => !(r as HTMLInputElement).checked)).toBe(true);
+    await user.click(within(panel()).getByRole('button', { name: 'Select all' }));
+    await user.click(within(panel()).getByRole('button', { name: 'Apply to 2' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(2));
+    const all = await ipc().listTransactions({});
+    expect(all.filter((t) => t.categoryId === 2).map((t) => t.id).sort()).toEqual([1, 3]);
   });
 
   it('closes itself when nothing else matches', async () => {
-    const onDone = setup([tx(4, '2026-05-04', 'SAFEWAY', 'safeway', { categoryId: 2 })], { merchant: 'safeway', sampleDescription: 'SAFEWAY' });
+    const onDone = setup([tx(4, '2026-05-04', 'SAFEWAY', 'safeway', { categoryId: 2 })], { merchant: 'safeway' });
     await waitFor(() => expect(onDone).toHaveBeenCalledWith(null));
   });
 
@@ -180,5 +197,40 @@ describe('RecategorizeOffer', () => {
     await user.click(within(again).getByRole('button', { name: 'Close statement details' }));
     expect(within(panel()).queryByRole('group', { name: 'Statement for WSDOT GOODTOGO 2222' })).not.toBeInTheDocument();
     expect(info).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('Select none unticks everything and Select all ticks every unlocked row', async () => {
+    const user = userEvent.setup();
+    setup(wsdot);
+    await ready();
+    await within(panel()).findByRole('radio', { name: /All named/ });
+    await user.click(within(panel()).getByRole('button', { name: 'Select none' }));
+    expect(within(panel()).getByRole('button', { name: 'Apply to 0' })).toBeDisabled();
+    await user.click(within(panel()).getByRole('button', { name: 'Select all' }));
+    expect(within(panel()).getByRole('button', { name: 'Apply to 3' })).toBeEnabled();
+  });
+
+  it('the list folds away behind its ⓘ and comes back', async () => {
+    const user = userEvent.setup();
+    setup(wsdot);
+    await ready();
+    await within(panel()).findByRole('radio', { name: /All named/ });
+    await user.click(within(panel()).getByRole('button', { name: 'Hide the matching transactions' }));
+    expect(within(panel()).queryAllByRole('checkbox', { name: /^Include / })).toHaveLength(0);
+    expect(within(panel()).getByRole('button', { name: 'Apply to 3' })).toBeEnabled();
+    await user.click(within(panel()).getByRole('button', { name: 'Show the matching transactions' }));
+    expect(rows()).toHaveLength(3);
+  });
+
+  it('several names changed together are offered together', async () => {
+    const user = userEvent.setup();
+    const onDone = setup([...wsdot, tx(6, '2026-05-06', 'SR 520 TOLL 77', 'sr 520 toll'), tx(7, '2026-05-07', 'SR 520 TOLL 78', 'sr 520 toll')], {
+      others: ['sr 520 toll'],
+    });
+    await ready();
+    const named = await within(panel()).findByRole('radio', { name: /All named .Good To Go. and .Sr 520 Toll./ });
+    expect(named.closest('label')).toHaveTextContent('5');
+    await user.click(within(panel()).getByRole('button', { name: 'Apply to 5' }));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith(5));
   });
 });

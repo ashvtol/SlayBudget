@@ -1524,11 +1524,32 @@ pub fn preview_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcR
     Ok(recurrings::preview_count(&conn, &rule)?)
 }
 
+/// The unlinked charges a rule would claim, oldest first, as the screens show them.
 #[tauri::command]
-pub fn create_recurring(state: State<'_, AppState>, rule: NewRecurring) -> IpcResult<i64> {
+pub fn preview_recurring_matches(
+    state: State<'_, AppState>,
+    rule: NewRecurring,
+) -> IpcResult<Vec<TransactionDto>> {
+    let conn = lock(&state);
+    let shown = slaybudget_core::fx::Shown::of(&conn);
+    let rule = rule_back(&shown, rule);
+    let mut out = Vec::new();
+    for id in recurrings::preview_matches(&conn, &rule)? {
+        out.push(TransactionDto::shown(&shown, transactions::get(&conn, id)?));
+    }
+    Ok(out)
+}
+
+/// Create a bill; charges in `exclude` (unticked in the preview) are marked "not recurring", in the same undo step.
+#[tauri::command]
+pub fn create_recurring(
+    state: State<'_, AppState>,
+    rule: NewRecurring,
+    exclude: Option<Vec<i64>>,
+) -> IpcResult<i64> {
     recorded(&state, "New Recurring".to_string(), |c| {
         let rule = rule_back(&slaybudget_core::fx::Shown::of(c), rule);
-        recurrings::create(c, &rule)
+        recurrings::create_except(c, &rule, &exclude.unwrap_or_default())
     })
 }
 

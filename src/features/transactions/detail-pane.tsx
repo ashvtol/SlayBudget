@@ -5,7 +5,7 @@ import { useDisplayStore } from '@/lib/stores/display-store';
 import { TagPicker } from './tag-picker';
 import { CategoryPill } from '@/components/category-pill';
 import { CategoryMenu } from '@/components/category-menu';
-import { PlatformOffer } from './platform-offer';
+import { RecategorizeOffer } from './recategorize-offer';
 import { StatementBox } from './statement-box';
 import { ipc } from '@/lib/ipc';
 import type { Category, NewRecurring, PriceCheck, SplitPart, Transaction } from '@/lib/types';
@@ -334,7 +334,7 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
   const onlyThisOne = useTransactionsStore((s) => s.onlyThisOne);
   const platformOffer = useTransactionsStore((s) => s.platformOffer);
   const closePlatformOffer = useTransactionsStore((s) => s.closePlatformOffer);
-  const setCategories = useTransactionsStore((s) => s.setCategories);
+  const refresh = useTransactionsStore((s) => s.refresh);
   const setType = useTransactionsStore((s) => s.setType);
   const signs = useDisplayStore((s) => s.signs);
 
@@ -414,14 +414,16 @@ export function DetailPane({ id, onPickCategory, onOpen }: { id: number | null; 
       </div>
 
       {platformOffer && platformOffer.transactionId === tx.id && (
-        <PlatformOffer
+        // A payment app (Wise, Zelle): nothing moved by itself; the same choices as any merchant, nothing ticked.
+        <RecategorizeOffer
           key={`${platformOffer.transactionId}-${platformOffer.categoryId}`}
-          transactionId={platformOffer.transactionId}
-          categoryId={platformOffer.categoryId}
           merchant={platformOffer.merchant}
+          categoryId={platformOffer.categoryId}
           categoriesById={categoriesById}
-          onApply={setCategories}
-          onDone={closePlatformOffer}
+          onDone={(moved) => {
+            closePlatformOffer();
+            if (moved) void refresh();
+          }}
         />
       )}
       {moveNote && moveNote.transactionId === tx.id && (
@@ -596,8 +598,8 @@ function RecurringField({ tx }: { tx: Transaction }) {
             categories={Object.values(categoriesById)}
             preview
             onCancel={() => setDraft(null)}
-            onSave={async (rule) => {
-              await ipc().createRecurring(rule);
+            onSave={async (rule, exclude) => {
+              await ipc().createRecurring(rule, exclude);
               setDraft(null);
               await applyFilter({});
             }}

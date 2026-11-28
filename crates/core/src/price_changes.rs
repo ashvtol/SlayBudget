@@ -344,20 +344,22 @@ fn name_words(s: &SavedRecurring) -> Vec<String> {
         .collect()
 }
 
-/// "Claude" in both, or "youtube" and "youtubepremi" (a statement cut short).
+/// "Claude" in both, "youtube" and "youtubepremi" (a statement cut short), or "hulu" and "huluplus": a shared word, or
+/// one word starting another, four letters at least.
 fn names_related(a: &SavedRecurring, b: &SavedRecurring) -> bool {
     let (wa, wb) = (name_words(a), name_words(b));
     wa.iter().any(|x| {
         wb.iter().any(|y| {
             x == y
-                || (x.len().min(y.len()) >= 5
+                || (x.len().min(y.len()) >= 4
                     && (x.starts_with(y.as_str()) || y.starts_with(x.as_str())))
         })
     })
 }
 
-/// One subscription whose statement name changed: the same frequency, one bill's charges ending before the other's
-/// start (within two billing periods), and either related names or the same price (within 5%) on the same day.
+/// One subscription whose statement name changed: the same frequency, and either one bill's charges ending before the
+/// other's start (within two billing periods) or the two taking turns (the name changed for a few months and back,
+/// never both in one billing period); plus related names, or the same price (within 5%) on the same day.
 fn renamed(
     a: &SavedRecurring,
     b: &SavedRecurring,
@@ -377,15 +379,31 @@ fn renamed(
     let (Some((a_first, a_last)), Some((b_first, b_last))) = (span(ca), span(cb)) else {
         return false;
     };
-    let (earlier_last, later_first) = if a_last < b_first {
-        (a_last, b_first)
+    let handover = if a_last < b_first {
+        Some((a_last, b_first))
     } else if b_last < a_first {
-        (b_last, a_first)
+        Some((b_last, a_first))
     } else {
-        return false; // both running at once: two subscriptions
+        None
     };
-    if later_first > a.frequency.next_after(a.frequency.next_after(earlier_last)) {
-        return false;
+    match handover {
+        Some((earlier_last, later_first)) => {
+            if later_first > a.frequency.next_after(a.frequency.next_after(earlier_last)) {
+                return false;
+            }
+        }
+        None => {
+            // Taking turns: no charge of one within half a billing period of a charge of the other. Both charged in
+            // one period means two subscriptions running at once.
+            let together = ca.iter().any(|x| {
+                let half = (a.frequency.next_after(x.posted_on) - x.posted_on).num_days() / 2;
+                cb.iter()
+                    .any(|y| (y.posted_on - x.posted_on).num_days().abs() < half)
+            });
+            if together {
+                return false;
+            }
+        }
     }
     let median = |cs: &[recurrings::Candidate]| {
         let mut xs: Vec<i64> = cs.iter().map(|c| -c.amount_cents).collect();

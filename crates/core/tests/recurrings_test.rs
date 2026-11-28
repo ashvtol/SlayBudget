@@ -919,3 +919,39 @@ fn merging_two_paid_back_bills_keeps_both_credit_names() {
         ])
     );
 }
+
+#[test]
+fn the_preview_lists_the_charges_a_rule_would_claim() {
+    let db = setup();
+    let charges = db.netflix_history();
+    let other = db.add("2026-05-20", "NETFLIX.COM 866", -9999); // outside the amount range
+    let ids = recurrings::preview_matches(&db.conn, &netflix()).unwrap();
+    assert_eq!(ids, charges, "oldest first, only what fits");
+    assert!(!ids.contains(&other));
+    assert_eq!(recurrings::preview_count(&db.conn, &netflix()).unwrap(), 5);
+}
+
+#[test]
+fn creating_a_bill_can_leave_out_charges_you_untick() {
+    let db = setup();
+    let charges = db.netflix_history();
+    let id = recurrings::create_except(&db.conn, &netflix(), &[charges[1], charges[3]]).unwrap();
+    let linked: Vec<i64> = charges
+        .iter()
+        .copied()
+        .filter(|c| db.link(*c) == Some(id))
+        .collect();
+    assert_eq!(linked, vec![charges[0], charges[2], charges[4]]);
+    // Left out for good: rematching the bill doesn't claim them again.
+    recurrings::rematch(&db.conn, id).unwrap();
+    assert_eq!(db.link(charges[1]), None);
+    assert_eq!(db.link(charges[3]), None);
+}
+
+#[test]
+fn leaving_out_nothing_is_the_same_as_creating() {
+    let db = setup();
+    let charges = db.netflix_history();
+    let id = recurrings::create_except(&db.conn, &netflix(), &[]).unwrap();
+    assert!(charges.iter().all(|c| db.link(*c) == Some(id)));
+}

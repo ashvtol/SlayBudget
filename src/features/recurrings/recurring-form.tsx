@@ -4,6 +4,7 @@ import { ipc } from '@/lib/ipc';
 import { cleanMerchant } from '@/lib/merchant';
 import type { Cadence, Category, NewRecurring, SavedRecurring, Transaction } from '@/lib/types';
 import { Select } from '@/components/select';
+import { MatchList } from '@/features/transactions/match-list';
 
 const FREQUENCIES: [Cadence, string][] = [
   ['weekly', 'Weekly'],
@@ -38,7 +39,8 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 /** A recurring bill's rules: name, what it matches, amount range, frequency, day, category.
- *  With `preview`, says how many past transactions the rules would claim. */
+ *  With `preview`, lists the past transactions the rules would claim (behind an ⓘ), all ticked: untick any to leave
+ *  them out of the bill. */
 export function RecurringForm({
   initial,
   categories,
@@ -49,7 +51,8 @@ export function RecurringForm({
   initial: NewRecurring;
   categories: Category[];
   preview?: boolean;
-  onSave: (rule: NewRecurring) => Promise<void>;
+  /** `exclude`: matching transactions you unticked, to leave out of the bill. */
+  onSave: (rule: NewRecurring, exclude: number[]) => Promise<void>;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial.name);
@@ -62,7 +65,9 @@ export function RecurringForm({
   const [categoryId, setCategoryId] = useState<number | null>(initial.categoryId);
   const [also, setAlso] = useState((initial.alsoMatches ?? []).join(', '));
   const [paidBack, setPaidBack] = useState((initial.paidBackBy ?? []).join(', '));
-  const [matches, setMatches] = useState<number | null>(null);
+  const [matches, setMatches] = useState<Transaction[] | null>(null);
+  /** Matching transactions you unticked; they stay unticked while the rule changes. */
+  const [unticked, setUnticked] = useState<Set<number>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /** A new bill: the bills you already have, to warn before saving a second copy of one. */
@@ -94,7 +99,9 @@ export function RecurringForm({
   useEffect(() => {
     if (!preview || !rule) return;
     let live = true;
-    void ipc().previewRecurring(rule).then((n) => live && setMatches(n));
+    void ipc()
+      .previewRecurringMatches(rule)
+      .then((m) => live && setMatches(m));
     return () => {
       live = false;
     };
@@ -105,7 +112,7 @@ export function RecurringForm({
     setBusy(true);
     setError(null);
     try {
-      await onSave(rule);
+      await onSave(rule, (matches ?? []).filter((t) => unticked.has(t.id)).map((t) => t.id));
     } catch (e) {
       setError(`Couldn’t save: ${(e as Error).message ?? String(e)}`);
     } finally {
@@ -169,9 +176,12 @@ export function RecurringForm({
         <input aria-label="Paid back by" value={paidBack} onChange={(e) => setPaidBack(e.target.value)} placeholder="e.g. Platinum Walmart+" className={fieldClass} style={fieldStyle} />
       </Field>
       {preview && matches != null && (
-        <p className="m-0 text-[12px]" style={{ color: 'var(--muted)' }}>
-          Matches {matches} {matches === 1 ? 'transaction' : 'transactions'} so far.
-        </p>
+        <MatchList
+          rows={matches.map((transaction) => ({ transaction }))}
+          ticked={new Set(matches.filter((t) => !unticked.has(t.id)).map((t) => t.id))}
+          onChange={(next) => setUnticked(new Set(matches.filter((t) => !next.has(t.id)).map((t) => t.id)))}
+          categoriesById={Object.fromEntries(categories.map((c) => [c.id, c]))}
+        />
       )}
       {!rule && <p className="m-0 text-[12px]" style={{ color: 'var(--warn)' }}>Fill in a name, what to match, and an amount range (from is at most to).</p>}
       {twin && <p className="m-0 text-[12px]" style={{ color: 'var(--warn)' }}>You already have {twin.name} with this rule. Saving makes a second bill.</p>}
@@ -237,7 +247,7 @@ export function NewRecurringDialog({
           categories={categories}
           preview
           onCancel={onClose}
-          onSave={async (rule) => onCreated(await ipc().createRecurring(rule))}
+          onSave={async (rule, exclude) => onCreated(await ipc().createRecurring(rule, exclude))}
         />
       ) : (
         <div className="flex flex-col gap-2">

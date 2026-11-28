@@ -26,6 +26,10 @@ export interface RecurringItem {
   credited: 'full' | 'partial' | null;
   /** Due after the newest statement from its account: not seen yet because it isn't imported yet. */
   waiting: boolean;
+  /** Not seen yet: its account's statements go past the due day (and the days a charge takes to post) without it. */
+  late: boolean;
+  /** How far the statements from its account go (YYYY-MM-DD). */
+  statementsTo: string;
 }
 
 export type RecurringTrend = SpendTrend;
@@ -172,6 +176,8 @@ export function buildRecurrings(input: {
       credits,
       credited,
       waiting,
+      late: paidThisMonth == null && !waiting,
+      statementsTo: coveredTo,
     };
   });
 

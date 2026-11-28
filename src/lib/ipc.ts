@@ -204,7 +204,10 @@ export interface Ipc {
   recurringSuggestions(profileId: number | null): Promise<Recurring[]>;
   /** How many unlinked charges a rule would claim. */
   previewRecurring(rule: NewRecurring): Promise<number>;
-  createRecurring(rule: NewRecurring): Promise<number>;
+  /** The unlinked charges a rule would claim, oldest first. */
+  previewRecurringMatches(rule: NewRecurring): Promise<Transaction[]>;
+  /** Create a bill; charges in `exclude` are left out for good ("not recurring"). */
+  createRecurring(rule: NewRecurring, exclude?: number[]): Promise<number>;
   /** Save new rules and re-match past charges. */
   updateRecurring(id: number, rule: NewRecurring): Promise<MatchReport>;
   setRecurringStatus(id: number, status: RecurringStatus): Promise<void>;
@@ -948,12 +951,12 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       let hits: Transaction[];
       if (target.kind === 'merchant') {
         const key = target.value.trim().toLowerCase();
-        if (!key || isPaymentPlatform(key)) return [];
+        if (!key) return [];
         hits = candidates.filter((t) => t.merchant.toLowerCase() === key);
       } else {
         const text = normalizeDescription(target.value);
         if (text.length < MIN_CONTAINS) return [];
-        hits = candidates.filter((t) => !isPaymentPlatform(t.merchant) && normalizeDescription(t.description).includes(text));
+        hits = candidates.filter((t) => normalizeDescription(t.description).includes(text));
       }
       return hits.map((t) => ({ transaction: { ...t }, similar: false, locked: t.categoryLocked }));
     },
@@ -1230,9 +1233,21 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     async previewRecurring(rule) {
       return transactions.filter((t) => isCandidate(t) && t.recurringId == null && fitsRule(rule, t)).length;
     },
-    async createRecurring(rule) {
+    async previewRecurringMatches(rule) {
+      return transactions
+        .filter((t) => isCandidate(t) && t.recurringId == null && fitsRule(rule, t))
+        .sort((a, b) => a.postedOn.localeCompare(b.postedOn) || a.id - b.id)
+        .map((t) => ({ ...t }));
+    },
+    async createRecurring(rule, exclude = []) {
       ensureSeeded();
-      return createSaved(rule);
+      const id = createSaved(rule);
+      for (const txId of exclude) {
+        const t = transactions.find((x) => x.id === txId);
+        if (t) t.recurringId = null;
+        optedOut.add(txId);
+      }
+      return id;
     },
     async updateRecurring(id, rule) {
       const r = saved.find((x) => x.id === id);
@@ -1424,7 +1439,7 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
       const GENERIC = new Set(['platinum', 'gold', 'amex', 'american', 'express', 'card', 'credit', 'statement', 'the', 'com', 'inc', 'www', 'pos', 'ach', 'llc', 'new']);
       const words = (b: SavedRecurring) => `${b.name} ${b.pattern}`.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3 && !GENERIC.has(w));
       const related = (a: SavedRecurring, b: SavedRecurring) =>
-        words(a).some((x) => words(b).some((y) => x === y || (Math.min(x.length, y.length) >= 5 && (x.startsWith(y) || y.startsWith(x)))));
+        words(a).some((x) => words(b).some((y) => x === y || (Math.min(x.length, y.length) >= 4 && (x.startsWith(y) || y.startsWith(x)))));
       const renamed = (a: SavedRecurring, b: SavedRecurring) => {
         if (a.frequency !== b.frequency) return false;
         const of = (id: number) => transactions.filter((t) => t.recurringId === id && isCandidate(t)).sort((x, y) => x.postedOn.localeCompare(y.postedOn));
@@ -1432,7 +1447,13 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
         if (!ca.length || !cb.length) return false;
         const [aFirst, aLast, bFirst, bLast] = [ca[0].postedOn, ca.at(-1)!.postedOn, cb[0].postedOn, cb.at(-1)!.postedOn];
         const gap = aLast < bFirst ? [aLast, bFirst] : bLast < aFirst ? [bLast, aFirst] : null;
-        if (!gap || gap[1] > nextAfter(a.frequency, nextAfter(a.frequency, gap[0]))) return false;
+        if (gap && gap[1] > nextAfter(a.frequency, nextAfter(a.frequency, gap[0]))) return false;
+        // Taking turns (the name changed for a few months and back): never both within half a billing period.
+        if (!gap) {
+          const days = (x: string, y: string) => Math.abs(Date.parse(`${x}T00:00:00Z`) - Date.parse(`${y}T00:00:00Z`)) / 86_400_000;
+          const together = ca.some((x) => cb.some((y) => days(x.postedOn, y.postedOn) < days(x.postedOn, nextAfter(a.frequency, x.postedOn)) / 2));
+          if (together) return false;
+        }
         const median = (cs: Transaction[]) => cs.map((t) => -t.amountCents).sort((x, y) => x - y)[Math.floor(cs.length / 2)];
         const [ma, mb] = [median(ca), median(cb)];
         const samePrice = Math.abs(ma - mb) * 20 <= Math.max(ma, mb);
@@ -1843,7 +1864,8 @@ export function createMemoryIpc(seed: MemoryIpcSeed = {}): Ipc {
     return r && { ...r, minCents: s.charge(r.minCents), maxCents: s.charge(r.maxCents) };
   });
   wrap('previewRecurring', (f) => async (rule) => f(ruleBack(rule)));
-  wrap('createRecurring', (f) => async (rule) => f(ruleBack(rule)));
+  wrap('createRecurring', (f) => async (rule, exclude) => f(ruleBack(rule), exclude));
+  wrap('previewRecurringMatches', (f) => async (rule) => (await f(ruleBack(rule))).map((t) => show(t)));
   wrap('updateRecurring', (f) => async (id, rule) => f(id, ruleBack(rule)));
   wrap('setBudget', (f) => async (...a) => {
     adoptDisplayCurrency();

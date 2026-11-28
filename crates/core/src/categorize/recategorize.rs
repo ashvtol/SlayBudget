@@ -58,15 +58,19 @@ pub fn preview(conn: &Connection, target: &Target, category_id: i64) -> Result<V
     let out = match target {
         Target::Merchant(key) => {
             let key = key.trim().to_lowercase();
-            if key.is_empty() || is_payment_platform(&key) {
+            if key.is_empty() {
                 return Ok(Vec::new());
             }
+            // A payment app (Wise, Venmo): exactly that name, never similar ones; each payment can be for something
+            // different, so the screen leaves them unticked.
+            let platform = is_payment_platform(&key);
             candidates
                 .into_iter()
                 .filter_map(|t| {
                     if t.merchant == key {
                         Some((t, false))
-                    } else if !is_payment_platform(&t.merchant)
+                    } else if !platform
+                        && !is_payment_platform(&t.merchant)
                         && similarity(&t.merchant, &key) >= MATCH_THRESHOLD
                     {
                         Some((t, true))
@@ -81,9 +85,9 @@ pub fn preview(conn: &Connection, target: &Target, category_id: i64) -> Result<V
             if text.chars().count() < MIN_CONTAINS {
                 return Ok(Vec::new());
             }
+            // Payment-app rows included: "wise" + "rent llc" is how you find the rent among Wise transfers.
             candidates
                 .into_iter()
-                .filter(|t| !is_payment_platform(&t.merchant))
                 .filter(|t| normalize_description(&t.description).contains(&text))
                 .map(|t| (t, false))
                 .collect()

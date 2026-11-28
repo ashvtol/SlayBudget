@@ -138,7 +138,6 @@ export function CleanUpOther({
               <RecategorizeOffer
                 key={`${offer.row.key}-${offer.categoryId}`}
                 merchant={offer.row.merchant}
-                sampleDescription={offer.row.sampleDescription}
                 categoryId={offer.categoryId}
                 categoriesById={categoriesById}
                 onlyOther

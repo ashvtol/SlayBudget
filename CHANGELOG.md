@@ -5,6 +5,25 @@ All notable changes to SlayBudget are listed here. The format follows
 
 ## [Unreleased]
 
+## [0.10.5] - 2026-11-27
+### Added
+- **Choose exactly which transactions a change takes.** Make recurring lists the charges a new bill would claim behind
+  an ⓘ, all ticked: untick any (or Select none) and they stay out of the bill for good. Applying a category to other
+  transactions works the same way, with Select all and Select none.
+- **Wise, Zelle, PayPal and other payment apps get the same choices as any merchant.** Changing one offers the others
+  with the same name, or with names containing what you type ("rent llc"), with nothing ticked, since each payment can
+  be for something different.
+- **Change several transactions at once, and the others follow if you want.** After setting a category on a selection,
+  the other transactions with those names are offered together.
+### Fixed
+- **A bill that should have been charged by now says "Not seen yet".** Once the statements from its account go past
+  its due day (and the few days a charge takes to post) without it, This month marks it in orange, and hovering says
+  why. A bill still within those days, or due after your newest statement, says nothing yet.
+- **A subscription renamed for a few months and back is suggested for merging.** Hulu billed as "Hulu Santa" most
+  months and "HLU*HULUPLUS" in August and September now shows as one subscription to merge, so those months don't look
+  missed. Two bills count as one when they take turns (never both in one billing period) and share a name of four
+  letters or more ("hulu" in "huluplus"), or the same price on the same day.
+
 ## [0.10.4] - 2026-11-26
 ### Added
 - **15 more default categories.** Coffee, Bars & Alcohol, Rent & Mortgage, Utilities, Home & Household, Clothing,

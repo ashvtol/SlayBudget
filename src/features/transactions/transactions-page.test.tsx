@@ -37,7 +37,7 @@ async function renderPage(over: Partial<typeof seed> = {}) {
   useTransactionsStore.setState({ transactions: [], filter: {}, sort: 'newest', selected: new Set(), cursor: 0, focused: null });
   useProfileStore.setState({ profiles: [], activeProfileId: null });
   render(<TransactionsPage />);
-  await screen.findByRole('row', { name: /Whole Foods/ });
+  await screen.findAllByRole('row', { name: /Whole Foods/ });
 }
 
 const list = () => screen.getByRole('grid', { name: 'Transactions' });
@@ -287,6 +287,39 @@ describe('TransactionsPage', () => {
     await waitFor(() => expect(useTransactionsStore.getState().transactions.every((t) => t.categoryId === 20)).toBe(true));
     expect(useTransactionsStore.getState().selected.size).toBe(0);
     expect(screen.queryByRole('dialog', { name: 'Choose category' })).not.toBeInTheDocument();
+  });
+
+  it('after setting a category on several, offers the other transactions with those names, together', async () => {
+    const user = userEvent.setup();
+    await renderPage({
+      transactions: [
+        ...seed.transactions,
+        tx({ id: 3, postedOn: '2026-10-15', description: 'WHOLE FOODS', merchant: 'whole foods', amountCents: -3000 }),
+        tx({ id: 4, postedOn: '2026-10-10', description: 'SHELL OIL', merchant: 'shell', amountCents: -4100, sourceId: 2 }),
+      ],
+    });
+    // Select the two November rows, Whole Foods and Shell.
+    const rows = within(list()).getAllByRole('row');
+    await user.click(within(rows[0]).getByRole('checkbox', { name: /^Select / }));
+    await user.click(within(rows[1]).getByRole('checkbox', { name: /^Select / }));
+    await user.click(screen.getByRole('button', { name: 'Set category' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'fue{Enter}');
+    const offer = await screen.findByRole('region', { name: /Apply .Fuel. to other transactions\?/ });
+    expect(await within(offer).findByRole('radio', { name: /All named .Whole Foods. and .Shell./ })).toBeChecked();
+    await user.click(within(offer).getByRole('button', { name: 'Apply to 2' }));
+    await waitFor(() => expect(useTransactionsStore.getState().transactions.every((t) => t.categoryId === 20)).toBe(true));
+    expect(screen.queryByRole('region', { name: /to other transactions/ })).not.toBeInTheDocument();
+  });
+
+  it('after setting a category on one selected row, offers nothing more', async () => {
+    const user = userEvent.setup();
+    await renderPage();
+    const rows = within(list()).getAllByRole('row');
+    await user.click(within(rows[0]).getByRole('checkbox', { name: /^Select / }));
+    await user.click(screen.getByRole('button', { name: 'Set category' }));
+    await user.type(screen.getByRole('textbox', { name: 'Search categories' }), 'fue{Enter}');
+    await waitFor(() => expect(useTransactionsStore.getState().byId(1)?.categoryId).toBe(20));
+    expect(screen.queryByRole('region', { name: /to other transactions/ })).not.toBeInTheDocument();
   });
 
   it('keeps the bulk bar compact: review and clear are icon buttons with tooltips', async () => {

@@ -85,3 +85,41 @@ describe('memory IPC price changes', () => {
     expect(await ipc.lookAlikeRecurrings()).toEqual([]);
   });
 });
+
+describe('memory IPC look-alikes that take turns', () => {
+  const tx = (postedOn: string, description: string, merchant: string, cents: number): Transaction => ({
+    id: nextId++, profileId: 1, sourceId: 1, postedOn, description, merchant, amountCents: -cents, currency: 'USD',
+    categoryId: null, categoryLocked: false, reviewed: true, notes: null, refundOf: null,
+  });
+  const bill = (name: string, pattern: string, cents: number, day: number) => ({
+    name, categoryId: null, matchKind: 'merchant' as const, pattern, minCents: cents - 300, maxCents: cents + 300, frequency: 'monthly' as const, dayOfMonth: day,
+  });
+
+  it('suggests a subscription whose statement name changed for a few months and back', async () => {
+    nextId = 1;
+    const ipc = createMemoryIpc({
+      transactions: [
+        ...[1, 2, 3, 4, 5, 6, 7, 10].map((m) => tx(`2026-${String(m).padStart(2, '0')}-13`, 'HULU SANTA MONICA CA', 'hulu santa', 2763)),
+        ...[8, 9].map((m) => tx(`2026-0${m}-13`, 'HLU*HULUPLUS', 'hlu huluplus', 2427)),
+      ],
+    });
+    for (const b of await ipc.listRecurring(null)) if (b.saved) await ipc.deleteRecurring(b.saved.id);
+    const hulu = await ipc.createRecurring(bill('Hulu Santa', 'hulu santa', 2763, 13));
+    const plus = await ipc.createRecurring(bill('Hlu Huluplus', 'hlu huluplus', 2427, 13));
+    expect(await ipc.lookAlikeRecurrings()).toEqual([[hulu, plus]]);
+  });
+
+  it('does not suggest related names charged in the same month', async () => {
+    nextId = 1;
+    const ipc = createMemoryIpc({
+      transactions: [1, 2, 3, 4, 5, 6].flatMap((m) => [
+        tx(`2026-0${m}-13`, 'HULU SANTA MONICA CA', 'hulu santa', 2763),
+        tx(`2026-0${m}-15`, 'HLU*HULUPLUS LIVE', 'hlu huluplus live', 8299),
+      ]),
+    });
+    for (const b of await ipc.listRecurring(null)) if (b.saved) await ipc.deleteRecurring(b.saved.id);
+    await ipc.createRecurring(bill('Hulu', 'hulu santa', 2763, 13));
+    await ipc.createRecurring(bill('Hulu Live', 'hlu huluplus live', 8299, 15));
+    expect(await ipc.lookAlikeRecurrings()).toEqual([]);
+  });
+});

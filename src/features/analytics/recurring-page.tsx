@@ -693,7 +693,7 @@ function BillList({
             >
               <span
                 className={`${stale ? 'w-[118px]' : 'w-[64px]'} shrink-0 whitespace-nowrap`}
-                style={{ color: stale ? 'var(--warn)' : 'var(--muted)' }}
+                style={{ color: stale || (i.late && i.recurring.saved?.status !== 'paused') ? 'var(--warn)' : 'var(--muted)' }}
                 title={stale ? `Expected ${ordinalDay(i.date)}` : i.waiting && !i.paid ? 'Not in your statements yet' : undefined}
               >
                 {stale ? `Last ${lastSeen(i.recurring.lastDate, thisYear)}` : ordinalDay(i.date)}
@@ -701,6 +701,15 @@ function BillList({
               <CategoryIcon emoji={cat?.emoji} color={cat?.color} className="w-4" />
               <span className="truncate">{i.rules.name}</span>
               <span className="truncate text-[12px]" style={{ color: 'var(--muted)' }}>{CADENCE_LABEL[i.recurring.cadence]}</span>
+              {!stale && i.late && i.recurring.saved?.status !== 'paused' && (
+                <span
+                  className="shrink-0 text-[11px] font-semibold"
+                  style={{ color: 'var(--warn)' }}
+                  title={`Due ${ordinalDay(i.date)}. Your statements go to ${ordinalDay(i.statementsTo)} and it isn't there yet.`}
+                >
+                  Not seen yet
+                </span>
+              )}
               {back > 0 ? (
                 <span className="shrink-0 text-[11px] font-semibold" style={{ color: 'var(--pos)' }} title={`Charged ${formatMoney(charged ?? 0, currency)}, ${formatMoney(back, currency)} back`}>
                   {formatMoney(back, currency)} back

@@ -393,10 +393,32 @@ fn rule_of(s: &SavedRecurring) -> NewRecurring {
 
 /// How many unlinked charges a rule would claim.
 pub fn preview_count(conn: &Connection, r: &NewRecurring) -> Result<i64> {
-    Ok(candidates(conn, None)?
-        .iter()
+    Ok(preview_matches(conn, r)?.len() as i64)
+}
+
+/// The unlinked charges a rule would claim, oldest first.
+pub fn preview_matches(conn: &Connection, r: &NewRecurring) -> Result<Vec<TransactionId>> {
+    let mut fits_rule: Vec<Candidate> = candidates(conn, None)?
+        .into_iter()
         .filter(|c| c.recurring_id.is_none() && fits(r, c))
-        .count() as i64)
+        .collect();
+    fits_rule.sort_by_key(|c| (c.posted_on, c.id));
+    Ok(fits_rule.into_iter().map(|c| c.id).collect())
+}
+
+/// Create a bill, leaving out charges you unticked: they're marked "not recurring", so no bill claims them again.
+pub fn create_except(
+    conn: &Connection,
+    r: &NewRecurring,
+    exclude: &[TransactionId],
+) -> Result<i64> {
+    crate::db::atomically(conn, |c| {
+        let id = create(c, r)?;
+        for tx in exclude {
+            unlink(c, *tx)?;
+        }
+        Ok(id)
+    })
 }
 
 /// Re-apply a recurring's rules to past charges: unlink what no longer fits, link unclaimed fits. Charges from before

@@ -698,3 +698,63 @@ fn a_big_payment_to_the_person_a_bill_names_is_asked_about() {
         "the person the bill names: a new price is a fair question"
     );
 }
+
+#[test]
+fn a_subscription_whose_statement_name_changed_for_a_few_months_and_back_is_suggested() {
+    let db = Db::setup();
+    // Hulu billed as "HULU SANTA" most months, as "HLU*HULUPLUS" in Aug and Sep, then back: the bills take turns.
+    for m in [1, 2, 3, 4, 5, 6, 7, 10] {
+        db.charge(&format!("2026-{m:02}-13"), "HULU SANTA MONICA CA", 2763);
+    }
+    for m in [8, 9] {
+        db.charge(&format!("2026-{m:02}-13"), "HLU*HULUPLUS", 2427);
+    }
+    let hulu = monthly(&db, "Hulu Santa", "hulu santa", 2763, Some(13));
+    let plus = monthly(&db, "Hlu Huluplus", "hlu huluplus", 2427, Some(13));
+    assert_eq!(
+        price_changes::look_alikes(&db.conn).unwrap(),
+        vec![(hulu, plus)]
+    );
+}
+
+#[test]
+fn bills_taking_turns_with_unrelated_names_prices_and_days_are_not_suggested() {
+    let db = Db::setup();
+    for m in [1, 3, 5, 7, 9] {
+        db.charge(&format!("2026-{m:02}-03"), "CITY GYM", 4000);
+    }
+    for m in [2, 4, 6, 8, 10] {
+        db.charge(&format!("2026-{m:02}-20"), "SPOTIFY USA", 1199);
+    }
+    monthly(&db, "City Gym", "city gym", 4000, Some(3));
+    monthly(&db, "Spotify", "spotify usa", 1199, Some(20));
+    assert!(price_changes::look_alikes(&db.conn).unwrap().is_empty());
+}
+
+#[test]
+fn related_names_charged_in_the_same_month_are_two_subscriptions() {
+    let db = Db::setup();
+    // Hulu and Hulu + Live TV, both every month.
+    for m in 1..=6 {
+        db.charge(&format!("2026-{m:02}-13"), "HULU SANTA MONICA CA", 2763);
+        db.charge(&format!("2026-{m:02}-15"), "HLU*HULUPLUS LIVE", 8299);
+    }
+    monthly(&db, "Hulu", "hulu santa", 2763, Some(13));
+    monthly(&db, "Hulu Live", "hlu huluplus live", 8299, Some(15));
+    assert!(price_changes::look_alikes(&db.conn).unwrap().is_empty());
+}
+
+#[test]
+fn a_three_letter_word_alone_does_not_make_names_related() {
+    let db = Db::setup();
+    // "max" inside "maxwell": too short to say anything; different prices and days.
+    for m in [1, 2, 3] {
+        db.charge(&format!("2026-{m:02}-05"), "MAX STREAMING", 1699);
+    }
+    for m in [4, 5, 6] {
+        db.charge(&format!("2026-{m:02}-25"), "MAXWELL HOUSE CLUB", 900);
+    }
+    monthly(&db, "Max", "max streaming", 1699, Some(5));
+    monthly(&db, "Maxwell", "maxwell house club", 900, Some(25));
+    assert!(price_changes::look_alikes(&db.conn).unwrap().is_empty());
+}

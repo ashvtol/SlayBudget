@@ -85,8 +85,8 @@ export function PriceCheckBox({
               setDraft(null);
               onDone();
             }}
-            onSave={async (rule) => {
-              await ipc().createRecurring(rule);
+            onSave={async (rule, exclude) => {
+              await ipc().createRecurring(rule, exclude);
               setDraft(null);
               onDone();
             }}

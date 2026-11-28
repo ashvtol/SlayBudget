@@ -143,6 +143,26 @@ describe('DetailPane', () => {
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
   });
 
+  it('makes a transaction recurring, leaving out a matching charge you untick', async () => {
+    const user = userEvent.setup();
+    await renderPane(1);
+    const detail = () => screen.getByRole('article', { name: 'Transaction detail' });
+    await user.click(within(detail()).getByRole('button', { name: 'Make recurring' }));
+    const form = await screen.findByRole('dialog', { name: 'New recurring' });
+    // Any day and from $40: Oct 20's $50 fits too.
+    await user.clear(within(form).getByLabelText('Day of month'));
+    await user.clear(within(form).getByLabelText('Minimum amount'));
+    await user.type(within(form).getByLabelText('Minimum amount'), '40');
+    await within(form).findByText('Matches 2 transactions');
+    await user.click(within(form).getByRole('button', { name: 'Show the matching transactions' }));
+    await user.click(within(form).getByRole('checkbox', { name: 'Include WHOLE FOODS on 2026-10-20' }));
+    await user.click(within(form).getByRole('button', { name: 'Save' }));
+    await within(detail()).findByText('Whole Foods', { selector: '[data-testid="recurring-name"]' });
+    const rows = await ipc().listTransactions({});
+    expect(rows.find((t) => t.id === 1)?.recurringId).not.toBeNull();
+    expect(rows.find((t) => t.id === 2)?.recurringId ?? null).toBeNull();
+  });
+
   it('does not show the note on another transaction', async () => {
     await renderPane(3);
     await act(() => useTransactionsStore.getState().setCategory(2, 20));
@@ -322,7 +342,7 @@ describe('DetailPane in another display currency', () => {
     expect(screen.queryByRole('group', { name: 'Suggested category' })).not.toBeInTheDocument();
   });
 
-  it('a payment app asks before moving the others with its name', async () => {
+  it('a payment app asks before moving the others with its name, with nothing ticked and a contains option', async () => {
     const user = userEvent.setup();
     setIpc(createMemoryIpc({ sources, transactions: [
       tx({ id: 7, postedOn: '2026-11-01', description: 'WISE INC WISE', merchant: 'wise inc wise', amountCents: -50000 }),
@@ -334,22 +354,22 @@ describe('DetailPane in another display currency', () => {
     await useTransactionsStore.getState().load(null);
     render(<DetailPane id={7} onPickCategory={() => {}} />);
     await act(() => useTransactionsStore.getState().setCategory(7, 20));
-    const ask = await screen.findByRole('region', { name: /Also put other Wise Inc Wise transactions in Fuel\?/ });
+    const ask = await screen.findByRole('region', { name: /Apply .Fuel. to other transactions\?/ });
     expect(useTransactionsStore.getState().byId(8)?.categoryId).toBeNull();
-    expect(within(ask).getByRole('checkbox', { name: /2026-08-01/ })).not.toBeChecked();
+    expect(await within(ask).findByRole('radio', { name: /Names containing/ })).toBeInTheDocument();
+    for (const box of within(ask).getAllByRole('checkbox', { name: /^Include / })) expect(box).not.toBeChecked();
     await user.click(within(ask).getByRole('button', { name: 'Statement details for WISE INC WISE on 2026-10-01' }));
     expect(within(ask).getByRole('group', { name: 'Statement for WISE INC WISE' })).toHaveTextContent('Appears on statement as');
     await user.click(within(within(ask).getByRole('group', { name: 'Statement for WISE INC WISE' })).getByRole('button', { name: 'Close statement details' }));
-    expect(within(ask).queryByRole('group', { name: 'Statement for WISE INC WISE' })).not.toBeInTheDocument();
-    await user.click(within(ask).getByRole('checkbox', { name: /2026-09-01/ }));
+    await user.click(within(ask).getByRole('checkbox', { name: /2026-10-01/ }));
     await user.click(within(ask).getByRole('button', { name: 'Apply to 1' }));
     await waitFor(() => expect(useTransactionsStore.getState().byId(8)?.categoryId).toBe(20));
     expect(useTransactionsStore.getState().byId(9)?.categoryId).toBeNull();
     expect(useTransactionsStore.getState().byId(10)?.categoryId).toBe(10);
-    expect(screen.queryByRole('region', { name: /Also put other/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: /to other transactions/ })).not.toBeInTheDocument();
   });
 
-  it('Just this one closes the question without moving anything', async () => {
+  it('Not now closes the question without moving anything', async () => {
     const user = userEvent.setup();
     setIpc(createMemoryIpc({ sources, transactions: [
       tx({ id: 7, postedOn: '2026-11-01', description: 'WISE INC WISE', merchant: 'wise inc wise', amountCents: -50000 }),
@@ -359,8 +379,8 @@ describe('DetailPane in another display currency', () => {
     await useTransactionsStore.getState().load(null);
     render(<DetailPane id={7} onPickCategory={() => {}} />);
     await act(() => useTransactionsStore.getState().setCategory(7, 20));
-    await user.click(within(await screen.findByRole('region', { name: /Also put other/ })).getByRole('button', { name: 'Just this one' }));
-    expect(screen.queryByRole('region', { name: /Also put other/ })).not.toBeInTheDocument();
+    await user.click(within(await screen.findByRole('region', { name: /to other transactions/ })).getByRole('button', { name: 'Not now' }));
+    expect(screen.queryByRole('region', { name: /to other transactions/ })).not.toBeInTheDocument();
     expect(useTransactionsStore.getState().byId(8)?.categoryId).toBeNull();
   });
 

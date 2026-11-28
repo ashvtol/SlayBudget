@@ -180,6 +180,46 @@ describe('RecurringPage when the statements end before this month', () => {
   });
 });
 
+describe('RecurringPage bills not seen yet', () => {
+  it('says "Not seen yet" when the statements go past the due day without the charge, and why', async () => {
+    setIpc(createMemoryIpc({
+      sources,
+      transactions: [tx('hulu', '2026-08-13', -2763), tx('hulu', '2026-09-13', -2763), tx('hulu', '2026-10-13', -2763), tx('groceries', '2026-11-20', -2500)],
+    }));
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<RecurringPage />);
+    const month = await screen.findByRole('list', { name: 'This month' });
+    const row = within(month).getByRole('listitem', { name: /Hulu/i });
+    const flag = within(row).getByText('Not seen yet');
+    expect(flag).toHaveAttribute('title', "Due Nov 13th. Your statements go to Nov 20th and it isn't there yet.");
+    expect(within(row).queryByRole('img', { name: 'Paid' })).toBeNull();
+  });
+
+  it('says nothing for a paused bill', async () => {
+    setIpc(createMemoryIpc({
+      sources,
+      transactions: [tx('hulu', '2026-08-13', -2763), tx('hulu', '2026-09-13', -2763), tx('hulu', '2026-10-13', -2763), tx('groceries', '2026-11-20', -2500)],
+    }));
+    const bill = (await ipc().listRecurring(null)).find((b) => b.merchant === 'hulu')!;
+    await ipc().setRecurringStatus(bill.saved!.id, 'paused');
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<RecurringPage />);
+    await screen.findByRole('list', { name: 'Paused' });
+    expect(screen.queryByText('Not seen yet')).toBeNull();
+  });
+
+  it('says nothing while the charge may still be posting', async () => {
+    setIpc(createMemoryIpc({
+      sources,
+      transactions: [tx('hulu', '2026-08-13', -2763), tx('hulu', '2026-09-13', -2763), tx('hulu', '2026-10-13', -2763), tx('groceries', '2026-11-14', -2500)],
+    }));
+    useAnalyticsStore.setState({ today: '2026-11-21' });
+    render(<RecurringPage />);
+    const month = await screen.findByRole('list', { name: 'This month' });
+    expect(within(month).queryByText('Not seen yet')).toBeNull();
+  });
+});
+
 describe('RecurringPage management', () => {
   const thisMonth = () => screen.getByRole('list', { name: 'This month' });
   const openActions = async (user: ReturnType<typeof userEvent.setup>) => user.click(screen.getByRole('button', { name: 'Recurring actions' }));

@@ -77,6 +77,7 @@ pub fn run() {
             commands::list_recurring,
             commands::recurring_suggestions,
             commands::preview_recurring,
+            commands::preview_recurring_matches,
             commands::create_recurring,
             commands::update_recurring,
             commands::set_recurring_status,

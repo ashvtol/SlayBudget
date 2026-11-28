@@ -3,62 +3,60 @@ import { ipc } from '@/lib/ipc';
 import { cleanMerchant } from '@/lib/merchant';
 import { MIN_CONTAINS, isPaymentPlatform, normalizeDescription } from '@/lib/recategorize';
 import type { Category, RecatMatch, RecatTarget } from '@/lib/types';
-import { CategoryPill } from '@/components/category-pill';
-import { Money } from '@/components/money';
 import { Switch } from '@/components/switch';
-import { shortDate } from '@/lib/format';
-import { DetailsButton, StatementBox, useOpenRows } from './statement-box';
+import { MatchList } from './match-list';
 
 type Choice = 'one' | 'merchant' | 'contains';
 
 export interface RecategorizeOfferProps {
   /** Merchant key of the changed transaction (or of a Clean up Other group). */
   merchant: string;
-  sampleDescription: string;
   categoryId: number;
   categoriesById: Record<number, Category>;
   /** Called with how many transactions moved, or null when nothing changed. */
   onDone: (moved: number | null) => void;
   /** Clean up Other: list only rows still in Other (or uncategorized). */
   onlyOther?: boolean;
+  /** Other names changed together (several transactions at once): "All named" covers them all. */
+  others?: string[];
 }
 
 /** "Apply to other transactions?" after a category change: choose a match, see the rows, apply. */
-export function RecategorizeOffer({ merchant, sampleDescription, categoryId, categoriesById, onDone, onlyOther = false }: RecategorizeOfferProps) {
+export function RecategorizeOffer({ merchant, categoryId, categoriesById, onDone, onlyOther = false, others = [] }: RecategorizeOfferProps) {
   const category = categoriesById[categoryId];
-  const platform = isPaymentPlatform(merchant);
+  const names = useMemo(() => [merchant, ...others.filter((o) => o !== merchant)], [merchant, others]);
+  const platform = names.some(isPaymentPlatform);
   const [choice, setChoice] = useState<Choice>('merchant');
   const [text, setText] = useState(merchant);
   const [exact, setExact] = useState<RecatMatch[] | null>(null);
   const [contains, setContains] = useState<RecatMatch[]>([]);
-  const [unticked, setUnticked] = useState<Set<number>>(new Set());
-  const [future, setFuture] = useState(true);
+  /** Your ticks and unticks; anything else starts as `startsTicked` says. */
+  const [picked, setPicked] = useState<Map<number, boolean>>(new Map());
+  // A payment app's rows each can be for something different: no rule for the future unless you ask.
+  const [future, setFuture] = useState(!platform);
   const [busy, setBusy] = useState(false);
-  const details = useOpenRows();
+  const key = names.join('\n');
 
   useEffect(() => {
-    if (platform) return;
     let live = true;
-    void ipc()
-      .previewRecategorize({ kind: 'merchant', value: merchant }, categoryId)
-      .then((m) => {
-        if (!live) return;
-        if (m.length === 0) onDone(null);
-        else {
-          setExact(m);
-          // Similar names, and categories you chose yourself, stay unless you tick them.
-          setUnticked(new Set(m.filter((x) => x.similar || x.transaction.categorySource === 'user').map((x) => x.transaction.id)));
-        }
-      });
+    void Promise.all(names.map((value) => ipc().previewRecategorize({ kind: 'merchant', value }, categoryId))).then((lists) => {
+      if (!live) return;
+      const seen = new Set<number>();
+      const m = lists.flat().filter((x) => !seen.has(x.transaction.id) && seen.add(x.transaction.id));
+      // Several names: newest first across them all (each list already is).
+      if (lists.length > 1) m.sort((a, b) => b.transaction.postedOn.localeCompare(a.transaction.postedOn) || b.transaction.id - a.transaction.id);
+      if (m.length === 0) onDone(null);
+      else setExact(m);
+    });
     return () => {
       live = false;
     };
-    // onDone is a callback from the parent; re-running on its identity would refetch.
+    // onDone is a callback from the parent; re-running on its identity would refetch. `key` stands for `names`.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [merchant, categoryId, platform]);
+  }, [key, categoryId]);
 
   useEffect(() => {
-    if (platform || choice !== 'contains') return;
+    if (choice !== 'contains') return;
     let live = true;
     const target: RecatTarget = { kind: 'contains', value: text };
     void ipc()
@@ -67,7 +65,7 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
     return () => {
       live = false;
     };
-  }, [platform, choice, text, categoryId]);
+  }, [choice, text, categoryId]);
 
   const inScope = useMemo(
     () => (rows: RecatMatch[]) => (onlyOther ? rows.filter((m) => m.transaction.categoryId == null || categoriesById[m.transaction.categoryId]?.isOther) : rows),
@@ -77,17 +75,22 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
   const shown = useMemo(() => (choice === 'merchant' ? named : choice === 'contains' ? inScope(contains) : []), [choice, named, contains, inScope]);
   // Clean up Other: nothing has moved yet, so "just this one" moves this name's rows that are in Other.
   const own = onlyOther ? named.filter((m) => !m.similar && !m.locked) : [];
-  const ticked = shown.filter((m) => !m.locked && !unticked.has(m.transaction.id));
+  // Similar names, categories you chose yourself, and payment-app rows stay unticked unless you tick them.
+  const startsTicked = (m: RecatMatch) => !m.similar && m.transaction.categorySource !== 'user' && !isPaymentPlatform(m.transaction.merchant);
+  const isTicked = (m: RecatMatch) => !m.locked && (picked.get(m.transaction.id) ?? startsTicked(m));
+  const ticked = shown.filter(isTicked);
   const title = `Apply “${category?.name ?? 'this category'}” to other transactions?`;
-  const name = cleanMerchant(merchant);
+  const quoted = names.map((n) => `“${cleanMerchant(n)}”`);
+  const name = quoted.length <= 2 ? quoted.join(' and ') : `${quoted.slice(0, 2).join(', ')} and ${quoted.length - 2} more`;
 
   async function apply() {
     setBusy(true);
     try {
       const moved = await ipc().applyRecategorize(ticked.map((m) => m.transaction.id), categoryId);
-      if (future && choice !== 'one') {
-        const pattern = choice === 'merchant' ? merchant : normalizeDescription(text);
-        await ipc().saveRule({ kind: choice, pattern, categoryId });
+      if (future && choice === 'merchant') {
+        for (const pattern of names) await ipc().saveRule({ kind: 'merchant', pattern, categoryId });
+      } else if (future && choice === 'contains') {
+        await ipc().saveRule({ kind: 'contains', pattern: normalizeDescription(text), categoryId });
       }
       onDone(moved);
     } finally {
@@ -116,17 +119,6 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
     </section>
   );
 
-  if (platform) {
-    const label = cleanMerchant(sampleDescription).split(' ')[0] || 'These';
-    return shell(
-      <div className="flex items-center justify-between gap-4">
-        <p className="m-0" style={{ color: 'var(--muted)' }}>{label} payments are categorized one at a time.</p>
-        <button type="button" onClick={() => onDone(null)} className="rounded-md px-3 py-1.5 text-[12px] font-semibold" style={{ background: 'var(--accent)', color: 'var(--bg)' }}>
-          OK
-        </button>
-      </div>,
-    );
-  }
   if (exact == null) return null;
 
   const option = (value: Choice, label: React.ReactNode, count?: number) => (
@@ -141,7 +133,7 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
     <>
       <div className="flex flex-col">
         {option('one', own.length > 1 ? `Just these ${own.length}` : 'Just this one')}
-        {option('merchant', `All named “${name}”`, named.length)}
+        {option('merchant', `All named ${name}`, named.length)}
         <label className="flex min-h-8 items-center gap-2.5">
           <input type="radio" name="recat-choice" checked={choice === 'contains'} onChange={() => setChoice('contains')} aria-label="Names containing" />
           <span>Names containing</span>
@@ -160,48 +152,22 @@ export function RecategorizeOffer({ merchant, sampleDescription, categoryId, cat
         )}
       </div>
 
-      {shown.length > 0 && (
-        <ul className="-mx-4 mt-3 max-h-64 overflow-y-auto border-t px-4 pt-2" style={{ borderColor: 'var(--line)' }}>
-          {shown.map((m) => {
-            const t = m.transaction;
-            const current = t.categoryId != null ? categoriesById[t.categoryId] : undefined;
-            const checked = !m.locked && !unticked.has(t.id);
-            return (
-              <li key={t.id} style={{ opacity: m.locked ? 0.5 : 1 }}>
-                <div className="flex min-h-8 items-center gap-3">
-                <input
-                  type="checkbox"
-                  aria-label={`Include ${t.description} on ${t.postedOn}`}
-                  checked={checked}
-                  disabled={m.locked}
-                  onChange={() =>
-                    setUnticked((s) => {
-                      const next = new Set(s);
-                      if (next.has(t.id)) next.delete(t.id);
-                      else next.add(t.id);
-                      return next;
-                    })
-                  }
-                />
-                <span className="w-14 shrink-0 tabular-nums" style={{ color: 'var(--muted)' }}>{shortDate(t.postedOn)}</span>
-                <span className="min-w-0 flex-1 truncate">{t.description}</span>
-                {m.similar && <span className="text-[11px]" style={{ color: 'var(--warn)' }}>similar</span>}
-                {m.locked && <span className="text-[11px]" style={{ color: 'var(--muted)' }}>locked</span>}
-                <CategoryPill category={current} />
-                <span className="w-16 shrink-0 text-right">
-                  <Money cents={t.amountCents} currency={t.currency} />
-                </span>
-                <DetailsButton tx={t} open={details.isOpen(t.id)} onToggle={() => details.toggle(t.id)} />
-                </div>
-                {details.isOpen(t.id) && (
-                  <div className="mb-2 ml-7">
-                    <StatementBox tx={t} named onClose={() => details.toggle(t.id)} />
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
+      {choice !== 'one' && (
+        <div className="mt-3 border-t pt-2" style={{ borderColor: 'var(--line)' }}>
+          <MatchList
+            rows={shown}
+            startOpen
+            ticked={new Set(shown.filter(isTicked).map((m) => m.transaction.id))}
+            onChange={(next) =>
+              setPicked((p) => {
+                const out = new Map(p);
+                for (const m of shown) out.set(m.transaction.id, next.has(m.transaction.id));
+                return out;
+              })
+            }
+            categoriesById={categoriesById}
+          />
+        </div>
       )}
 
       <div className="mt-3 flex items-center justify-between gap-3 border-t pt-3" style={{ borderColor: 'var(--line)' }}>
